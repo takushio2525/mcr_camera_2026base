@@ -1224,22 +1224,21 @@ SW User    & -- & P6\_0   & Low = 押下   & プルアップ、GND 接続 \\
 
 \textbf{ファイル:} \texttt{src/drivers/Serial.h}, \texttt{Serial.cpp} \hfill
 \textbf{継承:} \texttt{IModule} \hfill
-\phasebadge{Output Phase}
+\phasebadge{Logic/Output Phase}
 
 \vspace{2mm}\hrule\vspace{2mm}
 
 \apisection{概要}
 
-SCIF (Serial Communication Interface with FIFO) を使用してデバッグ用シリアル通信を行う。
-送信はバッファリングし、\texttt{update()} で順次送出する。
+SCIF (Serial Communication Interface) を使用してデバッグ用シリアル通信を行う。
+他のドライバとは異なり、ラッチ方式（\texttt{update()}による遅延送出）は採用せず、\texttt{printf} 呼び出し時に\textbf{即時出力（ポーリング送信）}を行う。これにより、途中クラッシュ時にもデバッグ出力を確実に得られるようにする。
 
 \apisection{機能一覧}
 
 \begin{itemize}[nosep]
-  \item SCIF によるシリアル通信
-  \item リングバッファによる送信バッファリング
+  \item SCIF2 によるシリアル通信 (GR-PEACH USBシリアル通信ポート想定)
   \item 書式付き出力 (\texttt{printf})
-  \item \texttt{update()} による非ブロッキング送出
+  \item \textbf{即時出力}（バッファリングなし、ポーリング待機）
 \end{itemize}
 
 \apisection{内部定数}
@@ -1249,21 +1248,12 @@ SCIF (Serial Communication Interface with FIFO) を使用してデバッグ用�
 \textbf{定数名} & \textbf{値} & \textbf{説明} \\
 \midrule
 \texttt{BAUD\_RATE}   & 115200 & ボーレート \\
-\texttt{TX\_BUF\_SIZE} & 256    & 送信バッファサイズ (bytes) \\
 \bottomrule
 \end{tabularx}
 
 \apisection{内部変数}
 
-\begin{tabularx}{\textwidth}{l l l X}
-\toprule
-\textbf{変数名} & \textbf{型} & \textbf{初期値} & \textbf{説明} \\
-\midrule
-\texttt{\_txBuf[]}  & \texttt{char[]}    & \texttt{0} & 送信リングバッファ \\
-\texttt{\_txHead}   & \texttt{uint16\_t} & \texttt{0} & 書込みポインタ \\
-\texttt{\_txTail}   & \texttt{uint16\_t} & \texttt{0} & 読出しポインタ \\
-\bottomrule
-\end{tabularx}
+特になし（バッファ状態を持たない）。
 
 \apisection{関数ドキュメント}
 
@@ -1271,47 +1261,31 @@ SCIF (Serial Communication Interface with FIFO) を使用してデバッグ用�
 \texttt{void init(void)}
 
 \vspace{1.5mm}
-SCIFの初期化・ボーレート設定を行う。送信バッファをクリアする。
+SCIFの初期化（ピン設定、モジュールストップ解除、ボーレート設定等）を行う。
 \end{funcblock}
 
 \begin{funcblock}{update()}
 \texttt{void update(void)}
 
 \vspace{1.5mm}
-送信バッファの内容をFIFOへ順次送出する。FIFO空き状況に応じて部分送出する。
-内部で \texttt{flushTx()} を呼び出す。
-\end{funcblock}
-
-\begin{funcblock}{print(str)}
-\texttt{void print(const char* str)}
-
-\vspace{1.5mm}
-文字列を送信バッファに追加する。バッファ満杯時は古いデータを上書き。
-
-\vspace{1.5mm}
-\textbf{引数:} \texttt{str} (\texttt{const char*}) --- 送信文字列
+\texttt{IModule} インターフェースを満たすためのダミー関数。何もしない。
 \end{funcblock}
 
 \begin{funcblock}{printf(fmt, ...)}
 \texttt{void printf(const char* fmt, ...)}
 
 \vspace{1.5mm}
-書式付き文字列を送信バッファに追加する。\texttt{vsnprintf} を内部で使用。
+書式付き文字列を即時送信する。\texttt{vsnprintf} を内部で使用し、\texttt{putChar()} を経由して文字を送信する。
 
 \vspace{1.5mm}
 \textbf{引数:} \texttt{fmt} (\texttt{const char*}) --- 書式文字列（\texttt{printf} 互換）
 \end{funcblock}
 
 \begin{funcblock}{putChar(c) \normalfont\small\color{gray}[内部]}
-\texttt{void putChar(char c)} --- 1文字をFIFOへ書き込む。
-\end{funcblock}
+\texttt{void putChar(char c)}
 
-\begin{funcblock}{isTxReady() \normalfont\small\color{gray}[内部]}
-\texttt{bool isTxReady(void)} --- 送信FIFOに空きがあるかを返す。
-\end{funcblock}
-
-\begin{funcblock}{flushTx() \normalfont\small\color{gray}[内部]}
-\texttt{void flushTx(void)} --- バッファ内容を可能な限り一括送出する。
+\vspace{1.5mm}
+1文字を即時書き込む。FIFO/送信レジスタに空きができるまで待機（ポーリング）してから送信する。
 \end{funcblock}
 
 \end{apibox}

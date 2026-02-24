@@ -34,6 +34,8 @@ GR-PEACH (RZ/A1H) をベースとしたマイクロマウス／ロボットカ�
 | `src/core/IModule.h` | 全モジュール共通の基底インターフェース |
 | `src/drivers/Onboard.h` | オンボードのLED / SWを抽象化したラッチ管理ドライバ の定義 |
 | `src/drivers/Onboard.cpp` | Onboardクラスのハードウェア（GPIO）操作の実装 |
+| `src/drivers/Serial.h` | デバッグ用シリアル通信（即時出力）ドライバの定義 |
+| `src/drivers/Serial.cpp` | シリアル通信のハードウェア（SCIF）操作とprintf機能の実装 |
 | `generate/inthandler.c` | e2 studio 生成の中断ハンドラ実装ファイル（OSTM0コールバックをフック） |
 | `doc/main.tex` | プロジェクト等の全体・旧版仕様や関連詳細資料 |
 
@@ -42,6 +44,7 @@ GR-PEACH (RZ/A1H) をベースとしたマイクロマウス／ロボットカ�
 | 機能 | メインファイル | 関連ファイル |
 |------|----------------|--------------|
 | オンボードLED・SW操作 | `src/drivers/Onboard.cpp` | `src/drivers/Onboard.h`, `mcr_camera_2026base.cpp` |
+| デバッグシリアル通信 | `src/drivers/Serial.cpp` | `src/drivers/Serial.h`, `mcr_camera_2026base.cpp` |
 | 1msタイマー割り込み処理 | `src/mcr_camera_2026base.cpp` | `generate/inthandler.c` |
 
 ## 8. 詳細設計
@@ -55,8 +58,24 @@ GR-PEACH (RZ/A1H) をベースとしたマイクロマウス／ロボットカ�
 - **`initOSTM0()`**: RZ/A1HのOSTM0を1ms用に設定し、GIC(INTC)へ登録。
 - **`ostm0_interrupt_callback()`**: `INT_Excep_OSTMI0` から呼ばれ、実時間をカウント(`g_timer_1ms`)し、`g_onboard` 経由でLED制御を行う。
 - **`INT_Excep_IRQ()`**: GIC(INTC)を用いたベクタ割り込みディスパッチャ。ICCIARから要因IDを取得し、`RelocatableVectors` から適切なハンドラへ分岐・EIOを通知する実装。
+- **`Serial::init()`**: SCIFモジュールの初期化とボーレート（115200bps等）設定を行う。
+- **`Serial::printf(fmt, ...)`**: 書式付き文字列をフォーマットし、送出可能になるまでポーリング待機しながらSCIFへ1文字ずつ即時出力する。
+- **`Serial::update()`**: IModule準拠のためのダミー関数（何も行わない）。
+- **`g_serial`**: `Serial`クラスのグローバルインスタンス。デバッグ出力の用途として各所で使用する。
 
 ## 24. 修正履歴
+
+### 2026-02-24 21:15: シリアル通信（Serial）クラス要件の定義
+**変更内容:**
+- 開発・デバッグ用にシリアル通信を行う `Serial` クラスの仕様を定義。
+- `doc/main.tex` および `mcr_camera_2026base_SPEC.md` にクラスの設計を追加。
+
+**解消した問題/不満:**
+- 動作中の変数値やクラッシュ直前の状態を知るためのデバッグ出力手段がなかった問題。
+- 他モジュール用のラッチ方式（`update()`呼出時の一括反映）を採用すると、クラッシュ時にバッファ内の文字列が出力されない懸念があった問題。
+
+**解決方法:**
+- 単純なポーリング待機による即時出力機能（`printf`）を持つクラスとし、ラッチバッファを使用しないアーキテクチャとした。これにより、関数が呼ばれた瞬間に確実に端末へ出力される。
 
 ### 2026-02-24 21:05: OnboardのLED制御メソッド（setLed）の分割
 **変更内容:**
