@@ -1,0 +1,47 @@
+[
+  {
+    "directory": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug",
+    "command": "\"C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/13.3 rel1/bin/arm-none-eabi-gcc.exe\" -mcpu\u003dcortex-a9 -marm -mlittle-endian -mfloat-abi\u003dhard -mfpu\u003dvfpv3-d16 -fdiagnostics-parseable-fixits -O0 -fmessage-length\u003d0 -fsigned-char -ffunction-sections -fdata-sections -fno-strict-aliasing -Wnull-dereference -Wstack-usage\u003d100 -g -gdwarf-4 -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src -std\u003dgnu11 -c -o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug/generate/hwsetup.o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/hwsetup.c",
+    "file": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/hwsetup.c"
+  },
+  {
+    "directory": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug",
+    "command": "\"C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/13.3 rel1/bin/arm-none-eabi-gcc.exe\" -mcpu\u003dcortex-a9 -marm -mlittle-endian -mfloat-abi\u003dhard -mfpu\u003dvfpv3-d16 -fdiagnostics-parseable-fixits -O0 -fmessage-length\u003d0 -fsigned-char -ffunction-sections -fdata-sections -fno-strict-aliasing -Wnull-dereference -Wstack-usage\u003d100 -g -gdwarf-4 -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src -std\u003dgnu11 -c -o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug/generate/inthandler.o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/inthandler.c",
+    "file": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/inthandler.c"
+  },
+  {
+    "directory": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug",
+    "command": "\"C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/13.3 rel1/bin/arm-none-eabi-gcc.exe\" -mcpu\u003dcortex-a9 -marm -mlittle-endian -mfloat-abi\u003dhard -mfpu\u003dvfpv3-d16 -fdiagnostics-parseable-fixits -O0 -fmessage-length\u003d0 -fsigned-char -ffunction-sections -fdata-sections -fno-strict-aliasing -Wnull-dereference -Wstack-usage\u003d100 -g -gdwarf-4 -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src -std\u003dgnu11 -c -o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug/generate/mbed_sf_boot.o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/mbed_sf_boot.c",
+    "file": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/mbed_sf_boot.c"
+  },
+  {
+    "directory": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug",
+    "command": "\"C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/13.3 rel1/bin/arm-none-eabi-gcc.exe\" -mcpu\u003dcortex-a9 -marm -mlittle-endian -mfloat-abi\u003dhard -mfpu\u003dvfpv3-d16 -fdiagnostics-parseable-fixits -O0 -fmessage-length\u003d0 -fsigned-char -ffunction-sections -fdata-sections -fno-strict-aliasing -Wnull-dereference -Wstack-usage\u003d100 -g -gdwarf-4 -x assembler-with-cpp -c -o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug/generate/start.o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/start.S",
+    "file": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/start.S"
+  },
+  {
+    "directory": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug",
+    "command": "\"C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/13.3 rel1/bin/arm-none-eabi-gcc.exe\" -mcpu\u003dcortex-a9 -marm -mlittle-endian -mfloat-abi\u003dhard -mfpu\u003dvfpv3-d16 -fdiagnostics-parseable-fixits -O0 -fmessage-length\u003d0 -fsigned-char -ffunction-sections -fdata-sections -fno-strict-aliasing -Wnull-dereference -Wstack-usage\u003d100 -g -gdwarf-4 -x assembler-with-cpp -c -o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug/generate/vect_table.o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/vect_table.S",
+    "file": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/vect_table.S"
+  },
+  {
+    "directory": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug",
+    "command": "\"C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/13.3 rel1/bin/arm-none-eabi-gcc.exe\" -mcpu\u003dcortex-a9 -marm -mlittle-endian -mfloat-abi\u003dhard -mfpu\u003dvfpv3-d16 -fdiagnostics-parseable-fixits -O0 -fmessage-length\u003d0 -fsigned-char -ffunction-sections -fdata-sections -fno-strict-aliasing -Wnull-dereference -Wstack-usage\u003d100 -g -gdwarf-4 -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src -std\u003dgnu11 -c -o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug/generate/vects.o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/vects.c",
+    "file": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/vects.c"
+  },
+  {
+    "directory": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug",
+    "command": "\"C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/13.3 rel1/bin/arm-none-eabi-g++.exe\" -mcpu\u003dcortex-a9 -marm -mlittle-endian -mfloat-abi\u003dhard -mfpu\u003dvfpv3-d16 -fdiagnostics-parseable-fixits -O0 -fmessage-length\u003d0 -fsigned-char -ffunction-sections -fdata-sections -fno-strict-aliasing -Wnull-dereference -Wstack-usage\u003d100 -g -gdwarf-4 -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src -fabi-version\u003d0 -c -o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug/src/mcr_camera_2026base.o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/mcr_camera_2026base.cpp",
+    "file": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/mcr_camera_2026base.cpp"
+  },
+  {
+    "directory": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base",
+    "command": "clang  -I\"C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug\" -I\"C:\\Users\\shioz\\e2_studio\\workspace\\mcr_camera_2026base\\generate\" -ferror-limit\u003d30",
+    "file": "C:\\Users\\shioz\\e2_studio\\workspace\\mcr_camera_2026base\\generate\\linker_script.ld"
+  },
+  {
+    "directory": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base",
+    "command": "clang  -I\"C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug\" -I\"C:\\Users\\shioz\\e2_studio\\workspace\\mcr_camera_2026base\\generate\" -ferror-limit\u003d30",
+    "file": "C:\\Users\\shioz\\e2_studio\\workspace\\mcr_camera_2026base\\generate\\linker_script_ram.ld"
+  }
+]

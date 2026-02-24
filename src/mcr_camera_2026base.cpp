@@ -27,36 +27,109 @@ extern void __main() {
 }
 #endif
 
-// GR-PEACH USER_LED: P6_12 (Low Active: Low出力で点灯)
-#define PIN_LED_USER (12)
+#include "drivers/Onboard.h"
+
+// OSTM0 タイマー割り込み (1ms周期)
+// GR-PEACH (RZ/A1H) の周辺クロック P0Φ は 33.33MHz
+// 1ms = 33333 カウント
+#define OSTM0_CMP_1MS 33333
+
+// グローバルタイマーカウンタ
+volatile unsigned long g_timer_1ms = 0;
+
+extern "C" void ostm0_interrupt_callback(void);
+
+// OSTM0タイマー初期化 (1ms周期インターバルタイマー)
+static void initOSTM0(void) {
+  // OSTMのスタンバイ解除 (STBCR5 bit1 = OSTM0)
+  CPG.STBCR5 &= ~(0x02);
+
+  // ダミーリード (リファレンスマニュアル推奨)
+  volatile uint8_t dummy = CPG.STBCR5;
+  (void)dummy;
+
+  // OSTM0を停止
+  OSTM0.OSTMnTT = 0x01;
+
+  // 比較レジスタに1ms相当のカウント値を設定
+  OSTM0.OSTMnCMP = OSTM0_CMP_1MS;
+
+  // OSTMnCTL設定
+  // bit1: OSTMnMD1 = 0 (インターバルタイマー)
+  // bit0: OSTMnMD0 = 1 (カウント開始時に割り込み要求を発生)
+  OSTM0.OSTMnCTL = 0x01;
+
+  // GIC設定: OSTM0割り込みを有効化
+  // OSTM0 IRQ ID = 134
+  // ICDISER (割り込みセットイネーブルレジスタ)
+  // IRQ134 → レジスタ番号 = 134/32 = 4, ビット位置 = 134%32 = 6
+  INTC.ICDISER4 |= (1 << 6);
+
+  // 割り込み優先度設定 (ICDIPR)
+  // IRQ134 → レジスタ番号 = 134/4 = 33, バイト位置 = (134%4)*8 = 16
+  // 優先度: 低め (0xF0) に設定
+  uint32_t ipr = INTC.ICDIPR33;
+  ipr &= ~(0xFF << 16);
+  ipr |= (0xF0 << 16);
+  INTC.ICDIPR33 = ipr;
+
+  // 割り込みプロセッサターゲット設定 (ICDIPTR)
+  // CPU0にターゲット (0x01)
+  // IRQ134 → レジスタ番号 = 134/4 = 33, バイト位置 = (134%4)*8 = 16
+  uint32_t iptr = INTC.ICDIPTR33;
+  iptr &= ~(0xFF << 16);
+  iptr |= (0x01 << 16);
+  INTC.ICDIPTR33 = iptr;
+
+  // GICディストリビュータ有効化
+  INTC.ICDDCR = 0x01;
+
+  // GIC CPUインターフェース有効化
+  INTC.ICCICR = 0x01;
+
+  // 割り込み優先度マスク: 全割り込みを許可
+  INTC.ICCPMR = 0xFF;
+
+  // OSTM0カウント開始
+  OSTM0.OSTMnTS = 0x01;
+
+  // CPUレベルのIRQを有効化（CPSR Iビットクリア）
+  __asm__ volatile("CPSIE i");
+}
+
+// OSTM0割り込みコールバック
+// inthandler.c の INT_Excep_OSTMI0() から呼ばれる
+void ostm0_interrupt_callback(void) {
+  g_timer_1ms++;
+
+  // LEDとスイッチのテスト: 100msごとにUSER LEDをトグル
+  // スイッチが押されていたらREDを点灯
+  if (g_timer_1ms % 100 == 0) {
+    static int toggle = 0;
+    toggle = !toggle;
+    Onboard::setLed(3, toggle); // USER LED
+  }
+
+  if (Onboard::sw()) {
+    Onboard::setLed(0, 1); // RED
+  } else {
+    Onboard::setLed(0, 0); // RED
+  }
+
+  Onboard::update();
+}
 
 int main(void) {
+  // オンボードLED/SWの初期化
+  Onboard::init();
 
-  // --- USER_LED (P6_12) をGPIO出力に設定 ---
+  // OSTM0タイマー割り込みを設定・開始（1ms周期）
+  initOSTM0();
 
-  // PMC6: ポートモード制御 -> 0 = ポートモード（GPIO）
-  GPIO.PMC6 &= ~(1 << PIN_LED_USER);
-
-  // PM6: ポート方向 -> 0 = 出力
-  GPIO.PM6 &= ~(1 << PIN_LED_USER);
-
-  // PIPC6: ソフトウェアIO制御を選択 -> 0
-  GPIO.PIPC6 &= ~(1 << PIN_LED_USER);
-
-  // --- USER_LED点滅テスト ---
-  // コードが実行されているか確認するため、LEDを点滅させる
-  // LOW/HIGHの両方がテストされるので、どちらで光るか確認可能
-  volatile unsigned long i;
+  // メインループ
+  // 処理はすべて割り込み内（1ms周期）で実行されるため、ここでは何もしない
   while (1) {
-    // LOW出力（Low Active なら点灯）
-    GPIO.P6 &= ~(1 << PIN_LED_USER);
-    for (i = 0; i < 1000000; i++)
-      ; // 簡易ディレイ
-
-    // HIGH出力（Low Active なら消灯）
-    GPIO.P6 |= (1 << PIN_LED_USER);
-    for (i = 0; i < 1000000; i++)
-      ; // 簡易ディレイ
+    // 待機
   }
 
   return 0;
