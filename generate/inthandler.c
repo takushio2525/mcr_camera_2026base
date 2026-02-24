@@ -6,6 +6,7 @@
 /************************************************************************/
 
 #include "interrupt_handlers.h"
+#include <stdint.h>
 
 /* Exception(Undefined Instruction) */
 void INT_Excep_UndefinedInst(void) { /* brk(); */ }
@@ -26,7 +27,27 @@ void INT_Excep_DATA_ABORT(void) { /* brk(); */ }
 void INT_Excep_Reserved(void) { /* brk(); */ }
 
 /* IRQ*/
-void INT_Excep_IRQ(void) { /* brk(); */ }
+typedef void (*fp_irq)(void);
+extern const fp_irq RelocatableVectors[];
+
+void INT_Excep_IRQ(void) __attribute__((interrupt("IRQ")));
+void INT_Excep_IRQ(void) {
+  volatile uint32_t *ICCIAR = (volatile uint32_t *)0xE820200C;
+  volatile uint32_t *ICCEOIR = (volatile uint32_t *)0xE8202010;
+
+  // 割り込み要因を取得＆GICへACK
+  uint32_t irq = *ICCIAR;
+  uint32_t id = irq & 0x3FF;
+
+  if (id < 1020) {
+    if (RelocatableVectors[id] != 0) {
+      RelocatableVectors[id]();
+    }
+  }
+
+  // GICへEIO (End of Interrupt) を通知
+  *ICCEOIR = irq;
+}
 
 /* FIQ*/
 void INT_Excep_FIQ(void) { /* brk(); */ }

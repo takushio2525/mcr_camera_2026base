@@ -44,14 +44,26 @@ GR-PEACH (RZ/A1H) をベースとしたマイクロマウス／ロボットカ�
 | 1msタイマー割り込み処理 | `src/mcr_camera_2026base.cpp` | `generate/inthandler.c` |
 
 ## 8. 詳細設計
-- **`Onboard コンストラクタ`**: P6の出力・入力モード設定（PIPCやPBDC設定含む）。ラッチバッファの初期化。
+- **`Onboard コンストラクタ`**: P6の出力・入力モード設定。ラッチバッファの初期化。
 - **`Onboard::setLed(id, val)`**: 指定IDのLEDバッファ状態を1または0に保存。ハードウェアにはまだ反映しない。
 - **`Onboard::update()`**: LEDバッファ状態をまとめ、GR-PEACHの対象GPIOピン（Low Active）へ実際に出力する。
-- **`Onboard::sw()`**: SWのプッシュ状態をポーリングで監視し、押下時1を返す。
+- **`Onboard::sw()`**: SWのプッシュ状態をポーリングで監視し、押下時1(Active-High)を返す。
 - **`initOSTM0()`**: RZ/A1HのOSTM0を1ms用に設定し、GIC(INTC)へ登録。
 - **`ostm0_interrupt_callback()`**: `INT_Excep_OSTMI0` から呼ばれ、実時間をカウント(`g_timer_1ms`)し、`g_onboard` ポインタを経由してOnboardインスタンスを操作する。
+- **`INT_Excep_IRQ()`**: GIC(INTC)を用いたベクタ割り込みディスパッチャ。ICCIARから要因IDを取得し、`RelocatableVectors` から適切なハンドラへ分岐・EIOを通知する実装。
 
 ## 24. 修正履歴
+
+### 2026-02-24 16:45: GIC割り込みディスパッチャ（IRQ）の実装
+**変更内容:**
+- `generate/inthandler.c` の空関数だった `INT_Excep_IRQ()` に、GICからの割り込み要因取得と `RelocatableVectors` による個別ハンドラへの分岐処理、さらにEOI (End of Interrupt) 応答処理を追加しました。
+- `mcr_camera_2026base_SPEC.md` の詳細設計に `INT_Excep_IRQ()` の説明を追記しました。
+
+**解消した問題/不満:**
+- タイマー割り込み（OSTM0）などの割り込み要求が発生しても、ベクタテーブルから呼ばれる大元のIRQディスパッチャが空実装であったため、割り込みハンドラが実行されず、さらにGIC側でも割り込み要求がクリアされないという問題。オンボードLEDが点滅しない原因となっていました。
+
+**解決方法:**
+- ARM Cortex-A9向けの正しいGIC IRQディスパッチロジック（ICCIARの読み出し〜ハンドラ呼び出し〜ICCEOIRへの書き込み）を実装し、各種タイマ等の個別割り込みハンドラが正しく実行されるようにしました。
 
 ### 2026-02-24 16:15: オンボードクラスのインスタンス化対応とGPIO初期化修正
 **変更内容:**
