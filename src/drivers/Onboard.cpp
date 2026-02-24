@@ -57,9 +57,6 @@ Onboard::Onboard() {
 
   // PIBC6 (ポート入力バッファ制御) -> 有効 (1)
   GPIO.PIBC6 |= (1 << PIN_SW);
-
-  // PBDC6 -> 双方向モード無効 (0)
-  GPIO.PBDC6 &= ~(1 << PIN_SW);
 }
 
 void Onboard::setLed(int id, int val) {
@@ -80,9 +77,10 @@ void Onboard::update() {
 }
 
 int Onboard::sw() {
-  // If pulled-up and switch connected to GND, pressed = Low (0)
-  if ((GPIO.PPR6 & (1 << PIN_SW)) == 0) {
-    return 1; // Pressed
+  // ユーザースイッチ(P6_0)はMbed側ソースと実機挙動から active-high と推測。
+  // (PPR6 & 1) が 1 のとき押下と判定する。
+  if ((GPIO.PPR6 & (1 << PIN_SW)) != 0) {
+    return 1; // Pressed // Active High: 押すと1になる
   } else {
     return 0; // Released
   }

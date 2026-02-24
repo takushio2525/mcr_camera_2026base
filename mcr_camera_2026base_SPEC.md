@@ -44,14 +44,21 @@ GR-PEACH (RZ/A1H) をベースとしたマイクロマウス／ロボットカ�
 | 1msタイマー割り込み処理 | `src/mcr_camera_2026base.cpp` | `generate/inthandler.c` |
 
 ## 8. 詳細設計
-- **`Onboard::init()`**: P6の出力・入力モード設定。ラッチバッファの初期化。
+- **`Onboard コンストラクタ`**: P6の出力・入力モード設定（PIPCやPBDC設定含む）。ラッチバッファの初期化。
 - **`Onboard::setLed(id, val)`**: 指定IDのLEDバッファ状態を1または0に保存。ハードウェアにはまだ反映しない。
 - **`Onboard::update()`**: LEDバッファ状態をまとめ、GR-PEACHの対象GPIOピン（Low Active）へ実際に出力する。
 - **`Onboard::sw()`**: SWのプッシュ状態をポーリングで監視し、押下時1を返す。
-- **`initOSTM0()`**: RZ/A1HのOSTM0を1ms用に設定し、GICへ登録。
-- **`ostm0_interrupt_callback()`**: `INT_Excep_OSTMI0` から呼ばれ、実時間をカウント(`g_timer_1ms`)しつつ処理のディスパッチを担当。
+- **`initOSTM0()`**: RZ/A1HのOSTM0を1ms用に設定し、GIC(INTC)へ登録。
+- **`ostm0_interrupt_callback()`**: `INT_Excep_OSTMI0` から呼ばれ、実時間をカウント(`g_timer_1ms`)し、`g_onboard` ポインタを経由してOnboardインスタンスを操作する。
 
 ## 24. 修正履歴
+
+### 2026-02-24 16:15: オンボードクラスのインスタンス化対応とGPIO初期化修正
+**変更内容:**
+- `src/drivers/Onboard.cpp` のスイッチ入力初期化に欠けていたPIPC6やPBDC6のクリア処理を追加。
+- 動作安定化のため静的メソッドによる基盤操作から、インスタンスを生成（`Onboard onboard;`）し `g_onboard` ポインタ経由で割り込みハンドラから操作するオブジェクト指向構造にリファクタリング。
+**解決方法:**
+- Mbed由来のプロジェクト構造を参考に、より安全な初期化シーケンスと呼び出し経路に改修。
 
 ### 2026-02-24 16:04: オンボードクラス＆1msタイマーの実装
 
