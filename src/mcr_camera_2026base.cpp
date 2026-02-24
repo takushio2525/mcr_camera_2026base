@@ -10,7 +10,6 @@
 #include "iodefine.h"
 #include <typedefine.h>
 
-
 #ifdef CPPAPP
 // グローバルコンストラクタの初期化
 extern void __main() {
@@ -44,12 +43,20 @@ int main(void) {
   // PIPC6: ソフトウェアIO制御を選択 -> 0
   GPIO.PIPC6 &= ~(1 << PIN_LED_USER);
 
-  // --- USER_LEDを点灯（Low Active: Low出力 = 点灯） ---
-  GPIO.P6 &= ~(1 << PIN_LED_USER);
-
-  // 無限ループ（プログラムが終了しないようにする）
+  // --- USER_LED点滅テスト ---
+  // コードが実行されているか確認するため、LEDを点滅させる
+  // LOW/HIGHの両方がテストされるので、どちらで光るか確認可能
+  volatile unsigned long i;
   while (1) {
-    // 何もしない（LEDは点灯したまま）
+    // LOW出力（Low Active なら点灯）
+    GPIO.P6 &= ~(1 << PIN_LED_USER);
+    for (i = 0; i < 1000000; i++)
+      ; // 簡易ディレイ
+
+    // HIGH出力（Low Active なら消灯）
+    GPIO.P6 |= (1 << PIN_LED_USER);
+    for (i = 0; i < 1000000; i++)
+      ; // 簡易ディレイ
   }
 
   return 0;
