@@ -47,8 +47,8 @@ GR-PEACH (RZ/A1H) をベースとしたマイクロマウス／ロボットカ�
 ## 8. 詳細設計
 - **`IModule`**: 全ドライバおよびロジックモジュールの共通インターフェース。`init()`と`update()`を定義。
 - **`Onboard コンストラクタ`**: ラッチバッファの初期化のみ。
-- **`Onboard::init()`**: P6の出力・入力モード設定などのGPIO初期化を実行。
-- **`Onboard::setLed(id, val)`**: 指定IDのLEDバッファ状態を1または0に保存。ハードウェアにはまだ反映しない。
+- **`Onboard::setUserLed(val)`**: USER LEDのバッファ状態を1または0に保存。ハードウェアにはまだ反映しない。
+- **`Onboard::setColorLed(r, g, b)`**: フルカラーLED（RGB）のバッファ状態を保存。ハードウェアにはまだ反映しない。
 - **`Onboard::update()`**: LEDバッファ状態をまとめ、GR-PEACHの対象GPIOピン（Low Active）へ実際に出力する。
 - **`Onboard::sw()`**: SWのプッシュ状態をポーリングで監視し、押下時1(Active-High)を返す。
 - **`g_onboard`**: `Onboard`クラスのグローバルインスタンス。割り込みハンドラ等各所からハードウェア操作を行うために使用。
@@ -57,6 +57,17 @@ GR-PEACH (RZ/A1H) をベースとしたマイクロマウス／ロボットカ�
 - **`INT_Excep_IRQ()`**: GIC(INTC)を用いたベクタ割り込みディスパッチャ。ICCIARから要因IDを取得し、`RelocatableVectors` から適切なハンドラへ分岐・EIOを通知する実装。
 
 ## 24. 修正履歴
+
+### 2026-02-24 21:05: OnboardのLED制御メソッド（setLed）の分割
+**変更内容:**
+- `Onboard` クラスの `setLed(id, val)` メソッドを廃止し、`setUserLed(val)` と `setColorLed(r, g, b)` に分割。
+- `mcr_camera_2026base.cpp` における呼び出し部を新しいメソッドを使用するように修正。
+
+**解消した問題/不満:**
+- ユーザーLEDとRGBフルカラーLEDが同じ `setLed` メソッドでID指定により操作されていたため、直感的でなく可読性が低かった問題。
+
+**解決方法:**
+- 役割ごとに専用のメソッド（単一のON/OFF制御と、RGBの3色同時制御）を用意することで、呼び出し側のコードを簡潔にし、意図を明確にしました。
 
 ### 2026-02-24 20:55: IModuleインターフェース実装とOnboardクラスのグローバル化
 

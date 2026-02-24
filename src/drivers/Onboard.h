@@ -21,10 +21,13 @@ public:
   // Initialize GPIOs
   void init() override;
 
-  // Set LED state (Latched: not reflected to GPIO yet)
-  // id: 0=RED, 1=GREEN, 2=BLUE, 3=USER
+  // Set USER LED state (Latched: not reflected to GPIO yet)
   // val: 0=OFF, 1=ON
-  void setLed(int id, int val);
+  void setUserLed(int val);
+
+  // Set Full Color LED state (Latched: not reflected to GPIO yet)
+  // r, g, b: 0=OFF, 1=ON
+  void setColorLed(int r, int g, int b);
 
   // Reflect latched LED states to GPIO registers in one go
   void update() override;

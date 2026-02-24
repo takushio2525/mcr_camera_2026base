@@ -125,17 +125,13 @@ void ostm0_interrupt_callback(void) {
   if (g_timer_1ms % 5000 == 0) {
     static int toggle = 0;
     toggle = !toggle;
-    g_onboard.setLed(3, toggle); // USER LED
+    g_onboard.setUserLed(toggle); // USER LED
   }
 
   if (g_onboard.sw()) {
-    g_onboard.setLed(0, 1); // RED
-    g_onboard.setLed(1, 1); // GREEN
-    g_onboard.setLed(2, 1); // BLUE
+    g_onboard.setColorLed(1, 1, 1); // RED, GREEN, BLUE ON
   } else {
-    g_onboard.setLed(0, 0); // RED
-    g_onboard.setLed(1, 0); // GREEN
-    g_onboard.setLed(2, 0); // BLUE
+    g_onboard.setColorLed(0, 0, 0); // RED, GREEN, BLUE OFF
   }
 
   g_onboard.update();

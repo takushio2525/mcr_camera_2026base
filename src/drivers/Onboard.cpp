@@ -24,7 +24,7 @@ static const int LED_PINS[ONBOARD_LED_COUNT] = {PIN_LED_RED, PIN_LED_GRN,
 Onboard::Onboard() {
   // Initialize latch buffer (All OFF)
   for (int i = 0; i < ONBOARD_LED_COUNT; i++) {
-    ledState_[i] = 0;
+    ledState_[i] = 1;
   }
 }
 
@@ -61,10 +61,12 @@ void Onboard::init() {
   GPIO.PIBC6 |= (1 << PIN_SW);
 }
 
-void Onboard::setLed(int id, int val) {
-  if (id < 0 || id >= ONBOARD_LED_COUNT)
-    return;
-  ledState_[id] = val ? 1 : 0;
+void Onboard::setUserLed(int val) { ledState_[3] = val ? 1 : 0; }
+
+void Onboard::setColorLed(int r, int g, int b) {
+  ledState_[0] = r ? 1 : 0;
+  ledState_[1] = g ? 1 : 0;
+  ledState_[2] = b ? 1 : 0;
 }
 
 void Onboard::update() {
