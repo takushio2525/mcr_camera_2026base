@@ -64,9 +64,9 @@ static void initOSTM0(void) {
   OSTM0.OSTMnCMP = OSTM0_CMP_1MS;
 
   // OSTMnCTL設定
-  // bit1: OSTMnMD1 = 0 (インターバルタイマー)
-  // bit0: OSTMnMD0 = 0 (コンペアマッチ時に割り込み要求を発生)
-  OSTM0.OSTMnCTL = 0x00;
+  // bit1: OSTMnMD1 = 0 (インターバルタイマーモード)
+  // bit0: OSTMnMD0 = 1 (コンペアマッチ時に割り込み要求を発生)
+  OSTM0.OSTMnCTL = 0x01;
 
   // GIC設定: OSTM0割り込みを有効化
   // まず以前の割り込み状態を確実にクリア（安全のため）
