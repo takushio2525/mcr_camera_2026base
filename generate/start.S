@@ -30,6 +30,7 @@
     .extern main
     .extern .Lstack
     .extern _rvectors
+    .extern vector_table
     .extern _exit
     
 
@@ -98,6 +99,10 @@ vfp_init:
      mov    sp, r11
 
 #ifndef SIMULATOR_DEBUG
+/* set vector table address to VBAR */
+    ldr r0, =vector_table
+    mcr p15, 0, r0, c12, c0, 0
+
 /* call the hardware initialiser */
     bl    HardwareSetup
 #endif
