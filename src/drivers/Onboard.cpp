@@ -53,15 +53,21 @@ void Onboard::init() {
   // Initial state: Low Active, so High Output = OFF
   GPIO.P6 |= ledMask;
 
-  // Switch -> Input
-  // PM6_0 -> Input (1)
-  GPIO.PM6 |= (1 << PIN_SW);
+  // スイッチ -> 入力
+  // PIPC6_0 -> ソフトウェアIO制御 (0)
+  GPIO.PIPC6 &= ~(1 << PIN_SW);
 
-  // PMC6_0 -> Port mode (0)
+  // PMC6_0 -> ポートモード (0)
   GPIO.PMC6 &= ~(1 << PIN_SW);
 
-  // PIBC6 (Port input buffer control) -> Enable (1)
+  // PM6_0 -> 入力 (1)
+  GPIO.PM6 |= (1 << PIN_SW);
+
+  // PIBC6 (ポート入力バッファ制御) -> 有効 (1)
   GPIO.PIBC6 |= (1 << PIN_SW);
+
+  // PBDC6 -> 双方向モード無効 (0)
+  GPIO.PBDC6 &= ~(1 << PIN_SW);
 
   // Initialize latch buffer (All OFF)
   for (int i = 0; i < ONBOARD_LED_COUNT; i++) {

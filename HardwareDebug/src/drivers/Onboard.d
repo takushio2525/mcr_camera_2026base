@@ -1,4 +1,5 @@
-src/mcr_camera_2026base.o: ../src/mcr_camera_2026base.cpp \
+src/drivers/Onboard.o: ../src/drivers/Onboard.cpp \
+ ../src/drivers/Onboard.h \
  C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/iodefine.h \
  C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/typedefine.h \
  C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/iodefines/adc_iodefine.h \
@@ -39,9 +40,8 @@ src/mcr_camera_2026base.o: ../src/mcr_camera_2026base.cpp \
  C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/iodefines/ssif_iodefine.h \
  C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/iodefines/usb20_iodefine.h \
  C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/iodefines/vdc5_iodefine.h \
- C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/iodefines/wdt_iodefine.h \
- C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/typedefine.h \
- ../src/drivers/Onboard.h
+ C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/iodefines/wdt_iodefine.h
+../src/drivers/Onboard.h:
 C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/iodefine.h:
 C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/typedefine.h:
 C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/iodefines/adc_iodefine.h:
@@ -83,5 +83,3 @@ C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/iodefines/ssif_i
 C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/iodefines/usb20_iodefine.h:
 C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/iodefines/vdc5_iodefine.h:
 C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/iodefines/wdt_iodefine.h:
-C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/typedefine.h:
-../src/drivers/Onboard.h:

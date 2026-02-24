@@ -104,7 +104,7 @@ void ostm0_interrupt_callback(void) {
 
   // LEDとスイッチのテスト: 100msごとにUSER LEDをトグル
   // スイッチが押されていたらREDを点灯
-  if (g_timer_1ms % 100 == 0) {
+  if (g_timer_1ms % 1000 == 0) {
     static int toggle = 0;
     toggle = !toggle;
     Onboard::setLed(3, toggle); // USER LED
@@ -112,8 +112,13 @@ void ostm0_interrupt_callback(void) {
 
   if (Onboard::sw()) {
     Onboard::setLed(0, 1); // RED
+    Onboard::setLed(1, 1); // GREEN
+    Onboard::setLed(2, 1); // BLUE
+
   } else {
     Onboard::setLed(0, 0); // RED
+    Onboard::setLed(1, 0); // GREEN
+    Onboard::setLed(2, 0); // BLUE
   }
 
   Onboard::update();
