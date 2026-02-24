@@ -26,7 +26,9 @@ Onboard::Onboard() {
   for (int i = 0; i < ONBOARD_LED_COUNT; i++) {
     ledState_[i] = 0;
   }
+}
 
+void Onboard::init() {
   // Port 6 Setting
 
   // LED -> Output
