@@ -63,6 +63,10 @@ static void initOSTM0(void) {
   OSTM0.OSTMnCTL = 0x00;
 
   // GIC設定: OSTM0割り込みを有効化
+  // まず以前の割り込み状態を確実にクリア（安全のため）
+  INTC.ICDICER4 = (1 << 6); // Disable
+  INTC.ICDICPR4 = (1 << 6); // Clear Pending
+
   // OSTM0 IRQ ID = 134
   // ICDISER (割り込みセットイネーブルレジスタ)
   // IRQ134 → レジスタ番号 = 134/32 = 4, ビット位置 = 134%32 = 6
@@ -78,10 +82,10 @@ static void initOSTM0(void) {
 
   // 割り込み優先度設定 (ICDIPR)
   // IRQ134 → レジスタ番号 = 134/4 = 33, バイト位置 = (134%4)*8 = 16
-  // 優先度: 低め (0xF0) に設定
+  // 優先度: 最高 (0x00) もしくは高め (0x80) に設定
   uint32_t ipr = INTC.ICDIPR33;
   ipr &= ~(0xFF << 16);
-  ipr |= (0xF0 << 16);
+  ipr |= (0x80 << 16); // 優先度を中間に引き上げ
   INTC.ICDIPR33 = ipr;
 
   // 割り込みプロセッサターゲット設定 (ICDIPTR)
@@ -99,6 +103,7 @@ static void initOSTM0(void) {
   INTC.ICCICR = 0x01;
 
   // 割り込み優先度マスク: 全割り込みを許可
+  // (安全のため0xF8に設定することもあるが0xFFで全通し)
   INTC.ICCPMR = 0xFF;
 
   // OSTM0カウント開始
@@ -114,9 +119,11 @@ void ostm0_interrupt_callback(void) {
   g_timer_1ms++;
 
   if (g_onboard != nullptr) {
-    // LEDとスイッチのテスト: 100msごとにUSER LEDをトグル
     // スイッチが押されていたらREDを点灯
-    if (g_timer_1ms % 1000 == 0) {
+
+    // 500ミリ秒(0.5秒)ごとにUSER LEDをトグル（1秒周期の点滅）
+    // ※ 1ms割り込みなので 500回 = 500ms
+    if (g_timer_1ms % 500 == 0) {
       static int toggle = 0;
       toggle = !toggle;
       g_onboard->setLed(3, toggle); // USER LED
