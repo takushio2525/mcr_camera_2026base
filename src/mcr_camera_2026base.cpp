@@ -37,6 +37,9 @@ extern void __main() {
 // グローバルタイマーカウンタ
 volatile unsigned long g_timer_1ms = 0;
 
+// Onboardインスタンスへのポインタ（割り込みハンドラからアクセスするため）
+Onboard *g_onboard = nullptr;
+
 extern "C" void ostm0_interrupt_callback(void);
 
 // OSTM0タイマー初期化 (1ms周期インターバルタイマー)
@@ -102,31 +105,33 @@ static void initOSTM0(void) {
 void ostm0_interrupt_callback(void) {
   g_timer_1ms++;
 
-  // LEDとスイッチのテスト: 100msごとにUSER LEDをトグル
-  // スイッチが押されていたらREDを点灯
-  if (g_timer_1ms % 1000 == 0) {
-    static int toggle = 0;
-    toggle = !toggle;
-    Onboard::setLed(3, toggle); // USER LED
+  if (g_onboard != nullptr) {
+    // LEDとスイッチのテスト: 100msごとにUSER LEDをトグル
+    // スイッチが押されていたらREDを点灯
+    if (g_timer_1ms % 1000 == 0) {
+      static int toggle = 0;
+      toggle = !toggle;
+      g_onboard->setLed(3, toggle); // USER LED
+    }
+
+    if (g_onboard->sw()) {
+      g_onboard->setLed(0, 1); // RED
+      g_onboard->setLed(1, 1); // GREEN
+      g_onboard->setLed(2, 1); // BLUE
+    } else {
+      g_onboard->setLed(0, 0); // RED
+      g_onboard->setLed(1, 0); // GREEN
+      g_onboard->setLed(2, 0); // BLUE
+    }
+
+    g_onboard->update();
   }
-
-  if (Onboard::sw()) {
-    Onboard::setLed(0, 1); // RED
-    Onboard::setLed(1, 1); // GREEN
-    Onboard::setLed(2, 1); // BLUE
-
-  } else {
-    Onboard::setLed(0, 0); // RED
-    Onboard::setLed(1, 0); // GREEN
-    Onboard::setLed(2, 0); // BLUE
-  }
-
-  Onboard::update();
 }
 
 int main(void) {
-  // オンボードLED/SWの初期化
-  Onboard::init();
+  // オンボードLED/SWの初期化（インスタンス化）
+  Onboard onboard;
+  g_onboard = &onboard;
 
   // OSTM0タイマー割り込みを設定・開始（1ms周期）
   initOSTM0();
