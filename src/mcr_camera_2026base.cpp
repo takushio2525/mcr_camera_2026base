@@ -31,8 +31,8 @@ extern void __main() {
 
 // OSTM0 タイマー割り込み (1ms周期)
 // GR-PEACH (RZ/A1H) の周辺クロック P0Φ は 33.33MHz
-// 1ms = 33333 カウント
-#define OSTM0_CMP_1MS 33333
+// 1ms = 333333 カウント (実測で33333が0.1ms相当だったため10倍に変更)
+#define OSTM0_CMP_1MS 333333
 
 // グローバルタイマーカウンタ
 volatile unsigned long g_timer_1ms = 0;
@@ -123,7 +123,7 @@ void ostm0_interrupt_callback(void) {
 
     // 500ミリ秒(0.5秒)ごとにUSER LEDをトグル（1秒周期の点滅）
     // ※ 1ms割り込みなので 500回 = 500ms
-    if (g_timer_1ms % 500 == 0) {
+    if (g_timer_1ms % 5000 == 0) {
       static int toggle = 0;
       toggle = !toggle;
       g_onboard->setLed(3, toggle); // USER LED
