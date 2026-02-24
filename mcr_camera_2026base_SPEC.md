@@ -31,6 +31,7 @@ GR-PEACH (RZ/A1H) をベースとしたマイクロマウス／ロボットカ�
 | ファイル | 役割 |
 |----------|------|
 | `src/mcr_camera_2026base.cpp` | メインの初期化と 1msタイマー設定、コールバックを実装 |
+| `src/core/IModule.h` | 全モジュール共通の基底インターフェース |
 | `src/drivers/Onboard.h` | オンボードのLED / SWを抽象化したラッチ管理ドライバ の定義 |
 | `src/drivers/Onboard.cpp` | Onboardクラスのハードウェア（GPIO）操作の実装 |
 | `generate/inthandler.c` | e2 studio 生成の中断ハンドラ実装ファイル（OSTM0コールバックをフック） |
@@ -44,15 +45,32 @@ GR-PEACH (RZ/A1H) をベースとしたマイクロマウス／ロボットカ�
 | 1msタイマー割り込み処理 | `src/mcr_camera_2026base.cpp` | `generate/inthandler.c` |
 
 ## 8. 詳細設計
-- **`Onboard コンストラクタ`**: P6の出力・入力モード設定。ラッチバッファの初期化。
+- **`IModule`**: 全ドライバおよびロジックモジュールの共通インターフェース。`init()`と`update()`を定義。
+- **`Onboard コンストラクタ`**: ラッチバッファの初期化のみ。
+- **`Onboard::init()`**: P6の出力・入力モード設定などのGPIO初期化を実行。
 - **`Onboard::setLed(id, val)`**: 指定IDのLEDバッファ状態を1または0に保存。ハードウェアにはまだ反映しない。
 - **`Onboard::update()`**: LEDバッファ状態をまとめ、GR-PEACHの対象GPIOピン（Low Active）へ実際に出力する。
 - **`Onboard::sw()`**: SWのプッシュ状態をポーリングで監視し、押下時1(Active-High)を返す。
+- **`g_onboard`**: `Onboard`クラスのグローバルインスタンス。割り込みハンドラ等各所からハードウェア操作を行うために使用。
 - **`initOSTM0()`**: RZ/A1HのOSTM0を1ms用に設定し、GIC(INTC)へ登録。
-- **`ostm0_interrupt_callback()`**: `INT_Excep_OSTMI0` から呼ばれ、実時間をカウント(`g_timer_1ms`)し、`g_onboard` ポインタを経由してOnboardインスタンスを操作する。
+- **`ostm0_interrupt_callback()`**: `INT_Excep_OSTMI0` から呼ばれ、実時間をカウント(`g_timer_1ms`)し、`g_onboard` 経由でLED制御を行う。
 - **`INT_Excep_IRQ()`**: GIC(INTC)を用いたベクタ割り込みディスパッチャ。ICCIARから要因IDを取得し、`RelocatableVectors` から適切なハンドラへ分岐・EIOを通知する実装。
 
 ## 24. 修正履歴
+
+### 2026-02-24 20:55: IModuleインターフェース実装とOnboardクラスのグローバル化
+
+**変更内容:**
+- `src/core/IModule.h` を新規作成し、基底インターフェース `IModule` を定義。
+- `src/drivers/Onboard.h`, `Onboard.cpp` に `IModule` を継承させ、初期化処理を `init()` メソッドへ移行。
+- `src/mcr_camera_2026base.cpp` で `Onboard` インスタンス（`g_onboard`）をグローバル化し、`main` の先頭で `init()` を呼び出す構造に変更。
+
+**解消した問題/不満:**
+- オブジェクト指向ベースの共通インターフェース（`IModule`）に準拠させるためのアーキテクチャ整備。
+- インスタンスが `main` のローカル変数だったため、ポインタ経由で間接参照していた構造を、明確なグローバルインスタンスに変更し可読性を向上。
+
+**解決方法:**
+- `IModule`（`doc/main.tex` 定義に準拠）を実装し各ドライバに適応。グローバル確保でメモリ配置を確定させ、直接メソッドを呼ぶことで簡素化・安全性向上を図った。
 
 ### 2026-02-24 20:45: 個別割り込みハンドラからの不正なリターン命令によるクラッシュ修正
 **変更内容:**
