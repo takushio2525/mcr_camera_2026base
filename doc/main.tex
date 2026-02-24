@@ -1,0 +1,1536 @@
+%% ============================================================
+%% mcr_camera_2026base プログラム設計仕様書
+%% ============================================================
+%% ビルド: latexmk main.tex (.latexmkrc で uplatex + dvipdfmx)
+%% ============================================================
+\documentclass[a4paper,11pt,dvipdfmx]{jsarticle}
+
+%% ─── パッケージ ───────────────────────────────
+\usepackage[dvipdfmx]{graphicx}
+\usepackage[dvipdfmx]{xcolor}
+\usepackage[dvipdfmx,
+  bookmarks=true,
+  bookmarksnumbered=true,
+  colorlinks=true,
+  linkcolor={blue!70!black},
+  citecolor={green!50!black},
+  urlcolor={blue!60!black},
+  pdfauthor={Shiozawa},
+  pdftitle={mcr\_camera\_2026base プログラム設計仕様書},
+  pdfsubject={マイコンカーラリー カメラクラス開発仕様書},
+]{hyperref}
+\usepackage{pxjahyper}           % hyperref 日本語しおり対応
+\usepackage[top=25mm,bottom=25mm,left=20mm,right=20mm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{lastpage}
+\usepackage{tabularx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{tcolorbox}
+\tcbuselibrary{skins,breakable}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric,fit,calc}
+\usepackage{listings}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{amsmath}
+
+%% ─── 色定義 ──────────────────────────────────
+\definecolor{headerblue}{HTML}{1B3A5C}
+\definecolor{accentblue}{HTML}{2E86C1}
+\definecolor{lightgray}{HTML}{F2F3F4}
+\definecolor{codebg}{HTML}{F7F9FB}
+\definecolor{warnred}{HTML}{E74C3C}
+\definecolor{noteyellow}{HTML}{F39C12}
+\definecolor{okgreen}{HTML}{27AE60}
+
+%% ─── ヘッダー・フッター ───────────────────────
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\color{headerblue}\textbf{mcr\_camera\_2026base} プログラム設計仕様書}
+\fancyhead[R]{\small\color{headerblue}Rev.\,1.0}
+\fancyfoot[C]{\small\thepage\,/\,\pageref{LastPage}}
+\fancyfoot[R]{\small\color{gray}2026-02-19}
+\renewcommand{\headrulewidth}{0.8pt}
+\renewcommand{\footrulewidth}{0.4pt}
+
+%% ─── セクション見出しスタイル ─────────────────
+\titleformat{\section}
+  {\Large\bfseries\color{headerblue}}
+  {\thesection}{1em}{}
+  [\vspace{-0.5em}\textcolor{accentblue}{\rule{\textwidth}{1.2pt}}]
+\titleformat{\subsection}
+  {\large\bfseries\color{headerblue}}
+  {\thesubsection}{1em}{}
+\titleformat{\subsubsection}
+  {\normalsize\bfseries\color{accentblue}}
+  {\thesubsubsection}{1em}{}
+
+%% ─── listings 設定 (C++) ──────────────────────
+\lstdefinestyle{cppstyle}{
+  language=C++,
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{accentblue}\bfseries,
+  commentstyle=\color{gray}\itshape,
+  stringstyle=\color{okgreen},
+  numberstyle=\tiny\color{gray},
+  numbers=left,
+  numbersep=8pt,
+  frame=single,
+  framerule=0.5pt,
+  rulecolor=\color{accentblue!40},
+  backgroundcolor=\color{codebg},
+  breaklines=true,
+  breakatwhitespace=false,
+  tabsize=2,
+  showstringspaces=false,
+  captionpos=b,
+  xleftmargin=15pt,
+  framexleftmargin=15pt,
+  morekeywords={override,float,int,void,static,const},
+}
+\lstset{style=cppstyle}
+
+%% ─── tcolorbox スタイル ──────────────────────
+% データシート風ボックス
+\newtcolorbox{apibox}[1]{
+  enhanced,
+  colback=white,
+  colframe=accentblue,
+  coltitle=white,
+  fonttitle=\bfseries\large,
+  title=#1,
+  top=4mm,
+  arc=2mm,
+  breakable,
+  before upper={\parindent0pt},
+  attach boxed title to top left={yshift=-3mm,xshift=5mm},
+  boxed title style={colback=accentblue,arc=1.5mm},
+}
+
+% 注意ボックス
+\newtcolorbox{cautionbox}[1][注意]{
+  enhanced,
+  colback=warnred!5,
+  colframe=warnred!70,
+  coltitle=white,
+  fonttitle=\bfseries,
+  title={\raisebox{-0.1em}{\textbf{⚠}} #1},
+  arc=1.5mm,
+  breakable,
+  attach boxed title to top left={yshift=-2mm,xshift=5mm},
+  boxed title style={colback=warnred!70,arc=1mm},
+}
+
+% ノートボックス
+\newtcolorbox{notebox}[1][補足]{
+  enhanced,
+  colback=accentblue!5,
+  colframe=accentblue!50,
+  coltitle=white,
+  fonttitle=\bfseries,
+  title={$\triangleright$ #1},
+  arc=1.5mm,
+  breakable,
+  attach boxed title to top left={yshift=-2mm,xshift=5mm},
+  boxed title style={colback=accentblue!50,arc=1mm},
+}
+
+% 関数ドキュメント用ボックス (FSPスタイル)
+\newtcolorbox{funcblock}[1]{
+  enhanced,
+  colback=white,
+  colframe=accentblue!25,
+  coltitle=headerblue,
+  fonttitle=\bfseries\ttfamily\small,
+  title={◆ #1},
+  arc=1mm,
+  boxrule=0.4pt,
+  breakable,
+  left=3mm, right=3mm, top=2mm, bottom=2mm,
+  before skip=3mm, after skip=3mm,
+  before upper={\parindent0pt},
+}
+
+% APIセクション見出し (FSPスタイル)
+\newcommand{\apisection}[1]{%
+  \vspace{4mm}%
+  {\normalsize\bfseries\color{headerblue} #1}%
+  \par\vspace{-1mm}%
+  {\color{accentblue!40}\rule{\linewidth}{0.5pt}}%
+  \par\vspace{2mm}%
+}
+
+% 実行フェーズバッジ
+\newcommand{\phasebadge}[1]{%
+  \colorbox{accentblue!10}{\small\bfseries\color{accentblue!80!black}\,#1\,}%
+}
+
+%% ─── ドキュメント情報 ─────────────────────────
+\newcommand{\doctitle}{mcr\_camera\_2026base\\プログラム設計仕様書}
+\newcommand{\docsubtitle}{GR-PEACH (RZ/A1H) マイコンカーラリー カメラクラス開発}
+\newcommand{\docauthor}{Shiozawa}
+\newcommand{\docversion}{1.0}
+\newcommand{\docdate}{2026年2月19日}
+
+%% ============================================================
+\begin{document}
+
+%% ─── 表紙 ─────────────────────────────────────
+\begin{titlepage}
+\begin{center}
+\vspace*{30mm}
+
+{\color{accentblue}\rule{\textwidth}{2pt}}
+\vspace{8mm}
+
+{\Huge\bfseries\color{headerblue} \doctitle}
+
+\vspace{6mm}
+
+{\Large\color{accentblue} \docsubtitle}
+
+\vspace{4mm}
+{\color{accentblue}\rule{\textwidth}{2pt}}
+
+\vspace{20mm}
+
+\begin{tabular}{rl}
+  \textbf{バージョン} & \docversion \\[4pt]
+  \textbf{作成日}     & \docdate \\[4pt]
+  \textbf{作成者}     & \docauthor \\[4pt]
+  \textbf{ステータス} & ドラフト \\
+\end{tabular}
+
+\vfill
+
+\begin{tcolorbox}[
+  colback=lightgray,
+  colframe=headerblue,
+  width=0.8\textwidth,
+  arc=3mm,
+  halign=center,
+]
+\small
+本文書は \texttt{mcr\_camera\_2026base} プロジェクトのプログラム設計仕様書です。\\
+ベアメタル環境における割り込み駆動アーキテクチャの詳細設計を記述します。
+\end{tcolorbox}
+
+\vspace{10mm}
+{\small\color{gray} 機密区分: 内部利用}
+
+\end{center}
+\end{titlepage}
+
+%% ─── 改訂履歴 ─────────────────────────────────
+\newpage
+\section*{改訂履歴}
+\addcontentsline{toc}{section}{改訂履歴}
+
+\begin{tabularx}{\textwidth}{c c c X}
+\toprule
+\textbf{版} & \textbf{日付} & \textbf{著者} & \textbf{変更内容} \\
+\midrule
+1.0 & 2026-02-19 & Shiozawa & 初版作成 \\
+\bottomrule
+\end{tabularx}
+
+%% ─── 目次 ─────────────────────────────────────
+\newpage
+\tableofcontents
+\newpage
+
+%% ============================================================
+%% 1. 概要
+%% ============================================================
+\section{概要}\label{sec:overview}
+
+GR-PEACH (RZ/A1H) を使用した、マイコンカーラリー (MCR) カメラクラス開発のためのベースプログラムである。
+
+\begin{notebox}[設計思想]
+\begin{itemize}[nosep]
+  \item mbed OS を使用せず、ルネサス標準の \texttt{iodefine.h} を用いたベアメタル（レジスタ直接操作）環境で構築する
+  \item 既存のスパゲッティコードを廃し、クラスベースの \texttt{init}/\texttt{update} パターンを採用したモダンなアーキテクチャを目指す
+\end{itemize}
+\end{notebox}
+
+\subsection{用語定義}
+
+\begin{tabularx}{\textwidth}{l X}
+\toprule
+\textbf{用語} & \textbf{定義} \\
+\midrule
+MCR       & マイコンカーラリーの略称 \\
+GR-PEACH  & ルネサス RZ/A1H 搭載の開発ボード \\
+MTU2      & マルチファンクション・タイマ・ユニット2。PWM出力に使用 \\
+ラッチ方式 & セッターで値を内部変数に保持し、\texttt{update()} 呼び出し時にのみハードウェアへ反映する方式 \\
+IModule   & 全モジュール共通の基底インターフェース (\hyperref[sec:api-imodule]{§\ref*{sec:api-imodule}}) \\
+\bottomrule
+\end{tabularx}
+
+%% ============================================================
+%% 2. 背景・課題
+%% ============================================================
+\section{背景・課題}\label{sec:background}
+
+\begin{cautionbox}[開発環境の課題]
+\begin{enumerate}[nosep]
+  \item \textbf{mbed OS サービス終了}: mbed のサービス終了に伴い、将来的な継続利用や保守が困難になる
+  \item \textbf{開発環境の老朽化}: 既存プロジェクトの e2 studio 環境やコンパイラバージョンが古く、最新の環境でビルドを通す必要がある
+  \item \textbf{ブラックボックス化の解消}: OS内部処理への依存を減らし、デバッグを容易にする必要がある
+\end{enumerate}
+\end{cautionbox}
+
+%% ============================================================
+%% 3. 目的
+%% ============================================================
+\section{目的}\label{sec:purpose}
+
+\begin{enumerate}[nosep]
+  \item mbed OS に依存しない、RZ/A1H 用の C++ ベースプログラム環境の構築
+  \item \textbf{クラス化・モジュール化}による可読性・保守性の向上
+  \item 共通インターフェース (\texttt{IModule}) による統一的な制御フローの確立
+\end{enumerate}
+
+%% ============================================================
+%% 4. システムアーキテクチャ
+%% ============================================================
+\section{システムアーキテクチャ}\label{sec:architecture}
+
+システムはタイマー割り込みによる定期実行（1ループ/1ms を想定）で完全に同期して動作する。
+処理は3つのフェーズに分離される。
+
+\subsection{実行フロー図}\label{sec:flow}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  node distance=6mm and 10mm,
+  phase/.style={
+    draw=accentblue, fill=accentblue!10,
+    rounded corners=3pt, minimum width=55mm, minimum height=10mm,
+    font=\bfseries\small, align=center,
+  },
+  module/.style={
+    draw=headerblue, fill=headerblue!8,
+    rounded corners=2pt, minimum width=40mm, minimum height=8mm,
+    font=\small\ttfamily, align=center,
+  },
+  arr/.style={-{Stealth[length=3mm]}, thick, color=accentblue},
+]
+
+% フェーズ
+\node[phase] (input) {Input Phase};
+\node[phase, below=15mm of input] (logic) {Logic Phase (Pattern)};
+\node[phase, below=15mm of logic] (output) {Output Phase};
+
+% Input モジュール
+\node[module, right=12mm of input, yshift=4mm]  (enc) {Encoder.update()};
+\node[module, right=12mm of input, yshift=-4mm] (cam) {Camera.update()};
+
+% Logic
+\node[module, right=12mm of logic] (pat) {判断 → set...()};
+
+% Output モジュール
+\node[module, right=12mm of output, yshift=9mm]  (mot) {Motor.update()};
+\node[module, right=12mm of output, yshift=0mm]  (srv) {Servo.update()};
+\node[module, right=12mm of output, yshift=-9mm] (onb) {Onboard.update()};
+
+% 矢印
+\draw[arr] (input) -- (logic);
+\draw[arr] (logic) -- (output);
+
+\draw[arr] (input.east) ++(0,4mm) -- (enc.west);
+\draw[arr] (input.east) ++(0,-4mm) -- (cam.west);
+
+\draw[arr] (logic.east) -- (pat.west);
+
+\draw[arr] (output.east) ++(0,9mm) -- (mot.west);
+\draw[arr] (output.east) -- (srv.west);
+\draw[arr] (output.east) ++(0,-9mm) -- (onb.west);
+
+\end{tikzpicture}
+\caption{割り込みハンドラ実行フロー}
+\label{fig:flow}
+\end{figure}
+
+\subsection{3フェーズモデル}
+
+\begin{tabularx}{\textwidth}{c l X}
+\toprule
+\textbf{順序} & \textbf{フェーズ} & \textbf{内容} \\
+\midrule
+1 & Input Phase  & センサ値の読み取り（Encoder, Camera） \\
+2 & Logic Phase  & 判断ロジック実行、各ドライバの \texttt{set...()} を呼び出し（\textbf{この時点では出力しない}） \\
+3 & Output Phase & 全ドライバの \texttt{update()} を呼び出し、ハードウェアへ反映 \\
+\bottomrule
+\end{tabularx}
+
+\begin{notebox}[ラッチ方式の利点]
+Logic Phase でセットした値は即座にハードウェアへ反映されない。
+Output Phase で一括反映することで、割り込み内での出力タイミングを統一し、
+グリッチや不整合を防止する。
+\end{notebox}
+
+%% ============================================================
+%% 5. ファイル構成
+%% ============================================================
+\section{ファイル構成}\label{sec:files}
+
+\subsection{ディレクトリ構造}
+
+\begin{tcolorbox}[colback=codebg, colframe=accentblue!40, arc=2mm]
+\ttfamily\small
+\begin{tabbing}
+\hspace{4mm}\=\hspace{4mm}\=\hspace{4mm}\=\hspace{4mm}\=\kill
+mcr\_camera\_test1/ \\
+\> src/ \\
+\>\> mcr\_camera\_test1.cpp \quad\textrm{\color{gray}← メイン・割り込みハンドラ} \\
+\>\> core/ \\
+\>\>\> IModule.h \quad\textrm{\color{gray}← 基底インターフェース} \\
+\>\> drivers/ \\
+\>\>\> Camera.h / Camera.cpp \quad\textrm{\color{gray}← カメラ制御} \\
+\>\>\> Encoder.h / Encoder.cpp \quad\textrm{\color{gray}← エンコーダ制御} \\
+\>\>\> Motor.h / Motor.cpp \quad\textrm{\color{gray}← モータ制御} \\
+\>\>\> Onboard.h / Onboard.cpp \quad\textrm{\color{gray}← LED・スイッチ制御} \\
+\>\>\> SDCard.h / SDCard.cpp \quad\textrm{\color{gray}← SDカード制御} \\
+\>\>\> Serial.h / Serial.cpp \quad\textrm{\color{gray}← シリアル通信} \\
+\>\>\> Servo.h / Servo.cpp \quad\textrm{\color{gray}← サーボ制御} \\
+\>\> modules/ \\
+\>\>\> Trace.h / Trace.cpp \quad\textrm{\color{gray}← ライントレースロジック} \\
+\>\> utils/ \quad\textrm{\color{gray}← ユーティリティ (予定)} \\
+\> generate/ \\
+\>\> iodefine.h \quad\textrm{\color{gray}← レジスタ定義 (自動生成)} \\
+\> doc/ \\
+\>\> main.tex \quad\textrm{\color{gray}← 本仕様書} \\
+\end{tabbing}
+\end{tcolorbox}
+
+\subsection{ディレクトリ役割}
+
+\begin{tabularx}{\textwidth}{l X}
+\toprule
+\textbf{ディレクトリ} & \textbf{役割} \\
+\midrule
+\texttt{src/core/}    & システム基盤（\texttt{IModule} インターフェース） \\
+\texttt{src/modules/} & ロジックモジュール（\texttt{Trace} 等 --- 未実装） \\
+\texttt{src/drivers/} & ハードウェアドライバ（Motor, Servo, Encoder, Camera, Serial, SDCard, Onboard） \\
+\texttt{src/utils/}   & ユーティリティ関数 \\
+\texttt{generate/}    & e2 studio 自動生成ファイル（\texttt{iodefine.h} 等） \\
+\texttt{doc/}         & ドキュメント \\
+\bottomrule
+\end{tabularx}
+
+\subsection{全ファイル一覧}
+
+\begin{longtable}{l p{95mm}}
+\toprule
+\textbf{ファイル} & \textbf{役割} \\
+\midrule
+\endhead
+\texttt{src/mcr\_camera\_2026base.cpp}    & メインエントリ・割り込みハンドラ・Pattern ロジック \\
+\texttt{src/core/IModule.h}            & 全モジュール共通の基底インターフェース \\
+\texttt{src/drivers/Motor.h/.cpp}      & モータPWM制御 (MTU2 ch3/4) \\
+\texttt{src/drivers/Servo.h/.cpp}      & サーボPWM制御 (MTU2 ch0) \\
+\texttt{src/drivers/Encoder.h/.cpp}    & ロータリーエンコーダ読取 (MTU2 位相計数) \\
+\texttt{src/drivers/Camera.h/.cpp}     & カメラ画像取得・ライン検出 (CEU/DMA) \\
+\texttt{src/drivers/Serial.h/.cpp}     & シリアル通信 (SCIF) \\
+\texttt{src/drivers/SDCard.h/.cpp}     & SDカードログ書込み (SPI) \\
+\texttt{src/drivers/Onboard.h/.cpp}    & オンボードLED・スイッチ制御 (GPIO) \\
+\texttt{src/modules/Trace.h/.cpp}      & ライントレース・PID制御ロジック \\
+\bottomrule
+\end{longtable}
+
+\subsection{機能とファイルの対応表}
+
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{機能} & \textbf{メインファイル} & \textbf{関連ファイル} \\
+\midrule
+割り込みハンドラ & \texttt{mcr\_camera\_2026base.cpp} & 全ドライバ・モジュール \\
+モータ制御       & \texttt{Motor.cpp}       & IModule.h, iodefine.h \\
+サーボ制御       & \texttt{Servo.cpp}       & IModule.h, iodefine.h \\
+エンコーダ       & \texttt{Encoder.cpp}     & IModule.h, iodefine.h \\
+カメラ           & \texttt{Camera.cpp}      & IModule.h, iodefine.h \\
+シリアル通信     & \texttt{Serial.cpp}      & IModule.h, iodefine.h \\
+SDカード         & \texttt{SDCard.cpp}      & IModule.h, iodefine.h \\
+LED・スイッチ    & \texttt{Onboard.cpp}     & IModule.h, iodefine.h \\
+ライントレース   & \texttt{Trace.cpp}       & IModule.h, Camera.h, Encoder.h \\
+\bottomrule
+\end{tabularx}
+
+%% ============================================================
+%% 6. 技術スタック
+%% ============================================================
+\section{技術スタック}\label{sec:techstack}
+
+\begin{tabularx}{\textwidth}{l X}
+\toprule
+\textbf{項目} & \textbf{内容} \\
+\midrule
+ターゲットボード & GR-PEACH (ルネサス RZ/A1H, ARM Cortex-A9) \\
+開発環境         & Renesas e2 studio \\
+言語             & C++ (ベアメタル、mbed OS 不使用) \\
+コンパイラ       & GCC ARM (e2 studio 標準) \\
+レジスタ定義     & \texttt{iodefine.h} (e2 studio 自動生成) \\
+\bottomrule
+\end{tabularx}
+
+%% ============================================================
+%% 7. API仕様 (データシート)
+%% ============================================================
+\section{API仕様}\label{sec:api}
+
+本章では各クラスの公開APIをデータシート形式で記述する。
+全クラスは \texttt{IModule} インターフェース (\hyperref[sec:api-imodule]{§\ref*{sec:api-imodule}}) を継承する。
+
+%% ── 7.1 IModule ──
+\subsection{IModule インターフェース}\label{sec:api-imodule}
+
+\begin{apibox}{IModule --- 基底インターフェース}
+
+\textbf{ファイル:} \texttt{src/core/IModule.h} \hfill
+\textbf{種別:} 純粋仮想クラス
+
+\vspace{2mm}\hrule\vspace{2mm}
+
+\apisection{概要}
+
+全てのドライバおよびロジックモジュールが実装すべき共通インターフェース。
+\texttt{init()} で初期化、\texttt{update()} で周期処理を行う。
+
+\apisection{機能一覧}
+
+\begin{itemize}[nosep]
+  \item 全モジュール共通の初期化・周期処理メソッドを定義
+  \item 仮想デストラクタによる安全なポリモーフィズム
+\end{itemize}
+
+\apisection{関数ドキュメント}
+
+\begin{funcblock}{init()}
+\texttt{virtual void init() = 0}
+
+\vspace{1.5mm}
+初期化処理。レジスタ設定・変数初期化を行う。システム起動時に1回のみ呼び出される。
+\end{funcblock}
+
+\begin{funcblock}{update()}
+\texttt{virtual void update() = 0}
+
+\vspace{1.5mm}
+周期処理。割り込みハンドラまたはメインループから定期的に呼び出される。
+\end{funcblock}
+
+\apisection{実装例}
+
+\begin{lstlisting}[caption={IModule インターフェース定義},label=lst:imodule]
+class IModule {
+public:
+  virtual ~IModule() {}
+  virtual void init() = 0;   // 初期化処理
+  virtual void update() = 0; // 周期処理
+};
+\end{lstlisting}
+
+\end{apibox}
+
+%% ── 7.2 Encoder ──
+\subsection{Encoder クラス}\label{sec:api-encoder}
+
+\begin{apibox}{Encoder --- エンコーダドライバ}
+
+\textbf{ファイル:} \texttt{src/drivers/Encoder.h}, \texttt{Encoder.cpp} \hfill
+\textbf{継承:} \texttt{IModule} \hfill
+\phasebadge{Input Phase}
+
+\vspace{2mm}\hrule\vspace{2mm}
+
+\apisection{概要}
+
+MTU2 (チャネル1) の位相計数モード2を使用し、エンコーダのパルスをカウントする。
+フィルタリング処理を行い、走行距離と現在の速度を算出・管理する。
+
+\apisection{機能一覧}
+
+\begin{itemize}[nosep]
+  \item トータル走行距離・コース走行距離の管理
+  \item 現在速度の算出
+  \item 距離の任意設定（クリア機能含む）
+\end{itemize}
+
+\apisection{内部定数}
+
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{定数名} & \textbf{値} & \textbf{説明} \\
+\midrule
+\texttt{Filter\_N} & 2 & フィルタバッファサイズ \\
+\texttt{DIST\_PER\_PULSE} & (定数) & 1パルスあたりの移動距離 [mm] \\
+\bottomrule
+\end{tabularx}
+
+\apisection{内部変数}
+
+\begin{tabularx}{\textwidth}{l l l X}
+\toprule
+\textbf{変数名} & \textbf{型} & \textbf{初期値} & \textbf{説明} \\
+\midrule
+\texttt{\_totalDistance}  & \texttt{float} & 0.0 & トータル走行距離 \\
+\texttt{\_courseDistance} & \texttt{float} & 0.0 & コース走行距離 \\
+\texttt{\_speed}          & \texttt{float} & 0.0 & 現在速度 \\
+\texttt{\_deltaCount}     & \texttt{int}   & 0   & 今回のパルス変動量 \\
+\texttt{\_filter\_buf[]}  & \texttt{int[]} & 0   & フィルタ用バッファ \\
+\bottomrule
+\end{tabularx}
+
+\apisection{関数ドキュメント}
+
+\begin{funcblock}{init()}
+\texttt{void init(void)}
+
+\vspace{1.5mm}
+MTU2の位相計数モード2を初期化する。GPIO設定およびタイマスタートを行う。
+\end{funcblock}
+
+\begin{funcblock}{update()}
+\texttt{void update(void)}
+
+\vspace{1.5mm}
+MTU2カウンタ値を読み取り、前回値との差分から距離・速度を更新する。
+\end{funcblock}
+
+\begin{funcblock}{getTotalDistance()}
+\texttt{float getTotalDistance(void)} --- トータル走行距離 (\texttt{\_totalDistance}) を返す。
+\end{funcblock}
+
+\begin{funcblock}{getCourseDistance()}
+\texttt{float getCourseDistance(void)} --- コース走行距離 (\texttt{\_courseDistance}) を返す。
+\end{funcblock}
+
+\begin{funcblock}{getSpeed()}
+\texttt{float getSpeed(void)} --- 現在速度 (\texttt{\_speed}) を返す。
+\end{funcblock}
+
+\begin{funcblock}{setTotalDistance(dist)}
+\texttt{void setTotalDistance(float dist)} --- トータル走行距離を任意の値に設定する (0でクリア)。
+\end{funcblock}
+
+\begin{funcblock}{setCourseDistance(dist)}
+\texttt{void setCourseDistance(float dist)} --- コース走行距離を任意の値に設定する (0でクリア)。
+\end{funcblock}
+
+\end{apibox}
+
+%% ── 7.3 Camera ──
+\subsection{Camera クラス}\label{sec:api-camera}
+
+\begin{apibox}{Camera --- カメラ制御および画像処理ドライバ}
+
+\textbf{ファイル:} \texttt{src/drivers/Camera.h}, \texttt{Camera.cpp} \hfill
+\textbf{継承:} \texttt{IModule} \hfill
+\phasebadge{Input Phase}
+
+\vspace{2mm}\hrule\vspace{2mm}
+
+\apisection{概要}
+
+
+\apisection{関数ドキュメント (画像処理)}
+
+\begin{funcblock}{resize(src, dst, percent)}
+\texttt{void resize(uint8\_t *src, uint8\_t *dst, double percent)}
+
+\vspace{1.5mm}
+(旧: \texttt{ImageReduction}) --- 画像を縮小する。
+\end{funcblock}
+
+\begin{funcblock}{extractBrightness(src, dst)}
+\texttt{void extractBrightness(uint8\_t *src, uint8\_t *dst)}
+
+\vspace{1.5mm}
+(旧: \texttt{Extraction\_Brightness}) --- YCbCr画像から輝度成文(Y)を抽出する。
+\end{funcblock}
+
+\begin{funcblock}{binarize(src, dst, threshold)}
+\texttt{void binarize(uint8\_t *src, uint8\_t *dst, int threshold)}
+
+\vspace{1.5mm}
+(旧: \texttt{Binarization}) --- 画像を指定閾値で二値化する。
+\end{funcblock}
+
+\begin{funcblock}{percentileMethod(src, percent)}
+\texttt{int percentileMethod(uint8\_t *src, int percent)}
+
+\vspace{1.5mm}
+(旧: \texttt{Percentile\_Method}) --- パーセンタイル法による閾値決定を行う。
+\end{funcblock}
+
+\begin{funcblock}{discriminantAnalysis(src)}
+\texttt{int discriminantAnalysis(uint8\_t *src)}
+
+\vspace{1.5mm}
+(旧: \texttt{DiscriminantAnalysis\_Method}) --- 判別分析法による閾値決定を行う。
+\end{funcblock}
+
+\begin{funcblock}{extractPart(src, x, y, dst, w, h)}
+\texttt{void extractPart(uint8\_t *src, int x, int y, uint8\_t *dst, int w, int h)}
+
+\vspace{1.5mm}
+(旧: \texttt{Image\_part\_Extraction}) --- 画像の一部を切り出す。
+\end{funcblock}
+
+\begin{funcblock}{standardDeviation(...)}
+\texttt{double standardDeviation(uint8\_t *data, double *devi, int w, int h)}
+
+\vspace{1.5mm}
+(旧: \texttt{Standard\_Deviation}) --- 標準偏差を算出する。
+\end{funcblock}
+
+\begin{funcblock}{covariance(...)}
+\texttt{double covariance(double *deviA, double *deviB, int w, int h)}
+
+\vspace{1.5mm}
+(旧: \texttt{Covariance}) --- 共分散を算出する。
+\end{funcblock}
+
+\begin{funcblock}{matchPattern(...)}
+\texttt{void matchPattern(uint8\_t *src, ImagePartPattern *tmplt, ...)}
+
+\vspace{1.5mm}
+(旧: \texttt{PatternMatching\_process}) --- パターンマッチングを行う。
+\end{funcblock}
+
+\begin{cautionbox}[実装上の注意]
+\begin{itemize}[nosep]
+  \item \texttt{DisplayBase} ライブラリのセットアップ手順は複雑なため、既存実装 (\texttt{init\_Camera}) を参考に移植する。
+  \item 画像処理関数は重いため、処理時間オーバーに注意が必要。
+\end{itemize}
+\end{cautionbox}
+
+\end{apibox}
+
+%% ── 7.4 Trace ──
+\subsection{Trace クラス}\label{sec:api-trace}
+
+\begin{apibox}{Trace --- ライントレースモジュール}
+
+\textbf{ファイル:} \texttt{src/modules/Trace.h}, \texttt{Trace.cpp} \hfill
+\textbf{継承:} \texttt{IModule} \hfill
+\phasebadge{Logic Phase}
+
+\vspace{2mm}\hrule\vspace{2mm}
+
+\apisection{概要}
+
+カメラ画像からライン位置を検出し、PID制御によりステアリング角度を算出する。
+\texttt{update()} 内で検出→PID計算の一連処理を実行する。
+
+\apisection{機能一覧}
+
+\begin{itemize}[nosep]
+  \item 画像二値化によるライン検出
+  \item PID制御によるステアリング角度算出
+  \item ゲインパラメータの動的設定
+  \item ステアリング角度のリミット処理
+\end{itemize}
+
+\apisection{内部定数}
+
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{定数名} & \textbf{値} & \textbf{説明} \\
+\midrule
+\texttt{THRESHOLD}   & 未定 & 二値化閾値 \\
+\texttt{STEER\_MAX}  & 未定 & ステアリング角度上限 \\
+\texttt{STEER\_MIN}  & 未定 & ステアリング角度下限 \\
+\bottomrule
+\end{tabularx}
+
+\apisection{内部変数}
+
+\begin{tabularx}{\textwidth}{l l l X}
+\toprule
+\textbf{変数名} & \textbf{型} & \textbf{初期値} & \textbf{説明} \\
+\midrule
+\texttt{\_kp}        & \texttt{float} & \texttt{0.0f}  & 比例ゲイン \\
+\texttt{\_ki}        & \texttt{float} & \texttt{0.0f}  & 積分ゲイン \\
+\texttt{\_kd}        & \texttt{float} & \texttt{0.0f}  & 微分ゲイン \\
+\texttt{\_integral}  & \texttt{float} & \texttt{0.0f}  & 積分値 \\
+\texttt{\_prevErr}   & \texttt{float} & \texttt{0.0f}  & 前回偏差 \\
+\texttt{\_steer}     & \texttt{float} & \texttt{0.0f}  & 算出ステアリング角度 \\
+\texttt{\_linePos}   & \texttt{float} & \texttt{0.0f}  & 検出ライン位置 \\
+\texttt{\_lineFound} & \texttt{bool}  & \texttt{false} & ライン検出成否 \\
+\bottomrule
+\end{tabularx}
+
+\apisection{関数ドキュメント}
+
+\begin{funcblock}{init()}
+\texttt{void init(void)}
+
+\vspace{1.5mm}
+PIDパラメータおよび内部状態変数を初期化する。
+\end{funcblock}
+
+\begin{funcblock}{update()}
+\texttt{void update(void)}
+
+\vspace{1.5mm}
+ライン検出→PID計算の一連処理を実行する。
+内部で \texttt{binarize()}→\texttt{detectLine()}→\texttt{calcPid()}→\texttt{clampSteer()} の順に呼び出す。
+\end{funcblock}
+
+\begin{funcblock}{getSteer()}
+\texttt{float getSteer(void)} --- 算出されたステアリング角度を返す。
+\end{funcblock}
+
+\begin{funcblock}{getLinePos()}
+\texttt{float getLinePos(void)} --- 検出されたライン位置を返す。
+\end{funcblock}
+
+\begin{funcblock}{isLineFound()}
+\texttt{bool isLineFound(void)} --- ラインが検出されたかどうかを返す。
+\end{funcblock}
+
+\begin{funcblock}{setKp(v)}
+\texttt{void setKp(float v)} --- 比例ゲインを設定する。($v \geq 0$)
+\end{funcblock}
+
+\begin{funcblock}{setKi(v)}
+\texttt{void setKi(float v)} --- 積分ゲインを設定する。($v \geq 0$)
+\end{funcblock}
+
+\begin{funcblock}{setKd(v)}
+\texttt{void setKd(float v)} --- 微分ゲインを設定する。($v \geq 0$)
+\end{funcblock}
+
+\begin{funcblock}{detectLine(data) \normalfont\small\color{gray}[内部]}
+\texttt{float detectLine(uint8\_t* data)}
+
+\vspace{1.5mm}
+二値化済みの画像データからライン中心位置を算出する。
+
+\vspace{1.5mm}
+\textbf{引数:} \texttt{data} (\texttt{uint8\_t*}) --- 二値化済み画像データ
+
+\textbf{戻り値:} \texttt{float} --- ライン中心位置
+\end{funcblock}
+
+\begin{funcblock}{calcPid(error) \normalfont\small\color{gray}[内部]}
+\texttt{float calcPid(float error)}
+
+\vspace{1.5mm}
+PID制御量を計算する。積分値(\texttt{\_integral}) と前回偏差(\texttt{\_prevErr}) を内部で更新する。
+
+\vspace{1.5mm}
+\textbf{引数:} \texttt{error} (\texttt{float}) --- 目標位置との偏差
+
+\textbf{戻り値:} \texttt{float} --- PID制御量
+\end{funcblock}
+
+\begin{funcblock}{binarize(data) \normalfont\small\color{gray}[内部]}
+\texttt{void binarize(uint8\_t* data)}
+
+\vspace{1.5mm}
+画像データを閾値 (\texttt{THRESHOLD}) に基づいて二値化する。入力バッファを直接書き換える。
+
+\vspace{1.5mm}
+\textbf{引数:} \texttt{data} (\texttt{uint8\_t*}) --- 画像データ（in-place変換）
+\end{funcblock}
+
+\begin{funcblock}{clampSteer(val) \normalfont\small\color{gray}[内部]}
+\texttt{float clampSteer(float val)}
+
+\vspace{1.5mm}
+ステアリング角度を \texttt{STEER\_MIN}〜\texttt{STEER\_MAX} の範囲にクランプする。
+
+\vspace{1.5mm}
+\textbf{引数:} \texttt{val} (\texttt{float}) --- クランプ前のステアリング角度
+
+\textbf{戻り値:} \texttt{float} --- クランプ後のステアリング角度
+\end{funcblock}
+
+\end{apibox}
+
+%% ── 7.5 Motor ──
+\subsection{Motor クラス}\label{sec:api-motor}
+
+\begin{apibox}{Motor --- モータ PWM ドライバ}
+
+\textbf{ファイル:} \texttt{src/drivers/Motor.h}, \texttt{Motor.cpp} \hfill
+\textbf{継承:} \texttt{IModule} \hfill
+\phasebadge{Output Phase}
+
+\vspace{2mm}\hrule\vspace{2mm}
+
+\apisection{概要}
+
+MTU2 チャネル3/4を使用したリセット同期PWMモードで左右モータを制御する。
+ラッチ方式を採用し、\texttt{setPower()} でデューティ比を内部保持、\texttt{update()} でレジスタへ反映する。
+
+\apisection{機能一覧}
+
+\begin{itemize}[nosep]
+  \item MTU2 リセット同期PWMモードによるモータ駆動
+  \item 左右独立のデューティ比制御 ($-1.0 \sim 1.0$)
+  \item 符号による正転/逆転の方向制御
+  \item ラッチ方式による安全な出力タイミング
+\end{itemize}
+
+\apisection{内部定数}
+
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{定数} & \textbf{値} & \textbf{説明} \\
+\midrule
+\texttt{PWM\_CYCLE} & 33332 & PWM周期カウント値 (1ms @ P0$\phi$/1) \\
+\bottomrule
+\end{tabularx}
+
+\apisection{内部変数}
+
+\begin{tabularx}{\textwidth}{l l l X}
+\toprule
+\textbf{変数名} & \textbf{型} & \textbf{初期値} & \textbf{説明} \\
+\midrule
+\texttt{\_pwmLeft}  & \texttt{float} & \texttt{0.0f} & 左モータデューティ比 ($-1.0 \sim 1.0$) \\
+\texttt{\_pwmRight} & \texttt{float} & \texttt{0.0f} & 右モータデューティ比 ($-1.0 \sim 1.0$) \\
+\bottomrule
+\end{tabularx}
+
+\apisection{関数ドキュメント}
+
+\begin{funcblock}{init()}
+\texttt{void init(void)}
+
+\vspace{1.5mm}
+GPIO方向ピンおよびMTU2チャネル3/4のレジスタを初期化する。
+リセット同期PWMモードを設定し、カウント動作を開始する。
+\end{funcblock}
+
+\begin{funcblock}{update()}
+\texttt{void update(void)}
+
+\vspace{1.5mm}
+内部変数のデューティ比をハードウェアへ反映する。
+内部で \texttt{setDirection()}→\texttt{calcDuty()}→\texttt{applyPwm()} の順に呼び出す。
+\end{funcblock}
+
+\begin{funcblock}{setPower(l, r)}
+\texttt{void setPower(float l, float r)}
+
+\vspace{1.5mm}
+左右モータのデューティ比を内部変数に保存する（ラッチ方式）。
+この時点ではハードウェアへの反映は行わない。
+
+\vspace{1.5mm}
+\begin{itemize}[nosep, leftmargin=*]
+  \item \texttt{l} (\texttt{float}) --- 左モータデューティ比 ($-1.0 \sim 1.0$、負値で逆転)
+  \item \texttt{r} (\texttt{float}) --- 右モータデューティ比 ($-1.0 \sim 1.0$、負値で逆転)
+\end{itemize}
+\end{funcblock}
+
+\begin{funcblock}{calcDuty(pwm) \normalfont\small\color{gray}[内部]}
+\texttt{uint16\_t calcDuty(float pwm)}
+
+\vspace{1.5mm}
+デューティ比（浮動小数点数）をPWMカウント値に変換する。
+$\mathit{duty} = \lfloor |\mathit{pwm}| \times \mathtt{PWM\_CYCLE} \rfloor$
+
+\vspace{1.5mm}
+\textbf{引数:} \texttt{pwm} (\texttt{float}) --- デューティ比 ($-1.0 \sim 1.0$)
+
+\textbf{戻り値:} \texttt{uint16\_t} --- PWMカウント値
+\end{funcblock}
+
+\begin{funcblock}{setDirection(l, r) \normalfont\small\color{gray}[内部]}
+\texttt{void setDirection(float l, float r)}
+
+\vspace{1.5mm}
+デューティ比の符号に基づき、方向ピン (GPIO P4\_6, P4\_7) を設定する。
+正値で正転 (Low)、負値で逆転 (High)。
+
+\vspace{1.5mm}
+\begin{itemize}[nosep, leftmargin=*]
+  \item \texttt{l} (\texttt{float}) --- 左モータデューティ比
+  \item \texttt{r} (\texttt{float}) --- 右モータデューティ比
+\end{itemize}
+\end{funcblock}
+
+\begin{funcblock}{applyPwm(l, r) \normalfont\small\color{gray}[内部]}
+\texttt{void applyPwm(uint16\_t l, uint16\_t r)}
+
+\vspace{1.5mm}
+MTU2レジスタ (TGRA\_4/TGRC\_4, TGRB\_4/TGRD\_4) へPWM値を書き込む。
+
+\vspace{1.5mm}
+\begin{itemize}[nosep, leftmargin=*]
+  \item \texttt{l} (\texttt{uint16\_t}) --- 左モータPWMカウント値
+  \item \texttt{r} (\texttt{uint16\_t}) --- 右モータPWMカウント値
+\end{itemize}
+\end{funcblock}
+
+\apisection{ハードウェアマッピング}
+
+\begin{tabularx}{\textwidth}{l l l X}
+\toprule
+\textbf{信号} & \textbf{ピン} & \textbf{レジスタ} & \textbf{説明} \\
+\midrule
+左モータ PWM  & P4\_4 (TIOC4A) & TGRA\_4 / TGRC\_4 & デューティ比 \\
+右モータ PWM  & P4\_5 (TIOC4B) & TGRB\_4 / TGRD\_4 & デューティ比 \\
+左モータ 方向 & P4\_6 (GPIO)   & GPIO.P4 bit6      & Low:正転 / High:逆転 \\
+右モータ 方向 & P4\_7 (GPIO)   & GPIO.P4 bit7      & Low:正転 / High:逆転 \\
+\bottomrule
+\end{tabularx}
+
+\end{apibox}
+
+%% ── 7.6 Servo ──
+\subsection{Servo クラス}\label{sec:api-servo}
+
+\begin{apibox}{Servo --- サーボ PWM ドライバ}
+
+\textbf{ファイル:} \texttt{src/drivers/Servo.h}, \texttt{Servo.cpp} \hfill
+\textbf{継承:} \texttt{IModule} \hfill
+\phasebadge{Output Phase}
+
+\vspace{2mm}\hrule\vspace{2mm}
+
+\apisection{概要}
+
+MTU2 チャネル0をPWMモード1で駆動し、ステアリングサーボの角度を制御する。
+ラッチ方式を採用し、\texttt{setAngle()} で角度を内部保持、\texttt{update()} でレジスタへ反映する。
+
+\apisection{機能一覧}
+
+\begin{itemize}[nosep]
+  \item MTU2 PWMモード1によるサーボ駆動
+  \item 角度→パルス幅の自動変換
+  \item ラッチ方式による安全な出力タイミング
+\end{itemize}
+
+\apisection{内部定数}
+
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{定数名} & \textbf{値} & \textbf{説明} \\
+\midrule
+\texttt{SERVO\_CENTER} & 3090 & サーボ中心位置のパルス幅カウント値 \\
+\texttt{HANDLE\_STEP}  & 23   & 1度あたりのカウント値 \\
+\bottomrule
+\end{tabularx}
+
+\apisection{内部変数}
+
+\begin{tabularx}{\textwidth}{l l l X}
+\toprule
+\textbf{変数名} & \textbf{型} & \textbf{初期値} & \textbf{説明} \\
+\midrule
+\texttt{\_angle} & \texttt{float} & \texttt{0.0f} & サーボ角度 (度) \\
+\bottomrule
+\end{tabularx}
+
+\apisection{関数ドキュメント}
+
+\begin{funcblock}{init()}
+\texttt{void init(void)}
+
+\vspace{1.5mm}
+GPIO および MTU2チャネル0のレジスタを初期化する。PWMモード1を設定し、カウント動作を開始する。
+\end{funcblock}
+
+\begin{funcblock}{update()}
+\texttt{void update(void)}
+
+\vspace{1.5mm}
+内部変数の角度値をハードウェアへ反映する。
+内部で \texttt{calcPulse()}→\texttt{applyServo()} の順に呼び出す。
+\end{funcblock}
+
+\begin{funcblock}{setAngle(angle)}
+\texttt{void setAngle(float angle)}
+
+\vspace{1.5mm}
+サーボ角度を内部変数に保存する（ラッチ方式）。0が中心、正負で左右に振れる。
+
+\vspace{1.5mm}
+\textbf{引数:} \texttt{angle} (\texttt{float}) --- サーボ角度 (度、機体依存)
+\end{funcblock}
+
+\begin{funcblock}{calcPulse(angle) \normalfont\small\color{gray}[内部]}
+\texttt{uint16\_t calcPulse(float angle)}
+
+\vspace{1.5mm}
+角度をパルス幅カウント値に変換する。
+$\mathit{val} = \lfloor \mathit{angle} \times 23 \rfloor + \mathtt{SERVO\_CENTER}$
+
+\vspace{1.5mm}
+\textbf{引数:} \texttt{angle} (\texttt{float}) --- サーボ角度 (度)
+
+\textbf{戻り値:} \texttt{uint16\_t} --- パルス幅カウント値
+\end{funcblock}
+
+\begin{funcblock}{applyServo(val) \normalfont\small\color{gray}[内部]}
+\texttt{void applyServo(uint16\_t val)}
+
+\vspace{1.5mm}
+MTU2レジスタ (TGRB\_0 / TGRD\_0) へパルス幅を書き込む。
+
+\vspace{1.5mm}
+\textbf{引数:} \texttt{val} (\texttt{uint16\_t}) --- パルス幅カウント値
+\end{funcblock}
+
+\apisection{ハードウェアマッピング}
+
+\begin{tabularx}{\textwidth}{l l l X}
+\toprule
+\textbf{信号} & \textbf{ピン} & \textbf{レジスタ} & \textbf{説明} \\
+\midrule
+サーボ PWM & P4\_0 (TIOC0A) & TGRB\_0 / TGRD\_0 & パルス幅 (立ち下がりエッジ) \\
+\bottomrule
+\end{tabularx}
+
+\end{apibox}
+
+%% ── 7.7 Onboard ──
+\subsection{Onboard クラス}\label{sec:api-onboard}
+
+\begin{apibox}{Onboard --- オンボード LED / スイッチ ドライバ}
+
+\textbf{ファイル:} \texttt{src/drivers/Onboard.h}, \texttt{Onboard.cpp} \hfill
+\textbf{継承:} \texttt{IModule} \hfill
+\phasebadge{Output Phase}
+
+\vspace{2mm}\hrule\vspace{2mm}
+
+\apisection{概要}
+
+GR-PEACH ボード上のRGB LED (3個) + ユーザーLED (1個) およびユーザースイッチ (1個) を制御する。
+LED はラッチ方式、スイッチは即時読み取り。
+
+\apisection{機能一覧}
+
+\begin{itemize}[nosep]
+  \item RGB LED 3個 + ユーザーLED 1個の制御
+  \item ラッチ方式によるLED出力
+  \item ユーザースイッチの即時読み取り
+\end{itemize}
+
+\apisection{内部変数}
+
+\begin{tabularx}{\textwidth}{l l l X}
+\toprule
+\textbf{変数名} & \textbf{型} & \textbf{初期値} & \textbf{説明} \\
+\midrule
+\texttt{\_ledState[4]} & \texttt{int[4]} & \texttt{\{0,0,0,0\}} & 各LED状態 (0:消灯, 1:点灯) \\
+\bottomrule
+\end{tabularx}
+
+\apisection{関数ドキュメント}
+
+\begin{funcblock}{init()}
+\texttt{void init(void)}
+
+\vspace{1.5mm}
+GPIO初期化を行う。全LEDを消灯し、スイッチを入力モードに設定する。
+\texttt{PIBC6} の入力バッファ有効化を含む。
+\end{funcblock}
+
+\begin{funcblock}{update()}
+\texttt{void update(void)}
+
+\vspace{1.5mm}
+内部変数のLED状態をGPIOへ反映する。内部で \texttt{writeLed()} を各LED IDに対して呼び出す。
+\end{funcblock}
+
+\begin{funcblock}{setLed(id, val)}
+\texttt{void setLed(int id, int val)}
+
+\vspace{1.5mm}
+指定LEDの状態を内部変数に保存する（ラッチ方式）。
+
+\vspace{1.5mm}
+\begin{itemize}[nosep, leftmargin=*]
+  \item \texttt{id} (\texttt{int}) --- LED番号 (0:Red, 1:Green, 2:Blue, 3:User)
+  \item \texttt{val} (\texttt{int}) --- 0:消灯, 1:点灯
+\end{itemize}
+\end{funcblock}
+
+\begin{funcblock}{sw()}
+\texttt{int sw(void)}
+
+\vspace{1.5mm}
+ユーザースイッチの状態を即時読み取りで返す。ラッチ方式\textbf{ではなく}、呼び出し時にGPIOを直接読む。
+内部で \texttt{readSw()} を呼び出す。
+
+\vspace{1.5mm}
+\textbf{戻り値:} \texttt{int} --- 1:押下, 0:解放
+\end{funcblock}
+
+\begin{funcblock}{writeLed(id, val) \normalfont\small\color{gray}[内部]}
+\texttt{void writeLed(int id, int val)}
+
+\vspace{1.5mm}
+指定LEDのGPIOを直接操作する。RGB LEDはLow Active、ユーザーLEDはHigh Active。
+
+\vspace{1.5mm}
+\begin{itemize}[nosep, leftmargin=*]
+  \item \texttt{id} (\texttt{int}) --- LED番号
+  \item \texttt{val} (\texttt{int}) --- 論理的な点灯/消灯状態
+\end{itemize}
+\end{funcblock}
+
+\begin{funcblock}{readSw() \normalfont\small\color{gray}[内部]}
+\texttt{int readSw(void)}
+
+\vspace{1.5mm}
+SW用GPIO (P6\_0) を読み取り、論理値に変換して返す。Low = 押下。
+
+\vspace{1.5mm}
+\textbf{戻り値:} \texttt{int} --- 1:押下, 0:解放
+\end{funcblock}
+
+\apisection{ハードウェアマッピング}
+
+\begin{tabularx}{\textwidth}{l l l l X}
+\toprule
+\textbf{デバイス} & \textbf{ID} & \textbf{ピン} & \textbf{論理} & \textbf{説明} \\
+\midrule
+LED Red    & 0 & P6\_13 & Low Active  & 赤色 LED \\
+LED Green  & 1 & P6\_14 & Low Active  & 緑色 LED \\
+LED Blue   & 2 & P6\_15 & Low Active  & 青色 LED \\
+LED User   & 3 & P6\_12 & High Active & ユーザー LED \\
+SW User    & -- & P6\_0   & Low = 押下   & プルアップ、GND 接続 \\
+\bottomrule
+\end{tabularx}
+
+\begin{cautionbox}[GPIO注意事項]
+\begin{itemize}[nosep]
+  \item RGB LED は \textbf{Low Active}（GPIO Low で点灯）
+  \item スイッチ読み取りには \texttt{PIBC6} の入力バッファ有効化が必須
+  \item \texttt{sw()} はラッチ方式\textbf{ではなく}、呼び出し時に直接GPIOを読む
+\end{itemize}
+\end{cautionbox}
+
+\end{apibox}
+
+%% ── 7.8 Serial ──
+\subsection{Serial クラス}\label{sec:api-serial}
+
+\begin{apibox}{Serial --- シリアル通信ドライバ}
+
+\textbf{ファイル:} \texttt{src/drivers/Serial.h}, \texttt{Serial.cpp} \hfill
+\textbf{継承:} \texttt{IModule} \hfill
+\phasebadge{Output Phase}
+
+\vspace{2mm}\hrule\vspace{2mm}
+
+\apisection{概要}
+
+SCIF (Serial Communication Interface with FIFO) を使用してデバッグ用シリアル通信を行う。
+送信はバッファリングし、\texttt{update()} で順次送出する。
+
+\apisection{機能一覧}
+
+\begin{itemize}[nosep]
+  \item SCIF によるシリアル通信
+  \item リングバッファによる送信バッファリング
+  \item 書式付き出力 (\texttt{printf})
+  \item \texttt{update()} による非ブロッキング送出
+\end{itemize}
+
+\apisection{内部定数}
+
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{定数名} & \textbf{値} & \textbf{説明} \\
+\midrule
+\texttt{BAUD\_RATE}   & 115200 & ボーレート \\
+\texttt{TX\_BUF\_SIZE} & 256    & 送信バッファサイズ (bytes) \\
+\bottomrule
+\end{tabularx}
+
+\apisection{内部変数}
+
+\begin{tabularx}{\textwidth}{l l l X}
+\toprule
+\textbf{変数名} & \textbf{型} & \textbf{初期値} & \textbf{説明} \\
+\midrule
+\texttt{\_txBuf[]}  & \texttt{char[]}    & \texttt{0} & 送信リングバッファ \\
+\texttt{\_txHead}   & \texttt{uint16\_t} & \texttt{0} & 書込みポインタ \\
+\texttt{\_txTail}   & \texttt{uint16\_t} & \texttt{0} & 読出しポインタ \\
+\bottomrule
+\end{tabularx}
+
+\apisection{関数ドキュメント}
+
+\begin{funcblock}{init()}
+\texttt{void init(void)}
+
+\vspace{1.5mm}
+SCIFの初期化・ボーレート設定を行う。送信バッファをクリアする。
+\end{funcblock}
+
+\begin{funcblock}{update()}
+\texttt{void update(void)}
+
+\vspace{1.5mm}
+送信バッファの内容をFIFOへ順次送出する。FIFO空き状況に応じて部分送出する。
+内部で \texttt{flushTx()} を呼び出す。
+\end{funcblock}
+
+\begin{funcblock}{print(str)}
+\texttt{void print(const char* str)}
+
+\vspace{1.5mm}
+文字列を送信バッファに追加する。バッファ満杯時は古いデータを上書き。
+
+\vspace{1.5mm}
+\textbf{引数:} \texttt{str} (\texttt{const char*}) --- 送信文字列
+\end{funcblock}
+
+\begin{funcblock}{printf(fmt, ...)}
+\texttt{void printf(const char* fmt, ...)}
+
+\vspace{1.5mm}
+書式付き文字列を送信バッファに追加する。\texttt{vsnprintf} を内部で使用。
+
+\vspace{1.5mm}
+\textbf{引数:} \texttt{fmt} (\texttt{const char*}) --- 書式文字列（\texttt{printf} 互換）
+\end{funcblock}
+
+\begin{funcblock}{putChar(c) \normalfont\small\color{gray}[内部]}
+\texttt{void putChar(char c)} --- 1文字をFIFOへ書き込む。
+\end{funcblock}
+
+\begin{funcblock}{isTxReady() \normalfont\small\color{gray}[内部]}
+\texttt{bool isTxReady(void)} --- 送信FIFOに空きがあるかを返す。
+\end{funcblock}
+
+\begin{funcblock}{flushTx() \normalfont\small\color{gray}[内部]}
+\texttt{void flushTx(void)} --- バッファ内容を可能な限り一括送出する。
+\end{funcblock}
+
+\end{apibox}
+
+%% ── 7.9 SDCard ──
+\subsection{SDCard クラス}\label{sec:api-sdcard}
+
+\begin{apibox}{SDCard --- SDカードログドライバ}
+
+\textbf{ファイル:} \texttt{src/drivers/SDCard.h}, \texttt{SDCard.cpp} \hfill
+\textbf{継承:} \texttt{IModule} \hfill
+\phasebadge{Output Phase}
+
+\vspace{2mm}\hrule\vspace{2mm}
+
+\apisection{概要}
+
+SPI経由でSDカードへログデータを書き込む。
+データはバッファリングし、\texttt{update()} でブロック単位で書き出す。
+
+\apisection{機能一覧}
+
+\begin{itemize}[nosep]
+  \item SPI 経由の SD カードアクセス
+  \item バッファリングによる効率的なブロック書込み
+  \item ログ文字列の追記
+  \item 明示的フラッシュ・クローズ操作
+\end{itemize}
+
+\apisection{内部定数}
+
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{定数名} & \textbf{値} & \textbf{説明} \\
+\midrule
+\texttt{BLOCK\_SIZE}     & 512  & SDブロックサイズ (bytes) \\
+\texttt{WRITE\_BUF\_SIZE} & 1024 & 書込みバッファサイズ (bytes) \\
+\bottomrule
+\end{tabularx}
+
+\apisection{内部変数}
+
+\begin{tabularx}{\textwidth}{l l l X}
+\toprule
+\textbf{変数名} & \textbf{型} & \textbf{初期値} & \textbf{説明} \\
+\midrule
+\texttt{\_writeBuf[]} & \texttt{uint8\_t[]} & \texttt{0}     & 書込みバッファ \\
+\texttt{\_bufPos}     & \texttt{uint16\_t}  & \texttt{0}     & バッファ書込み位置 \\
+\texttt{\_isReady}    & \texttt{bool}       & \texttt{false} & SD初期化完了フラグ \\
+\texttt{\_blockAddr}  & \texttt{uint32\_t}  & \texttt{0}     & 現在の書込みブロックアドレス \\
+\bottomrule
+\end{tabularx}
+
+\apisection{関数ドキュメント}
+
+\begin{funcblock}{init()}
+\texttt{void init(void)}
+
+\vspace{1.5mm}
+SPI初期化およびSDカードの初期化シーケンス (CMD0→CMD8→ACMD41) を実行する。
+初期化成功で \texttt{\_isReady} を \texttt{true} に設定。
+\end{funcblock}
+
+\begin{funcblock}{update()}
+\texttt{void update(void)}
+
+\vspace{1.5mm}
+バッファが1ブロック分 (512B) 以上溜まっている場合、SDカードへブロック単位で書き出す。
+内部で \texttt{writeBlock()} を呼び出す。
+\end{funcblock}
+
+\begin{funcblock}{log(str)}
+\texttt{void log(const char* str)}
+
+\vspace{1.5mm}
+ログ文字列をバッファに追加する。
+
+\vspace{1.5mm}
+\textbf{引数:} \texttt{str} (\texttt{const char*}) --- ログ文字列
+\end{funcblock}
+
+\begin{funcblock}{flush()}
+\texttt{void flush(void)}
+
+\vspace{1.5mm}
+バッファ内容を即時書き出す。残りデータが512B未満でもパディングして書き出す。
+\end{funcblock}
+
+\begin{funcblock}{close()}
+\texttt{void close(void)}
+
+\vspace{1.5mm}
+\texttt{flush()} を呼び出した後、ファイル終端処理を行う。
+SD通信を終了し、\texttt{\_isReady} を \texttt{false} に設定する。
+\end{funcblock}
+
+\begin{funcblock}{spiWrite(byte) \normalfont\small\color{gray}[内部]}
+\texttt{uint8\_t spiWrite(uint8\_t byte)}
+
+\vspace{1.5mm}
+SPI 1バイト送受信を行う。送信と同時に受信データを返す。
+
+\vspace{1.5mm}
+\textbf{引数:} \texttt{byte} (\texttt{uint8\_t}) --- 送信バイト
+
+\textbf{戻り値:} \texttt{uint8\_t} --- 受信バイト
+\end{funcblock}
+
+\begin{funcblock}{sendCmd(cmd, arg) \normalfont\small\color{gray}[内部]}
+\texttt{uint8\_t sendCmd(uint8\_t cmd, uint32\_t arg)}
+
+\vspace{1.5mm}
+SDカードコマンドを送信し、レスポンスを返す。
+
+\vspace{1.5mm}
+\begin{itemize}[nosep, leftmargin=*]
+  \item \texttt{cmd} (\texttt{uint8\_t}) --- SDコマンド番号
+  \item \texttt{arg} (\texttt{uint32\_t}) --- コマンド引数
+\end{itemize}
+
+\textbf{戻り値:} \texttt{uint8\_t} --- R1レスポンス
+\end{funcblock}
+
+\begin{funcblock}{writeBlock(data) \normalfont\small\color{gray}[内部]}
+\texttt{bool writeBlock(const uint8\_t* data)}
+
+\vspace{1.5mm}
+512Bブロックをアドレス \texttt{\_blockAddr} に書き込む。成功で \texttt{\_blockAddr} をインクリメント。
+
+\vspace{1.5mm}
+\textbf{引数:} \texttt{data} (\texttt{const uint8\_t*}) --- 書込みデータ (512B)
+
+\textbf{戻り値:} \texttt{bool} --- 書込み成功/失敗
+\end{funcblock}
+
+\begin{funcblock}{waitReady() \normalfont\small\color{gray}[内部]}
+\texttt{bool waitReady(void)}
+
+\vspace{1.5mm}
+SDカードのビジー状態が解除されるまで待機する。タイムアウト時は \texttt{false} を返す。
+
+\vspace{1.5mm}
+\textbf{戻り値:} \texttt{bool} --- ビジー解除成功/タイムアウト
+\end{funcblock}
+
+\end{apibox}
+
+
+%% ============================================================
+%% 8. 実行モデル詳細
+%% ============================================================
+\section{実行モデル詳細}\label{sec:execution}
+
+\subsection{割り込みハンドラ}
+
+割り込みハンドラ関数内で各モジュールの \texttt{update()} を呼び出す。
+\texttt{Pattern} 処理はクラス化せず、ハンドラ内にベタ書き（または関数化）する。
+
+\begin{lstlisting}[caption={割り込みハンドラ実装例},label=lst:handler]
+// グローバルインスタンス
+static Onboard onboard;
+static Motor motor;
+static Servo servo;
+
+void interrupt_handler() {
+    // --- Input Phase ---
+    // encoder.read();
+    // camera.read();
+
+    // --- Logic Phase (Pattern) ---
+    int sw = onboard.sw();
+    if (sw) {
+        motor.setPower(0.2f, 0.2f);  // PWM 20%
+        servo.setAngle(10.0f);       // 10度
+        onboard.setLed(0, 1);        // Red ON
+        onboard.setLed(1, 1);        // Green ON
+        onboard.setLed(2, 1);        // Blue ON
+    } else {
+        motor.setPower(0.0f, 0.0f);
+        servo.setAngle(0.0f);
+        onboard.setLed(0, 1);        // Red ON
+        onboard.setLed(1, 0);        // Green OFF
+        onboard.setLed(2, 0);        // Blue OFF
+    }
+
+    // --- Output Phase ---
+    motor.update();
+    servo.update();
+    onboard.update();
+    // serial.update();
+    // sd.update();
+}
+\end{lstlisting}
+
+\subsection{ラッチ方式ドライバの動作原理}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  box/.style={draw=headerblue, fill=headerblue!8, rounded corners=2pt,
+              minimum width=32mm, minimum height=12mm, font=\small, align=center},
+  data/.style={draw=accentblue, fill=accentblue!10, rounded corners=2pt,
+               minimum width=25mm, minimum height=9mm, font=\small\ttfamily, align=center},
+  arr/.style={-{Stealth[length=3mm]}, thick, color=accentblue},
+  lbl/.style={font=\scriptsize\color{gray}, above, midway},
+]
+
+\node[box] (logic) {Logic Phase\\(Pattern)};
+\node[data, right=15mm of logic] (var) {\_pwmLeft\\\_pwmRight};
+\node[box, right=15mm of var] (update) {update()};
+\node[data, right=15mm of update] (hw) {MTU2\\レジスタ};
+
+\draw[arr] (logic) -- node[lbl]{setPower()} (var);
+\draw[arr] (var) -- node[lbl]{参照} (update);
+\draw[arr] (update) -- node[lbl]{書込み} (hw);
+
+\end{tikzpicture}
+\caption{ラッチ方式ドライバのデータフロー}
+\label{fig:latch}
+\end{figure}
+
+\end{document}
