@@ -96,7 +96,15 @@ vfp_init:
      ldr    r11, .Lstack
      cmp    r11, #0
      beq    exit
-     mov    sp, r11
+
+     /* Initialize IRQ mode stack */
+     msr    cpsr_c, #0xD2   /* Switch to IRQ mode, IRQ/FIQ disabled */
+     mov    sp, r11         /* Set IRQ stack pointer to top */
+     sub    r11, r11, #0x1000 /* Reserve 4KB for IRQ stack */
+
+     /* Initialize SVC mode stack */
+     msr    cpsr_c, #0xD3   /* Switch to SVC mode, IRQ/FIQ disabled */
+     mov    sp, r11         /* Set SVC stack pointer */
 
 #ifndef SIMULATOR_DEBUG
 /* set vector table address to VBAR */

@@ -59,14 +59,22 @@ static void initOSTM0(void) {
 
   // OSTMnCTL設定
   // bit1: OSTMnMD1 = 0 (インターバルタイマー)
-  // bit0: OSTMnMD0 = 1 (カウント開始時に割り込み要求を発生)
-  OSTM0.OSTMnCTL = 0x01;
+  // bit0: OSTMnMD0 = 0 (コンペアマッチ時に割り込み要求を発生)
+  OSTM0.OSTMnCTL = 0x00;
 
   // GIC設定: OSTM0割り込みを有効化
   // OSTM0 IRQ ID = 134
   // ICDISER (割り込みセットイネーブルレジスタ)
   // IRQ134 → レジスタ番号 = 134/32 = 4, ビット位置 = 134%32 = 6
   INTC.ICDISER4 |= (1 << 6);
+
+  // エッジトリガ設定 (ICDICFR8)
+  // IRQ134 -> 134/16 = 8, 134%16 = 6. 6 * 2 = 12ビット目
+  // 10: Edge triggered (bit 13=1, bit 12=0)
+  uint32_t icf = INTC.ICDICFR8;
+  icf &= ~(3 << 12);
+  icf |= (2 << 12);
+  INTC.ICDICFR8 = icf;
 
   // 割り込み優先度設定 (ICDIPR)
   // IRQ134 → レジスタ番号 = 134/4 = 33, バイト位置 = (134%4)*8 = 16
