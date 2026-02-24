@@ -54,12 +54,6 @@ static void initOSTM0(void) {
   // OSTM0を停止
   OSTM0.OSTMnTT = 0x01;
 
-  // タイマーが完全に停止するまで待機（TEビットが0になるまで）
-  // 稼働中にCMPレジスタを書き換えるとハードウェアに無視されるため
-  while (OSTM0.OSTMnTE != 0) {
-    // Wait for timer to stop
-  }
-
   // 比較レジスタに1ms相当のカウント値を設定
   OSTM0.OSTMnCMP = OSTM0_CMP_1MS;
 
