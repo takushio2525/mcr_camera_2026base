@@ -3,6 +3,7 @@
  *
  *  Serial Communication Driver (Instant Output via SCIF2)
  *  For GR-PEACH (RZ/A1H)
+ *  SCIF2: P6_3 (TxD2), P6_2 (RxD2) via DAPLink USB-Serial
  */
 
 #ifndef DRIVERS_SERIAL_H_

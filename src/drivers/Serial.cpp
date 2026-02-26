@@ -3,7 +3,7 @@
  *
  *  Serial Communication Driver (Instant Output via SCIF2)
  *  For GR-PEACH (RZ/A1H)
- *  SCIF2: P3_0 (TxD2), P3_2 (RxD2)
+ *  SCIF2: P6_3 (TxD2), P6_2 (RxD2) via DAPLink USB-Serial
  */
 
 #include "Serial.h"
@@ -28,29 +28,25 @@ void Serial::init() {
   volatile uint8_t dummy = CPG.STBCR4; // Dummy read
   (void)dummy;
 
-  // 2. Configure Pin Multiplexing for SCIF2
-  // TxD2 -> P3_0 (Alt 6)
-  // RxD2 -> P3_2 (Alt 4)
+  // 2. ピンマルチプレクス設定 (SCIF2)
+  // GR-PEACHでは DAPLink USB-Serial が以下のピンに接続:
+  //   TxD2 -> P6_3 (Alt 7)
+  //   RxD2 -> P6_2 (Alt 7)
+  uint16_t pinMask = (1 << 2) | (1 << 3); // P6_2, P6_3
 
-  // Clear PBDC
-  GPIO.PBDC3 &= ~((1 << 0) | (1 << 2));
+  // PBDC クリア
+  GPIO.PBDC6 &= ~pinMask;
 
-  // Set Port Mode (PMC = 1)
-  GPIO.PMC3 |= ((1 << 0) | (1 << 2));
+  // ポートモード (PMC = 1: 代替機能)
+  GPIO.PMC6 |= pinMask;
 
-  // Select Alt function
-  // P3_0: Alt 6 (PFCAE=1, PFCE=0, PFC=1)
-  GPIO.PFCAE3 |= (1 << 0);
-  GPIO.PFCE3 &= ~(1 << 0);
-  GPIO.PFC3 |= (1 << 0);
+  // Alt 7 選択 (PFCAE=1, PFCE=1, PFC=0)
+  GPIO.PFCAE6 |= pinMask;
+  GPIO.PFCE6 |= pinMask;
+  GPIO.PFC6 &= ~pinMask;
 
-  // P3_2: Alt 4 (PFCAE=0, PFCE=1, PFC=1)
-  GPIO.PFCAE3 &= ~(1 << 2);
-  GPIO.PFCE3 |= (1 << 2);
-  GPIO.PFC3 |= (1 << 2);
-
-  // Set PIPC (1 = Software I/O control not used, driven by peripheral)
-  GPIO.PIPC3 |= ((1 << 0) | (1 << 2));
+  // PIPC = 1 (ペリフェラルによるI/O制御)
+  GPIO.PIPC6 |= pinMask;
 
   // 3. Initialize SCIF2 Subsystem
   // Disable Tx/Rx (TE=0, RE=0) in SCSCR
