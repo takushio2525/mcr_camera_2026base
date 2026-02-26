@@ -28,6 +28,7 @@ extern void __main() {
 #endif
 
 #include "drivers/Onboard.h"
+#include "drivers/Serial.h"
 
 // OSTM0 タイマー割り込み (1ms周期)
 // GR-PEACH (RZ/A1H) の周辺クロック P0Φ は 33.33MHz
@@ -122,7 +123,7 @@ void ostm0_interrupt_callback(void) {
 
   // 500ミリ秒(0.5秒)ごとにUSER LEDをトグル（1秒周期の点滅）
   // ※ 1ms割り込みなので 500回 = 500ms
-  if (g_timer_1ms % 5000 == 0) {
+  if (g_timer_1ms % 1000 == 0) {
     static int toggle = 0;
     toggle = !toggle;
     g_onboard.setUserLed(toggle); // USER LED
@@ -141,13 +142,45 @@ int main(void) {
   // オンボードLED/SWの初期化
   g_onboard.init();
 
+  // シリアル通信初期化 (115200bps)
+  g_serial.init();
+  g_serial.printf("\033[2J\033[H"); // 画面クリア & カーソルホーム
+  g_serial.printf("\x1b[36m--- System Booting ---\x1b[39m\n");
+
   // OSTM0タイマー割り込みを設定・開始（1ms周期）
   initOSTM0();
 
+  int counter = 0;
+
   // メインループ
-  // 処理はすべて割り込み内（1ms周期）で実行されるため、ここでは何もしない
+  // 基本的な処理は1ms割り込み内で行われるが、
+  // ここではシリアルの色変えや連続出力のテストを行う
   while (1) {
-    // 待機
+    // スイッチを押している間は高速で出力、そうでない場合は1秒おき程度にするためのウェイト
+    int wait_time = g_onboard.sw() ? 100000 : 5000000;
+
+    for (volatile int i = 0; i < wait_time; i++) {
+    } // 簡易ウェイト
+
+    counter++;
+
+    // ANSIエスケープシーケンスを用いた色変えテスト
+    // \x1b[31m 赤, \x1b[32m 緑, \x1b[33m 黄, \x1b[34m 青, \x1b[35m マゼンタ,
+    // \x1b[36m シアン, \x1b[39m デフォルト
+    // \x1b[41m などの40番台は背景色
+
+    int color = (counter % 6) + 31; // 31〜36 の色を順番に使う
+
+    g_serial.printf("Count: %5d | ", counter);
+    g_serial.printf("\x1b[%dm[COLOR TEST %d]\x1b[39m ", color, color);
+
+    if (counter % 2 == 0) {
+      g_serial.printf("\x1b[43m\x1b[30m[BG YELLOW / FG BLACK]\x1b[49m\x1b[39m");
+    } else {
+      g_serial.printf("\x1b[44m\x1b[37m[BG BLUE / FG WHITE]\x1b[49m\x1b[39m");
+    }
+
+    g_serial.printf("\n");
   }
 
   return 0;

@@ -1,5 +1,5 @@
 src/drivers/Onboard.o: ../src/drivers/Onboard.cpp \
- ../src/drivers/Onboard.h \
+ ../src/drivers/Onboard.h ../src/drivers/../core/IModule.h \
  C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/iodefine.h \
  C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/typedefine.h \
  C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/iodefines/adc_iodefine.h \
@@ -42,6 +42,7 @@ src/drivers/Onboard.o: ../src/drivers/Onboard.cpp \
  C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/iodefines/vdc5_iodefine.h \
  C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/iodefines/wdt_iodefine.h
 ../src/drivers/Onboard.h:
+../src/drivers/../core/IModule.h:
 C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/iodefine.h:
 C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/typedefine.h:
 C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/iodefines/adc_iodefine.h:

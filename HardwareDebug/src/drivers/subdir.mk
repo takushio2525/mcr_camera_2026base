@@ -4,19 +4,23 @@
 
 # Add inputs and outputs from these tool invocations to the build variables 
 CPP_SRCS += \
-../src/drivers/Onboard.cpp 
+../src/drivers/Onboard.cpp \
+../src/drivers/Serial.cpp 
 
 LST += \
-Onboard.lst 
+Onboard.lst \
+Serial.lst 
 
 OBJS += \
-./src/drivers/Onboard.o 
+./src/drivers/Onboard.o \
+./src/drivers/Serial.o 
 
 MAP += \
 mcr_camera_2026base.map 
 
 CPP_DEPS += \
-./src/drivers/Onboard.d 
+./src/drivers/Onboard.d \
+./src/drivers/Serial.d 
 
 
 # Each subdirectory must supply rules for building sources it contributes
