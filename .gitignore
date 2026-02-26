@@ -1,0 +1,32 @@
+# TeX 実行時に生成される一時ファイル・ログ
+*.aux
+*.bbl
+*.blg
+*.idx
+*.ind
+*.lof
+*.lot
+*.out
+*.toc
+*.acn
+*.acr
+*.alg
+*.glg
+*.glo
+*.gls
+*.ist
+*.fls
+*.log
+*.fdb_latexmk
+*.synctex.gz
+*.dvi
+
+# VS Code の設定
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# カスタム設定等
+*.pdf

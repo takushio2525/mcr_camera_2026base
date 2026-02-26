@@ -21,7 +21,7 @@ GR-PEACH (RZ/A1H) をベースとしたマイクロマウス／ロボットカ�
 ## 6. 技術スタック
 - **ターゲット:** GR-PEACH (Renesas RZ/A1H MCU)
 - **言語:** C / C++
-- **開発環境:** e2 studio
+- **開発環境:** e2 studio / VSCode DevContainer (LaTeXドキュメント用)
 - **コンパイラ:** GCC for Renesas ARM
 - **割り込みコントローラ:** GIC (Generic Interrupt Controller)
 - **タイマー:** OSTM0 (OS Timer 0) -> 1msインターバルとして使用
@@ -30,6 +30,7 @@ GR-PEACH (RZ/A1H) をベースとしたマイクロマウス／ロボットカ�
 
 | ファイル | 役割 |
 |----------|------|
+| `.devcontainer/` | LaTeXドキュメントビルド用のコンテナ環境設定 |
 | `src/mcr_camera_2026base.cpp` | メインの初期化と 1msタイマー設定、コールバックを実装 |
 | `src/core/IModule.h` | 全モジュール共通の基底インターフェース |
 | `src/drivers/Onboard.h` | オンボードのLED / SWを抽象化したラッチ管理ドライバ の定義 |
@@ -64,6 +65,18 @@ GR-PEACH (RZ/A1H) をベースとしたマイクロマウス／ロボットカ�
 - **`g_serial`**: `Serial`クラスのグローバルインスタンス。デバッグ出力の用途として各所で使用する。
 
 ## 24. 修正履歴
+
+### 2026-02-26 20:18: LaTeXコンパイル用DevContainer環境の統合
+**変更内容:**
+- プロジェクト直下に `.devcontainer` ディレクトリを追加し、LaTeX Workshop 設定を含む DevContainer を構築。
+- プロジェクト直下に `.gitignore` を追加し、TeX の中間ビルド除外設定を追加。
+- 仕様書の技術スタックとファイル構成を更新。
+
+**解消した問題/不満:**
+- どこでも `doc/main.tex` を同一条件でコンパイルできる環境がなかった問題。
+
+**解決方法:**
+- 既存の `tex_devcontainer` の設定を本プロジェクトに統合し、VSCode で開くだけでコンパイルできる環境を用意しました。
 
 ### 2026-02-24 21:15: シリアル通信（Serial）クラス要件の定義
 **変更内容:**
