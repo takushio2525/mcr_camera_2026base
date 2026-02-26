@@ -23,8 +23,8 @@ Serial g_serial;
 Serial::Serial() {}
 
 void Serial::init() {
-  // 1. Cancel module stop for SCIF2 (bit 14 of STBCR4)
-  CPG.STBCR4 &= ~(1 << 14);
+  // 1. SCIF2 のモジュールストップ解除 (STBCR4 bit5)
+  CPG.STBCR4 &= ~(1 << 5);
   volatile uint8_t dummy = CPG.STBCR4; // Dummy read
   (void)dummy;
 
@@ -60,8 +60,9 @@ void Serial::init() {
   SCIF2.SCFCR = 0x0006;
 
   // Set Read/Write pointers in FIFO to 0
-  SCIF2.SCFSR = 0x0000;
-  SCIF2.SCLSR = 0x0000;
+  // ステータスレジスタをクリア（W0C方式: 1を読んで0を書く）
+  SCIF2.SCFSR &= ~0x00F3; // ER,TEND,TDFE,BRK,RDF,DR をクリア
+  SCIF2.SCLSR &= ~0x0001; // ORER をクリア
 
   // SCSMR: 8-bit data, 1 stop bit, no parity, P0 clock
   SCIF2.SCSMR = 0x0000;
