@@ -86,16 +86,18 @@ void Serial::update() {
 }
 
 void Serial::putChar(char c) {
-  // Wait until TDFE (Transmit Data FIFO Empty) is 1
-  while ((SCIF2.SCFSR & 0x0020) == 0) {
-    // Wait
+  // SCIF2 の送信FIFOに空きがあるまで待つ
+  // SCFDR下位5bit = 送信FIFOに入っているデータ数（最大16）
+  // FIFOに空きがあれば待たずに即座に書き込み
+  while ((SCIF2.SCFDR >> 8) >= 16) {
+    // 送信FIFO満杯の場合のみ待つ
   }
 
-  // Write the character to the transmit FIFO
+  // 送信FIFOに書き込み
   SCIF2.SCFTDR = c;
 
-  // Clear TDFE to allow transmission to start/continue
-  SCIF2.SCFSR &= ~0x0020;
+  // TDFEフラグをクリア（送信継続のため）
+  SCIF2.SCFSR &= ~0x0060; // TDFE, TENDをクリア
 }
 
 void Serial::print(const char *str) {
