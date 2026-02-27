@@ -92,9 +92,9 @@ static void initOSTM0(void)
 
   // OSTMnCTL設定
   // bit1: OSTMnMD1 = 0 (インターバルタイマーモード)
-  // bit0: OSTMnMD0 = 0 (カウント開始時に割り込みを発生しない)
-  // ※参考プロジェクト(mbed Ticker)と同様にMD0=0で開始
-  OSTM0.OSTMnCTL = 0x00;
+  // bit0: OSTMnMD0 = 1 (コンペアマッチ時に割り込み要求を発生=周期割り込み)
+  // ※MD0=0だとカウント開始時の1回のみ割り込みが発生し、周期動作しない
+  OSTM0.OSTMnCTL = 0x01;
 
   // GIC設定: OSTM0割り込みを有効化
   // まず以前の割り込み状態を確実にクリア（安全のため）
