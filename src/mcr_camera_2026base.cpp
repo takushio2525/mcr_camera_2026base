@@ -172,55 +172,40 @@ int main(void) {
   g_serial.printf("0/1表示: 0=暗い, 1=明るい（閾値以上）\n\n");
 
   // メインループ: カメラ映像のデバッグ表示
-  // 割り込み内で画像処理が進行し、ここでは定期的にシリアル出力を行う
+  // 参考プロジェクト debug_mode case 3 と同じパターン
+  int x, y, c;
+
   while (1) {
     // 一定間隔でシリアル出力
     if (g_cnt_printf >= DEBUG_PRINT_INTERVAL_MS) {
       g_cnt_printf = 0;
 
-      // 画面先頭にカーソルを移動（上書き表示）
-      g_serial.printf("\033[H");
-
-      // ヘッダ行: X座標の目盛り
+      // ヘッダ行（参考プロジェクト準拠）
       g_serial.printf(
-          "    0         1         2         3         4         5         "
-          "6         7         8         9         0         1         2  "
-          "       3         4         5        \r\n");
+          "shi 0         0         0         0         0         0  "
+          "       0         0         0         0         1         "
+          "1         1         1         1         1        1\r\n");
       g_serial.printf(
-          "    0123456789012345678901234567890123456789012345678901234567890"
-          "123456789012345678901234567890123456789012345678901234567890123456"
-          "789012345678901234567890123456789\r\n");
+          "kii 0         1         2         3         4         5  "
+          "       6         7         8         9         0         "
+          "1         2         3         4         5        5\r\n");
+      g_serial.printf(
+          "200 01234567890123456789012345678901234567890123456789012345"
+          "67890123456789012345678901234567890123456789012345678901234567"
+          "8901234567890123456789012345678901234567890123456789\r\n");
 
-      // 60行目〜100行目を2行飛ばしで表示
-      // 各ピクセルを閾値で二値化して 0/1 で表示
-      for (int y = 30; y < 100; y += 2) {
+      // 30行目〜100行目を2行飛ばしで表示（参考プロジェクトと同じ）
+      for (y = 30; y < 100; y += 2) {
         g_serial.printf("%03d:", y);
-        for (int x = 0; x < (int)CAM_PIXEL_HW; x++) {
-          int val = g_camera.getPixel(x, y);
-          char c = (val >= DEBUG_THRESHOLD) ? '1' : '0';
-
-          // 白線（閾値以上）の部分を背景色付きで表示
-          if (val >= DEBUG_THRESHOLD) {
-            g_serial.printf("\x1b[44m%c\x1b[49m", c); // 青背景
-          } else {
-            g_serial.printf("%c", c);
-          }
+        for (x = 0; x < 160; x++) {
+          c = g_camera.getPixel(x, y) >= DEBUG_THRESHOLD ? 1 : 0;
+          g_serial.printf("%d", c);
         }
         g_serial.printf("  \r\n");
       }
 
-      // 閾値変換による8点センサ表示（参考プロジェクト互換）
-      g_serial.printf("\r\n--- 8点センサ (shikiichi_henkan互換) ---\r\n");
-      for (int row = 40; row <= 100; row += 20) {
-        unsigned char sensor =
-            g_camera.thresholdConvert(row, DEBUG_THRESHOLD, 8);
-        // 8ビットを2進表示
-        g_serial.printf("行%3d: ", row);
-        for (int b = 7; b >= 0; b--) {
-          g_serial.printf("%d", (sensor >> b) & 1);
-        }
-        g_serial.printf("  \r\n");
-      }
+      // カーソルをホームに戻す（次の表示で上書き）
+      g_serial.printf("\033[H");
     }
   }
 
