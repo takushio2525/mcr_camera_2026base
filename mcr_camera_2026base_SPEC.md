@@ -61,10 +61,10 @@ GR-PEACH (RZ/A1H) をベースとしたマイクロマウス／ロボットカ�
 - **`g_onboard`**: `Onboard`クラスのグローバルインスタンス。割り込みハンドラ等各所からハードウェア操作を行うために使用。
 - **`initGIC()`**: GICディストリビュータ(ICDDCR)、CPUインターフェース(ICCICR)、割り込み優先度マスク(ICCPMR)を有効化し、CPSIE iでCPU IRQを許可する。カメラ初期化の前に呼ぶ必要がある（VDC5割り込みが正常動作するため）。mbed-osではブートコードが同等の処理を行っている。
 - **`initOSTM0()`**: RZ/A1HのOSTM0を1ms用に設定し、OSTM0固有のGIC設定（ICDISER, ICDICFR, ICDIPR, ICDIPTR）を行い、タイマーを開始する。GICグローバル有効化(initGIC)は事前に呼び出し済みの前提。
-- **`ostm0_interrupt_callback()`**: `INT_Excep_OSTMI0` から呼ばれ、実時間をカウント(`g_timer_1ms`)し、`g_camera.update()` と `g_onboard.update()` を実行する。
+- **`ostm0_interrupt_callback()`**: `INT_Excep_OSTMI0` から呼ばれ、実時間をカウント(`g_timer_1ms`)し、`g_onboard.update()` を実行する。画像処理(`g_camera.update()`) はSPIフラッシュ直接実行環境で1msを超過するためメインループで実行する。
 - **`INT_Excep_IRQ()`**: GIC(INTC)を用いたベクタ割り込みディスパッチャ。ICCIARから要因IDを取得し、`RelocatableVectors` から適切なハンドラへ分岐・EIOを通知する実装。
 - **`Camera::init()`**: `mbed-gr-libs`由来の`DisplayBase` API（`Graphics_init`, `Graphics_Video_init`, `Video_Write_Setting`等）を使用し、VDC5およびDVDECの初期化（NTSC 160x120 YCbCr422入力）とメモリ書き込み設定を行い、ビデオキャプチャを開始する。
-- **`Camera::update()`**: 1ms割り込みから呼ばれ、フレーム処理をステップ分割で実行する。VDC5 Vfield割り込みの`s_vfieldToggle`変化を検出してステップカウンタをリセットし、NTSCフィールド信号と同期する（参考プロジェクトの`vfield_count2`によるcounterリセットと同等方式）。ステップ0-1: `imageCopy`（VDC5書き込みバッファ`s_writeBuf`からYCbCr422データをコピー）、ステップ2-3: `extractBrightness`（Y成分のみ抽出し`imageBuffer_`に格納）。
+- **`Camera::update()`**: メインループから呼ばれ、フレーム処理をステップ分割で実行する。VDC5 Vfield割り込みの`s_vfieldToggle`変化を検出してステップカウンタをリセットし、NTSCフィールド信号と同期する（参考プロジェクトの`vfield_count2`によるcounterリセットと同等方式）。ステップ0-1: `imageCopy`（VDC5書き込みバッファ`s_writeBuf`からYCbCr422データをコピー）、ステップ2-3: `extractBrightness`（Y成分のみ抽出し`imageBuffer_`に格納）。※SPIフラッシュ直接実行環境ではimageCopyのループが1msを超過するため、1ms割り込み内ではなくメインループから実行する。
 - **`Camera::getPixel(x, y)`**: 輝度バッファ`imageBuffer_`から座標(x, y)のピクセル値(0-255)を返す。
 - **`Camera::thresholdConvert(gyou, threshold, diff)`**: 参考プロジェクトの`shikiichi_henkan`と同等の処理。指定行の8点（x=31,43,54,71,88,105,116,128）の輝度値を取得し、閾値を自動調整して2進数8ビットに変換する。
 - **`Camera::isFrameReady()`**: 新しいフレームの処理が完了したかを返す。
@@ -75,6 +75,26 @@ GR-PEACH (RZ/A1H) をベースとしたマイクロマウス／ロボットカ�
 - **`g_serial`**: `Serial`クラスのグローバルインスタンス。デバッグ出力の用途として各所で使用する。
 
 ## 24. 修正履歴
+
+### 2026-02-27: g_camera.update()をメインループに移動（SPIフラッシュ実行速度問題解消）
+
+**変更内容:**
+- `ostm0_interrupt_callback()` から `g_camera.update()` を削除し、メインループ内で実行するように変更。
+- 割り込みコールバックは軽量な処理のみ（カウンタインクリメント、LEDトグル、スイッチ読み取り）。
+
+**解消した問題/不満:**
+- 「タイマー開始」の後、1msタイマー制御やデバッグ表示が一切出力されない問題。
+
+**原因分析:**
+- 本プロジェクトはコードをSPIフラッシュ(0x1800xxxx)からXIPモードで直接実行している。ただしMMUもL1命令キャッシュも無効。
+- SPIBSC(SPIバスコントローラ)のプリフェッチバッファは32バイトだが、ループの後方分岐でバッファが無効化されるため、ループの各反復ごとにSPIフラッシュから命令を再フェッチする。
+- imageCopyの内側ループ(9600バイトコピー)だけで推定7-8ms以上。OSTM0の1ms周期を大幅に超過。
+- 結果、コールバック実行中に次のOSTM0割り込みが保留され、コールバック終了後即座に再発火。CPUが100%割り込み処理に占有されメインループが実行されない。
+- 参考プロジェクト(mbed-os)ではブートコードがコードをRAMにコピーし、L1キャッシュ+MMUを有効化して実行するため、同様のimageCopyが1ms以内に完了する。
+
+**解決方法:**
+- `g_camera.update()` を割り込みコールバックから削除し、メインループで実行するように変更。VDC5 Vfield同期は割り込み経由でs_vfieldToggleが更新されるため、メインループからの呼び出しでも同期が機能する。
+- 将来的にはMMU+L1キャッシュ有効化またはRAM実行への移行で、割り込み内実行に戻すことも可能。
 
 ### 2026-02-27: GIC初期化順序の修正（システムハング解消）
 
