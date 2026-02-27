@@ -54,7 +54,27 @@ Onboard g_onboard;
 
 extern "C" void ostm0_interrupt_callback(void);
 
+// GIC (Generic Interrupt Controller) のグローバル有効化
+// 参考プロジェクト(mbed-os)では、ブートコードがこれを先に行っている。
+// カメラ初期化でVDC5割り込みが GIC に登録されるため、
+// GIC と CPU IRQ はカメラ初期化の前に有効化する必要がある。
+static void initGIC(void)
+{
+  // GICディストリビュータ有効化
+  INTC.ICDDCR = 0x01;
+
+  // GIC CPUインターフェース有効化
+  INTC.ICCICR = 0x01;
+
+  // 割り込み優先度マスク: 全割り込みを許可
+  INTC.ICCPMR = 0xFF;
+
+  // CPUレベルのIRQを有効化（CPSR Iビットクリア）
+  __asm__ volatile("CPSIE i");
+}
+
 // OSTM0タイマー初期化 (1ms周期インターバルタイマー)
+// ※GICのグローバル有効化(initGIC)は事前に呼び出し済みの前提
 static void initOSTM0(void)
 {
   // OSTMのスタンバイ解除 (STBCR5 bit1 = OSTM0)
@@ -72,8 +92,9 @@ static void initOSTM0(void)
 
   // OSTMnCTL設定
   // bit1: OSTMnMD1 = 0 (インターバルタイマーモード)
-  // bit0: OSTMnMD0 = 1 (コンペアマッチ時に割り込み要求を発生)
-  OSTM0.OSTMnCTL = 0x01;
+  // bit0: OSTMnMD0 = 0 (カウント開始時に割り込みを発生しない)
+  // ※参考プロジェクト(mbed Ticker)と同様にMD0=0で開始
+  OSTM0.OSTMnCTL = 0x00;
 
   // GIC設定: OSTM0割り込みを有効化
   // まず以前の割り込み状態を確実にクリア（安全のため）
@@ -95,10 +116,9 @@ static void initOSTM0(void)
 
   // 割り込み優先度設定 (ICDIPR)
   // IRQ134 → レジスタ番号 = 134/4 = 33, バイト位置 = (134%4)*8 = 16
-  // 優先度: 最高 (0x00) もしくは高め (0x80) に設定
   uint32_t ipr = INTC.ICDIPR33;
   ipr &= ~(0xFF << 16);
-  ipr |= (0x80 << 16); // 優先度を中間に引き上げ
+  ipr |= (0x80 << 16);
   INTC.ICDIPR33 = ipr;
 
   // 割り込みプロセッサターゲット設定 (ICDIPTR)
@@ -109,21 +129,8 @@ static void initOSTM0(void)
   iptr |= (0x01 << 16);
   INTC.ICDIPTR33 = iptr;
 
-  // GICディストリビュータ有効化
-  INTC.ICDDCR = 0x01;
-
-  // GIC CPUインターフェース有効化
-  INTC.ICCICR = 0x01;
-
-  // 割り込み優先度マスク: 全割り込みを許可
-  // (安全のため0xF8に設定することもあるが0xFFで全通し)
-  INTC.ICCPMR = 0xFF;
-
   // OSTM0カウント開始
   OSTM0.OSTMnTS = 0x01;
-
-  // CPUレベルのIRQを有効化（CPSR Iビットクリア）
-  __asm__ volatile("CPSIE i");
 }
 
 // OSTM0割り込みコールバック
@@ -166,6 +173,15 @@ int main(void)
   g_serial.init();
   g_serial.printf("\033[2J\033[H"); // 画面クリア & カーソルホーム
   g_serial.printf("\x1b[36m--- MCR Camera 2026 Base ---\x1b[39m\n");
+  g_serial.printf("GIC初期化中...\n");
+
+  // GICのグローバル有効化 (カメラより先に行う)
+  // mbed-osではブートコードがこれを行っているため、参考プロジェクトでは
+  // カメラ初期化時にVDC5割り込みが正常に動作する。
+  // ベアメタルでは明示的に先に呼ぶ必要がある。
+  initGIC();
+  g_serial.printf("GIC初期化完了\n");
+
   g_serial.printf("カメラ初期化中...\n");
 
   // カメラ初期化（VDC5 + DVDEC）

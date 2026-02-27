@@ -59,7 +59,8 @@ GR-PEACH (RZ/A1H) をベースとしたマイクロマウス／ロボットカ�
 - **`Onboard::update()`**: LEDバッファ状態をまとめ、GR-PEACHの対象GPIOピン（Low Active）へ実際に出力する。
 - **`Onboard::sw()`**: SWのプッシュ状態をポーリングで監視し、押下時1(Active-High)を返す。
 - **`g_onboard`**: `Onboard`クラスのグローバルインスタンス。割り込みハンドラ等各所からハードウェア操作を行うために使用。
-- **`initOSTM0()`**: RZ/A1HのOSTM0を1ms用に設定し、GIC(INTC)へ登録。
+- **`initGIC()`**: GICディストリビュータ(ICDDCR)、CPUインターフェース(ICCICR)、割り込み優先度マスク(ICCPMR)を有効化し、CPSIE iでCPU IRQを許可する。カメラ初期化の前に呼ぶ必要がある（VDC5割り込みが正常動作するため）。mbed-osではブートコードが同等の処理を行っている。
+- **`initOSTM0()`**: RZ/A1HのOSTM0を1ms用に設定し、OSTM0固有のGIC設定（ICDISER, ICDICFR, ICDIPR, ICDIPTR）を行い、タイマーを開始する。GICグローバル有効化(initGIC)は事前に呼び出し済みの前提。
 - **`ostm0_interrupt_callback()`**: `INT_Excep_OSTMI0` から呼ばれ、実時間をカウント(`g_timer_1ms`)し、`g_camera.update()` と `g_onboard.update()` を実行する。
 - **`INT_Excep_IRQ()`**: GIC(INTC)を用いたベクタ割り込みディスパッチャ。ICCIARから要因IDを取得し、`RelocatableVectors` から適切なハンドラへ分岐・EIOを通知する実装。
 - **`Camera::init()`**: `mbed-gr-libs`由来の`DisplayBase` API（`Graphics_init`, `Graphics_Video_init`, `Video_Write_Setting`等）を使用し、VDC5およびDVDECの初期化（NTSC 160x120 YCbCr422入力）とメモリ書き込み設定を行い、ビデオキャプチャを開始する。
@@ -74,6 +75,25 @@ GR-PEACH (RZ/A1H) をベースとしたマイクロマウス／ロボットカ�
 - **`g_serial`**: `Serial`クラスのグローバルインスタンス。デバッグ出力の用途として各所で使用する。
 
 ## 24. 修正履歴
+
+### 2026-02-27: GIC初期化順序の修正（システムハング解消）
+
+**変更内容:**
+- `initOSTM0()` に含まれていたGICグローバル有効化（ICDDCR, ICCICR, ICCPMR, CPSIE i）を、新設の `initGIC()` 関数に分離。
+- `main()` の呼び出し順序を「initGIC() → カメラ初期化 → initOSTM0()」に変更。
+- `OSTMnCTL` を 0x01 から 0x00 に変更（MD0=0: カウント開始時に割り込みを発生しない。mbed Ticker と同等）。
+
+**解消した問題/不満:**
+- 「カメラ初期化完了」の後、Lチカもシリアル出力も行われずシステムが完全にフリーズする問題。
+
+**原因分析:**
+- カメラ初期化中に `GIC_EnableIRQ()` がVDC5割り込み（VSYNC/VFIELD, GIC ID 75-97）をレベルトリガとしてGICに登録するが、GICディストリビュータ（ICDDCR）とCPUインターフェース（ICCICR）が未有効のため割り込みは発火しない。
+- `WaitVsync(1)` / `WaitVfield(2)` は割り込みベースの待機だが、実際にはタイムアウトで抜けていた。
+- その後 `initOSTM0()` がGICグローバル有効化 + CPSIE i を実行した瞬間、蓄積されたVDC5レベルトリガ割り込みが一斉に発火し、割り込みストームが発生。VDC5割り込み（優先度0x28）がOSTM0（優先度0x80）を常に横取りし、CPUが割り込み処理から抜けられなくなっていた。
+- 参考プロジェクト（mbed-os）ではブートコードがGIC/IRQを先に有効化しているため、カメラ初期化時にVDC5割り込みが正常動作し、この問題は発生しない。
+
+**解決方法:**
+- GICグローバル有効化をカメラ初期化の前に移動し、mbed-osのブートシーケンスと同等の初期化順序にした。これによりVDC5割り込みがカメラ初期化中から正常に動作し、WaitVsync/WaitVfieldも実際の割り込みで待機するようになる。
 
 ### 2026-02-27: シリアルボーレート計算のクロックソースをP1φに修正
 
