@@ -224,40 +224,62 @@ void Camera::vsyncCallback(DisplayBase::int_type_t int_type)
 
 // ====================================================================
 // update(): フレーム周期ステップ処理
-// 1ms割り込みから毎回呼ばれ、ステップごとに画像処理を分割実行
+// メインループから毎回呼ばれ、ステップごとに画像処理を分割実行
 // 参考プロジェクト(2.38m-s)の intTimer() 内 switch(counter++) と同等
+//
+// 【XIP環境対応】
+// mbed-os(RAM実行+L1キャッシュ)では各ステップが1ms以内に完了するため、
+// Vfield(16.7ms間隔)ごとに余裕をもって4ステップを終えられる。
+// しかしXIP(SPIフラッシュ直接実行)ではimageCopyが重く、4ステップの
+// 合計が16.7msを超えることがある。
+// 従来のロジックではVfieldトグル変化で即座にframeStep_をリセットしていたため、
+// ステップ途中でリセットされフレーム処理が永遠に完了しない問題があった。
+//
+// 修正: フレーム処理中(frameStep_ 0〜3)はVfieldリセットを行わず、
+// 処理完了後(frameStep_ >= 4)に次のVfield変化を待って新フレームを開始する。
 // ====================================================================
 void Camera::update()
 {
-  // 参考プロジェクトと同じ方式:
-  // VDC5 Vfield割り込みでトグルされる s_vfieldToggle を監視し、
-  // フィールドが切り替わったタイミングで frameStep_ をリセットする。
-  // これにより画像処理がNTSCフィールド信号と同期する。
-  if ((int)s_vfieldToggle != fieldToggleBuf_)
+  if (frameStep_ <= 3)
   {
-    fieldToggleBuf_ = (int)s_vfieldToggle;
-    frameStep_ = 0;
+    // フレーム処理中: Vfield変化を無視して現在のフレームを最後まで処理する
+    // XIP環境では各ステップが重いため、途中リセットを防止する
+  }
+  else
+  {
+    // フレーム処理完了後: 次のVfieldトグル変化を待って新フレームを開始
+    if ((int)s_vfieldToggle != fieldToggleBuf_)
+    {
+      fieldToggleBuf_ = (int)s_vfieldToggle;
+      frameStep_ = 0;
+      frameReady_ = false; // 新フレーム処理開始時にクリア
+    }
+    else
+    {
+      // まだVfieldが来ていない → 何もしない
+      return;
+    }
   }
 
   switch (frameStep_++)
   {
   case 0:
-    // 0ms目: YCbCr422 生データのコピー（前半0-59行）
+    // ステップ0: YCbCr422 生データのコピー（前半0-59行）
     imageCopy(0);
     break;
 
   case 1:
-    // 1ms目: YCbCr422 生データのコピー（後半60-119行）
+    // ステップ1: YCbCr422 生データのコピー（後半60-119行）
     imageCopy(1);
     break;
 
   case 2:
-    // 2ms目: 輝度抽出（前半0-59行）
+    // ステップ2: 輝度抽出（前半0-59行）
     extractBrightness(0);
     break;
 
   case 3:
-    // 3ms目: 輝度抽出（後半60-119行）→ フレームデータ確定
+    // ステップ3: 輝度抽出（後半60-119行）→ フレームデータ確定
     extractBrightness(1);
     frameReady_ = true;
     break;
@@ -432,6 +454,12 @@ const volatile unsigned char *Camera::getImageBuffer() const
 // isFrameReady: 新しいフレームが準備できたかチェック
 // ====================================================================
 bool Camera::isFrameReady() const { return frameReady_; }
+
+// ====================================================================
+// clearFrameReady: フレーム準備完了フラグをクリア
+// メインループでフレーム読み出し後に呼んでフラグをリセットする
+// ====================================================================
+void Camera::clearFrameReady() { frameReady_ = false; }
 
 // ====================================================================
 // thresholdConvert: 閾値変換

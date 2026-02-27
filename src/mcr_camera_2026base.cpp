@@ -49,6 +49,9 @@ volatile unsigned long g_timer_1ms = 0;
 // シリアル出力用カウンタ
 volatile unsigned long g_cnt_printf = 0;
 
+// フレーム更新カウンタ（デバッグ用：フレーム処理完了回数を追跡）
+static unsigned long s_frameCount = 0;
+
 // Onboardインスタンス（グローバル）
 Onboard g_onboard;
 
@@ -214,6 +217,13 @@ int main(void)
     //  ベアメタル+XIPではメインループが適切。
     g_camera.update();
 
+    // フレーム更新完了をカウント（frameReady_は毎フレームtrueになる）
+    if (g_camera.isFrameReady())
+    {
+      s_frameCount++;
+      g_camera.clearFrameReady();
+    }
+
     // 一定間隔でシリアル出力（参考プロジェクトと同じ 200ms）
     if (g_cnt_printf >= DEBUG_PRINT_INTERVAL_MS)
     {
@@ -221,6 +231,10 @@ int main(void)
 
       // カーソルを左上に移動して上書き描画（画面全体クリアよりチラつきが少ない）
       g_serial.printf("\033[H");
+
+      // タイマー値・フレーム更新カウンタを表示（デバッグ用）
+      g_serial.printf("T=%lu Frame=%lu              \r\n",
+                      g_timer_1ms, s_frameCount);
 
       // ヘッダ行（参考プロジェクト準拠）
       g_serial.print(

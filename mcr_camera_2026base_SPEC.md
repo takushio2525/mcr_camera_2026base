@@ -64,10 +64,11 @@ GR-PEACH (RZ/A1H) をベースとしたマイクロマウス／ロボットカ�
 - **`ostm0_interrupt_callback()`**: `INT_Excep_OSTMI0` から呼ばれ、実時間をカウント(`g_timer_1ms`)し、`g_onboard.update()` を実行する。画像処理(`g_camera.update()`) はSPIフラッシュ直接実行環境で1msを超過するためメインループで実行する。
 - **`INT_Excep_IRQ()`**: GIC(INTC)を用いたベクタ割り込みディスパッチャ。ICCIARから要因IDを取得し、`RelocatableVectors` から適切なハンドラへ分岐・EIOを通知する実装。
 - **`Camera::init()`**: `mbed-gr-libs`由来の`DisplayBase` API（`Graphics_init`, `Graphics_Video_init`, `Video_Write_Setting`等）を使用し、VDC5およびDVDECの初期化（NTSC 160x120 YCbCr422入力）とメモリ書き込み設定を行い、ビデオキャプチャを開始する。
-- **`Camera::update()`**: メインループから呼ばれ、フレーム処理をステップ分割で実行する。VDC5 Vfield割り込みの`s_vfieldToggle`変化を検出してステップカウンタをリセットし、NTSCフィールド信号と同期する（参考プロジェクトの`vfield_count2`によるcounterリセットと同等方式）。ステップ0-1: `imageCopy`（VDC5書き込みバッファ`s_writeBuf`からYCbCr422データをコピー）、ステップ2-3: `extractBrightness`（Y成分のみ抽出し`imageBuffer_`に格納）。※SPIフラッシュ直接実行環境ではimageCopyのループが1msを超過するため、1ms割り込み内ではなくメインループから実行する。
+- **`Camera::update()`**: メインループから呼ばれ、フレーム処理をステップ分割で実行する。ステップ0-1: `imageCopy`（VDC5書き込みバッファ`s_writeBuf`からYCbCr422データをコピー）、ステップ2-3: `extractBrightness`（Y成分のみ抽出し`imageBuffer_`に格納）。フレーム処理中（frameStep_ 0〜3）はVfieldトグル変化によるリセットを行わず、処理完了後（frameStep_ >= 4）に次のVfield変化を待って新フレームを開始する。これによりXIP環境でimageCopyが重くても16.7msのVfield間隔をまたいでフレーム処理が完了する。※SPIフラッシュ直接実行環境ではimageCopyのループが1msを超過するため、1ms割り込み内ではなくメインループから実行する。
 - **`Camera::getPixel(x, y)`**: 輝度バッファ`imageBuffer_`から座標(x, y)のピクセル値(0-255)を返す。
 - **`Camera::thresholdConvert(gyou, threshold, diff)`**: 参考プロジェクトの`shikiichi_henkan`と同等の処理。指定行の8点（x=31,43,54,71,88,105,116,128）の輝度値を取得し、閾値を自動調整して2進数8ビットに変換する。
 - **`Camera::isFrameReady()`**: 新しいフレームの処理が完了したかを返す。
+- **`Camera::clearFrameReady()`**: `frameReady_`フラグを`false`にクリアする。メインループでフレーム読み出し後に呼ぶ。
 - **`g_camera`**: `Camera`クラスのグローバルインスタンス。割り込みハンドラからのフレーム周期処理とメインループからの画像データ取得に使用。
 - **`Serial::init()`**: STBCR4 bit5をクリアしSCIF2モジュールストップを解除後、ピンマルチプレクス設定（P6_3=TxD2 Alt7, P6_2=RxD2 Alt7）、SCIF2レジスタ初期化（ボーレート230400bps、P1φ=66.67MHz、SCEMR=0x0081(BGDM=1,ABCS=1)、SCBRR=35）を行う。mbed serial_api.c の serial_baud() と完全同一設定。
 - **`Serial::printf(fmt, ...)`**: 書式付き文字列をフォーマットし、送出可能になるまでポーリング待機しながらSCIFへ1文字ずつ即時出力する。
@@ -75,6 +76,27 @@ GR-PEACH (RZ/A1H) をベースとしたマイクロマウス／ロボットカ�
 - **`g_serial`**: `Serial`クラスのグローバルインスタンス。デバッグ出力の用途として各所で使用する。
 
 ## 24. 修正履歴
+
+### 2026-02-27: Camera::update()のVfield同期ロジック修正（フレーム更新停止問題解消）
+
+**変更内容:**
+- `Camera::update()`のVfieldトグル同期ロジックを変更。フレーム処理中（frameStep_ 0〜3）はVfield変化によるリセットを行わず、処理完了後にのみ次のVfieldを待って新フレームを開始する方式に変更。
+- `Camera::clearFrameReady()`メソッドを追加。メインループでフレーム読み出し後にフラグをクリアする用途。
+- メインループにフレーム更新カウンタ（`s_frameCount`）とタイマー値のデバッグ表示を追加。
+
+**解消した問題/不満:**
+- カメラからの情報取得は行われているが、シリアルから出力されるフレーム情報が更新されず、同じ画像が表示され続ける問題。
+
+**原因分析:**
+- XIP（SPIフラッシュ直接実行）環境では`imageCopy`のループが重く、4ステップの合計が16.7ms（NTSC Vfield間隔）を超過する。
+- 従来のロジックでは`update()`の先頭で`s_vfieldToggle`の変化を検出すると即座に`frameStep_`を0にリセットしていた。
+- ステップ0（imageCopy前半）の実行中に次のVfield割り込みが発生し`s_vfieldToggle`がトグルされると、次の`update()`呼び出しで`frameStep_`が再を0にリセットされ、ステップ1以降に進めない。
+- 結果、`extractBrightness`（ステップ2-3）に到達できず、`imageBuffer_`が更新されない。
+
+**解決方法:**
+- フレーム処理中（frameStep_ 0〜3）はVfieldトグル変化を無視し、4ステップを完了させる。
+- 処理完了後（frameStep_ >= 4）にのみ次のVfield変化を検出して新フレームを開始する。
+- これにより、1フレームがVfield 1回分ではなく数フィールド分かかるが、確実にフレーム処理が完了し継続的に更新される。
 
 ### 2026-02-27: g_camera.update()をメインループに移動（SPIフラッシュ実行速度問題解消）
 

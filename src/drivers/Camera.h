@@ -51,6 +51,9 @@ public:
   // 新フレーム準備完了フラグ
   bool isFrameReady() const;
 
+  // フレーム準備完了フラグをクリア（読み出し後に呼ぶ）
+  void clearFrameReady();
+
   // Vfield/Vsyncコールバック（割り込みから呼ばれる関数）
   static void vfieldCallback(DisplayBase::int_type_t int_type);
   static void vsyncCallback(DisplayBase::int_type_t int_type);
