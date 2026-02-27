@@ -8,9 +8,9 @@
 
 #include "Serial.h"
 #include "iodefine.h"
-#include <cstdarg>
-#include <cstdio>
-#include <cstring>
+#include <stdarg.h>
+#include <stdio.h>
+#include <string.h>
 
 // SCIF2 settings for GR-PEACH USB Serial
 // P0 phi = 33.3333... MHz
@@ -117,4 +117,14 @@ void Serial::printf(const char *fmt, ...) {
   va_end(args);
 
   print(buffer_);
+}
+
+extern "C" void c_printf(const char *fmt, ...) {
+  char buf[256];
+  va_list args;
+  va_start(args, fmt);
+  vsnprintf(buf, sizeof(buf), fmt, args);
+  va_end(args);
+
+  g_serial.print(buf);
 }
