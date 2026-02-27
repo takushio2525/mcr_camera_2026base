@@ -63,17 +63,55 @@ GR-PEACH (RZ/A1H) をベースとしたマイクロマウス／ロボットカ�
 - **`ostm0_interrupt_callback()`**: `INT_Excep_OSTMI0` から呼ばれ、実時間をカウント(`g_timer_1ms`)し、`g_camera.update()` と `g_onboard.update()` を実行する。
 - **`INT_Excep_IRQ()`**: GIC(INTC)を用いたベクタ割り込みディスパッチャ。ICCIARから要因IDを取得し、`RelocatableVectors` から適切なハンドラへ分岐・EIOを通知する実装。
 - **`Camera::init()`**: `mbed-gr-libs`由来の`DisplayBase` API（`Graphics_init`, `Graphics_Video_init`, `Video_Write_Setting`等）を使用し、VDC5およびDVDECの初期化（NTSC 160x120 YCbCr422入力）とメモリ書き込み設定を行い、ビデオキャプチャを開始する。
-- **`Camera::update()`**: 1ms割り込みから呼ばれ、フレーム処理をステップ分割で実行する。ステップ0-1: `imageCopy`（VDC5フレームバッファからYCbCr422データをコピー）、ステップ2-3: `extractBrightness`（Y成分のみ抽出し`imageBuffer_`に格納）。Vfieldコールバックによるフレーム切替検出でステップをリセット。
+- **`Camera::update()`**: 1ms割り込みから呼ばれ、フレーム処理をステップ分割で実行する。VDC5 Vfield割り込みの`s_vfieldToggle`変化を検出してステップカウンタをリセットし、NTSCフィールド信号と同期する（参考プロジェクトの`vfield_count2`によるcounterリセットと同等方式）。ステップ0-1: `imageCopy`（VDC5書き込みバッファ`s_writeBuf`からYCbCr422データをコピー）、ステップ2-3: `extractBrightness`（Y成分のみ抽出し`imageBuffer_`に格納）。
 - **`Camera::getPixel(x, y)`**: 輝度バッファ`imageBuffer_`から座標(x, y)のピクセル値(0-255)を返す。
 - **`Camera::thresholdConvert(gyou, threshold, diff)`**: 参考プロジェクトの`shikiichi_henkan`と同等の処理。指定行の8点（x=31,43,54,71,88,105,116,128）の輝度値を取得し、閾値を自動調整して2進数8ビットに変換する。
 - **`Camera::isFrameReady()`**: 新しいフレームの処理が完了したかを返す。
 - **`g_camera`**: `Camera`クラスのグローバルインスタンス。割り込みハンドラからのフレーム周期処理とメインループからの画像データ取得に使用。
-- **`Serial::init()`**: STBCR4 bit5をクリアしSCIF2モジュールストップを解除後、ピンマルチプレクス設定（P3_0=TxD2 Alt6, P3_2=RxD2 Alt4）、SCIF2レジスタ初期化（ボーレート115200bps、BRR=8）を行う。
+- **`Serial::init()`**: STBCR4 bit5をクリアしSCIF2モジュールストップを解除後、ピンマルチプレクス設定（P6_3=TxD2 Alt7, P6_2=RxD2 Alt7）、SCIF2レジスタ初期化（ボーレート230400bps、BGDM=1, BRR=8）を行う。参考プロジェクト(2.38m-s)の`pc.baud(230400)`と同一速度。
 - **`Serial::printf(fmt, ...)`**: 書式付き文字列をフォーマットし、送出可能になるまでポーリング待機しながらSCIFへ1文字ずつ即時出力する。
 - **`Serial::update()`**: IModule準拠のためのダミー関数（何も行わない）。
 - **`g_serial`**: `Serial`クラスのグローバルインスタンス。デバッグ出力の用途として各所で使用する。
 
 ## 24. 修正履歴
+
+### 2026-02-27: シリアル・カメラ処理を参考プロジェクト(2.38m-s)と整合性を取り根本修正
+
+**変更内容:**
+1. **シリアル通信ボーレートを 115200→230400 に変更** (`Serial.cpp`):
+   - SCIF2の`SCEMR`に`BGDM=1`（倍速モード、0x0080）を設定。BRR=8のまま、P0φ/(16×9)≈231481bps。
+   - 参考プロジェクトの`pc.baud(230400)`と同一速度に統一。
+
+2. **Camera::imageCopyの読み出しバッファを修正** (`Camera.cpp`):
+   - `s_saveBuf`（VDC5が書き込まない空バッファ）→ `s_writeBuf`（VDC5書き込み先）に変更。
+   - 参考プロジェクトが`write_buff_addr`を直接ImageCopyに渡す方式と同一に。
+
+3. **Camera::updateにVfield同期を追加** (`Camera.cpp`):
+   - VDC5 Vfield割り込みでトグルされる`s_vfieldToggle`の変化を検出し`frameStep_`をリセット。
+   - 参考プロジェクトの`vfield_count2 != vfield_count2_buff → counter=0`と同等の方式。
+   - 以前の固定17msカウントによるリセットを廃止。
+
+4. **extractBrightnessのフィールド値を実Vfield信号に変更** (`Camera.cpp`):
+   - `fieldToggle_`（ソフトウェア手動トグル）→ `s_vfieldToggle`（VDC5 Vfield割り込み値）を使用。
+   - 前半/後半ごとに適切な範囲でY抽出とバイリニア補間を実行。
+
+5. **カメラ初期化のVsync/Vfield待ちを正式実装** (`Camera.cpp`):
+   - ダミーウェイトループ → `s_vsyncCount`/`s_vfieldCount`を使った割り込みベース待機に変更。
+   - 参考プロジェクトの`WaitVsync(1)`/`WaitVfield(2)`と同等。
+
+6. **メインループのシリアル出力を行バッファリングに最適化** (`mcr_camera_2026base.cpp`):
+   - 1ピクセルごとの`printf`呼び出し（vsnprintf × 5600回/フレーム）を廃止。
+   - 行単位で静的バッファに構築→`print()`で一括出力する方式に変更。
+   - ヘッダ行も`print()`（固定文字列）に変更し`printf`のフォーマット解析を回避。
+
+7. **Serialのprintfバッファを256→512バイトに拡大** (`Serial.h`)
+
+**解消した問題/不満:**
+- シリアル出力が非常に遅い: ボーレート115200bps（参考は230400）+ 1ピクセルごとのprintf（vsnprintfオーバーヘッド）
+- カメラ出力がぐちゃぐちゃ: imageCopyがVDC5未書き込みバッファ(`s_saveBuf`)を読んでいた + Vfield信号と非同期の画像処理
+
+**解決方法:**
+- 参考プロジェクト(2.38m-s)のソースコードと1行ずつ比較し、シリアル・カメラ・割り込み処理の根本的な差異を特定して修正。
 
 ### 2026-02-27 ?:??: VDC5初期化のLVDS PLL設定エラー(error=6)を修正
 

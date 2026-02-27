@@ -33,7 +33,8 @@ private:
   void putChar(char c);
 
   // Internal buffer for vsnprintf
-  char buffer_[256];
+  // ANSI色付き160文字行 + ヘッダ等を考慮して512バイトに拡大
+  char buffer_[512];
 };
 
 extern Serial g_serial;

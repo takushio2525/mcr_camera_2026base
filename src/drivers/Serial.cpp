@@ -63,11 +63,13 @@ void Serial::init() {
   // SCSMR: 8-bit data, 1 stop bit, no parity, P0 clock
   SCIF2.SCSMR = 0x0000;
 
-  // SCEMR: Default (BGDM=0) -> N calculation uses P0phi/64
-  SCIF2.SCEMR = 0x0000;
+  // SCEMR: BGDM=1 (倍速モード) -> N calculation uses P0phi/16
+  // 参考プロジェクト(2.38m-s)は 230400bps を使用
+  SCIF2.SCEMR = 0x0080;
 
-  // BRR (Baud Rate Register) for 115200 target
-  // Actual BRR = 8
+  // BRR (Baud Rate Register) for 230400 target
+  // BGDM=1, n=0: B = P0φ / (16 * (BRR+1))
+  // B = 33333333 / (16 * 9) = 231481 ≈ 230400bps (誤差0.47%)
   SCIF2.SCBRR = 8;
 
   // Delay for a while (at least 1 bit time)

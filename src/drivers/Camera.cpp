@@ -126,14 +126,24 @@ void Camera::init() {
 
   g_serial.printf(
       "[Camera::init] Capture Start -> Stop -> Start sequence...\n");
-  // 6. Capture Start -> Stop -> Start (初期化の確実性のためのシーケンス)
+  // 6. Capture Start -> Stop -> Start (参考プロジェクトと同じ初期化シーケンス)
   display_.Video_Start(DisplayBase::VIDEO_INPUT_CHANNEL_0);
   display_.Video_Stop(DisplayBase::VIDEO_INPUT_CHANNEL_0);
   display_.Video_Start(DisplayBase::VIDEO_INPUT_CHANNEL_0);
   g_serial.printf("[Camera::init] Sequence done.\n");
 
-  // Vsync/Vfield待ちの代わりに簡易ウェイト（割り込み有効化までの代替）
-  for (volatile int i = 0; i < 3000000; i++) {
+  // 参考プロジェクトと同じ: Vsync/Vfield待ちでVDC5の安定を確認
+  // WaitVsync(1) 相当: Vsyncが1回発生するまで待つ
+  s_vsyncCount = 1;
+  for (volatile int timeout = 0; s_vsyncCount > 0 && timeout < 5000000;
+       timeout++) {
+  }
+  g_serial.printf("[Camera::init] WaitVsync done.\n");
+
+  // WaitVfield(2) 相当: Vfieldが2回発生するまで待つ
+  s_vfieldCount = 2;
+  for (volatile int timeout = 0; s_vfieldCount > 0 && timeout < 10000000;
+       timeout++) {
   }
   g_serial.printf(
       "[Camera::init] All initialization completed successfully.\n");
@@ -195,15 +205,17 @@ void Camera::vsyncCallback(DisplayBase::int_type_t int_type) {
 // ====================================================================
 // update(): フレーム周期ステップ処理
 // 1ms割り込みから毎回呼ばれ、ステップごとに画像処理を分割実行
-// 参考プロジェクトの intTimer() 内 switch(counter++) と同等
+// 参考プロジェクト(2.38m-s)の intTimer() 内 switch(counter++) と同等
 // ====================================================================
 void Camera::update() {
-  // 参考プロジェクトの intTimer() 内 switch(counter++) と同じパターン
-  // 1ms割り込みから呼ばれるたびに counter_ をインクリメントし、
-  // 特定のカウンタ値で処理を実行する
-  //
-  // NTSC 1フィールド ≒ 16.7ms なので、counter_ == 17 で自動リセット
-  // （VDC5 Vfield割り込みが使えないため、タイマーベースでフレーム周期を作る）
+  // 参考プロジェクトと同じ方式:
+  // VDC5 Vfield割り込みでトグルされる s_vfieldToggle を監視し、
+  // フィールドが切り替わったタイミングで frameStep_ をリセットする。
+  // これにより画像処理がNTSCフィールド信号と同期する。
+  if ((int)s_vfieldToggle != fieldToggleBuf_) {
+    fieldToggleBuf_ = (int)s_vfieldToggle;
+    frameStep_ = 0;
+  }
 
   switch (frameStep_++) {
   case 0:
@@ -227,21 +239,11 @@ void Camera::update() {
     frameReady_ = true;
     break;
 
-    // case 4〜16: 追加の処理があればここに記述可能
+    // case 4〜: 追加の処理があればここに記述可能
     // 例: エンコーダ更新、偏差計算、モーター制御値計算 etc.
-    // case 5:
-    //   // ここに追加処理を書ける
-    //   break;
-
-  case 17:
-    // 17ms目: 1フィールド分の時間が経過 → カウンタリセット
-    // フィールドトグルを切り替えて次フレームの処理を開始
-    fieldToggle_ = (fieldToggle_ == 0) ? 1 : 0;
-    frameStep_ = 0;
-    break;
 
   default:
-    // 上記以外のカウンタ値では何もしない（次の1msを待つ）
+    // 上記以外のカウンタ値では何もしない（次フィールドを待つ）
     break;
   }
 }
@@ -253,20 +255,28 @@ void Camera::update() {
 // ====================================================================
 void Camera::imageCopy(int half) {
   const int hwTwice = CAM_PIXEL_HW * 2; // YCbCr422は2バイト/ピクセル
-  const int startY = (half == 0) ? fieldToggle_ : CAM_PIXEL_VW / 2;
-  const int endY = (half == 0) ? (int)(CAM_PIXEL_VW / 2) : (int)CAM_PIXEL_VW;
-  const volatile uint8_t *src = s_saveBuf;
+  // 参考プロジェクトと同様に、VDC5が書き込み中のバッファから直接読む
+  // （s_saveBuf ではなく s_writeBuf を使用する）
+  const volatile uint8_t *src = s_writeBuf;
+  // VDC5 Vfield割り込みで取得した実際のフィールド値を使用
+  const int frame = (int)s_vfieldToggle;
 
-  // フィールドライン（2行飛ばし）でコピー
-  for (int y = startY; y < endY; y += 2) {
-    for (int x = 0; x < hwTwice; x++) {
-      ycbcrBuffer_[y * hwTwice + x] = src[y * hwTwice + x];
+  if (half == 0) {
+    // 前半: トップ/ボトムフィールドの前半(0〜59行)をコピー
+    for (int y = frame; y < (int)(CAM_PIXEL_VW / 2); y += 2) {
+      for (int x = 0; x < hwTwice; x++) {
+        ycbcrBuffer_[y * hwTwice + x] = src[y * hwTwice + x];
+      }
     }
-  }
-
-  // 後半コピー時：もう一方のフィールドラインを補間（黒で埋め）
-  if (half == 1) {
-    int otherField = (fieldToggle_ == 0) ? 1 : 0;
+  } else {
+    // 後半: トップ/ボトムフィールドの後半(60〜119行)をコピー
+    for (int y = (int)(CAM_PIXEL_VW / 2) + frame; y < (int)CAM_PIXEL_VW; y += 2) {
+      for (int x = 0; x < hwTwice; x++) {
+        ycbcrBuffer_[y * hwTwice + x] = src[y * hwTwice + x];
+      }
+    }
+    // もう一方のフィールドラインを黒で埋める（参考プロジェクトと同じ）
+    int otherField = (frame == 0) ? 1 : 0;
     for (int y = otherField; y < (int)CAM_PIXEL_VW; y += 2) {
       for (int x = 0; x < hwTwice; x += 2) {
         ycbcrBuffer_[y * hwTwice + x + 0] = 0;   // Y = 0 (黒)
@@ -284,37 +294,60 @@ void Camera::imageCopy(int half) {
 // ====================================================================
 void Camera::extractBrightness(int half) {
   const int hwTwice = CAM_PIXEL_HW * 2;
-  const int startField = fieldToggle_;
-  const int startY =
-      (half == 0) ? startField : (int)(CAM_PIXEL_VW / 2) + startField;
-  const int endY = (half == 0) ? (int)(CAM_PIXEL_VW / 2) : (int)CAM_PIXEL_VW;
+  // VDC5 Vfield割り込みの実フィールド値を使用（参考プロジェクト準拠）
+  const int frame = (int)s_vfieldToggle;
+  const int otherField = (frame == 0) ? 1 : 0;
 
-  // 自フィールドのY成分を抽出
-  for (int y = startY; y < endY; y += 2) {
-    int px = 0;
-    for (int x = 0; x < hwTwice; x += 2) {
-      imageBuffer_[y * CAM_PIXEL_HW + px] = ycbcrBuffer_[y * hwTwice + x];
-      px++;
+  if (half == 0) {
+    // 前半: 自フィールドのY成分を抽出 (0-59行)
+    for (int y = frame; y < (int)(CAM_PIXEL_VW / 2); y += 2) {
+      int px = 0;
+      for (int x = 0; x < hwTwice; x += 2, px++) {
+        imageBuffer_[y * CAM_PIXEL_HW + px] = ycbcrBuffer_[y * hwTwice + x];
+      }
     }
-  }
-
-  // 他フィールド行をバイリニア補間で埋める
-  int otherField = (startField == 0) ? 1 : 0;
-  int startYOther =
-      (half == 0) ? otherField : (int)(CAM_PIXEL_VW / 2) + otherField;
-  for (int y = startYOther; y < endY; y += 2) {
-    for (int x = 0; x < (int)CAM_PIXEL_HW; x++) {
-      if (y <= 0) {
-        imageBuffer_[y * CAM_PIXEL_HW + x] =
-            imageBuffer_[(y + 1) * CAM_PIXEL_HW + x];
-      } else if (y < endY - 1 && y > 0) {
-        imageBuffer_[y * CAM_PIXEL_HW + x] =
-            (unsigned char)(((int)imageBuffer_[(y - 1) * CAM_PIXEL_HW + x] +
-                             (int)imageBuffer_[(y + 1) * CAM_PIXEL_HW + x]) /
-                            2);
-      } else {
-        imageBuffer_[y * CAM_PIXEL_HW + x] =
-            imageBuffer_[(y - 1) * CAM_PIXEL_HW + x];
+    // 他フィールド行をバイリニア補間 (0-59行)
+    for (int y = otherField; y < (int)(CAM_PIXEL_VW / 2); y += 2) {
+      for (int x = 0; x < (int)CAM_PIXEL_HW; x++) {
+        if (y <= 0) {
+          imageBuffer_[y * CAM_PIXEL_HW + x] =
+              imageBuffer_[(y + 1) * CAM_PIXEL_HW + x];
+        } else if (y < (int)(CAM_PIXEL_VW / 2) - 1 && y > 0) {
+          imageBuffer_[y * CAM_PIXEL_HW + x] =
+              (unsigned char)(((int)imageBuffer_[(y - 1) * CAM_PIXEL_HW + x] +
+                               (int)imageBuffer_[(y + 1) * CAM_PIXEL_HW + x]) /
+                              2);
+        } else {
+          imageBuffer_[y * CAM_PIXEL_HW + x] =
+              imageBuffer_[(y - 1) * CAM_PIXEL_HW + x];
+        }
+      }
+    }
+  } else {
+    // 後半: 自フィールドのY成分を抽出 (60-119行)
+    for (int y = (int)(CAM_PIXEL_VW / 2) + frame; y < (int)CAM_PIXEL_VW;
+         y += 2) {
+      int px = 0;
+      for (int x = 0; x < hwTwice; x += 2, px++) {
+        imageBuffer_[y * CAM_PIXEL_HW + px] = ycbcrBuffer_[y * hwTwice + x];
+      }
+    }
+    // 他フィールド行をバイリニア補間 (60-119行)
+    for (int y = (int)(CAM_PIXEL_VW / 2) + otherField; y < (int)CAM_PIXEL_VW;
+         y += 2) {
+      for (int x = 0; x < (int)CAM_PIXEL_HW; x++) {
+        if (y <= 0) {
+          imageBuffer_[y * CAM_PIXEL_HW + x] =
+              imageBuffer_[(y + 1) * CAM_PIXEL_HW + x];
+        } else if (y < (int)CAM_PIXEL_VW - 1 && y > 0) {
+          imageBuffer_[y * CAM_PIXEL_HW + x] =
+              (unsigned char)(((int)imageBuffer_[(y - 1) * CAM_PIXEL_HW + x] +
+                               (int)imageBuffer_[(y + 1) * CAM_PIXEL_HW + x]) /
+                              2);
+        } else {
+          imageBuffer_[y * CAM_PIXEL_HW + x] =
+              imageBuffer_[(y - 1) * CAM_PIXEL_HW + x];
+        }
       }
     }
   }

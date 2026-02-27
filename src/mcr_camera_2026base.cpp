@@ -153,7 +153,7 @@ int main(void) {
   // オンボードLED/SWの初期化
   g_onboard.init();
 
-  // シリアル通信初期化 (115200bps)
+  // シリアル通信初期化 (230400bps)
   g_serial.init();
   g_serial.printf("\033[2J\033[H"); // 画面クリア & カーソルホーム
   g_serial.printf("\x1b[36m--- MCR Camera 2026 Base ---\x1b[39m\n");
@@ -175,6 +175,11 @@ int main(void) {
   // 参考プロジェクト debug_mode case 3 と完全に同じパターン
   int x, y, c;
 
+  // 行バッファ: 1行分の出力を一括で行うことでprintf回数を削減
+  // ANSI色コード付き1ピクセル = 最大13文字 (\x1b[44m1\x1b[49m)
+  // 160px * 13 + ヘッダ4文字 + 末尾6文字 + 余裕 = 約2200文字
+  static char lineBuf[2560];
+
   while (1) {
     // 一定間隔でシリアル出力（参考プロジェクトと同じ 200ms）
     if (g_cnt_printf >= DEBUG_PRINT_INTERVAL_MS) {
@@ -184,32 +189,55 @@ int main(void) {
       g_serial.printf("\033[H");
 
       // ヘッダ行（参考プロジェクト準拠）
-      g_serial.printf(
+      g_serial.print(
           "shi 0         0         0         0         0         0         0   "
           "      0         0         0         1         1         1         1 "
           "        1         1        1\r\n");
-      g_serial.printf(
+      g_serial.print(
           "kii 0         1         2         3         4         5         6   "
           "      7         8         9         0         1         2         3 "
           "        4         5        5\r\n");
-      g_serial.printf("200 "
+      g_serial.print("200 "
                       "01234567890123456789012345678901234567890123456789012345"
                       "67890123456789012345678901234567890123456789012345678901"
                       "234567890123456789012345678901234567890123456789\r\n");
 
       // 30行目〜100行目を2行飛ばしで表示（参考プロジェクトと同じ）
       for (y = 30; y < 100; y += 2) {
-        g_serial.printf("%03d:", y);
+        // 行ヘッダを書き込み
+        int pos = 0;
+        lineBuf[pos++] = '0' + (y / 100) % 10;
+        lineBuf[pos++] = '0' + (y / 10) % 10;
+        lineBuf[pos++] = '0' + y % 10;
+        lineBuf[pos++] = ':';
+
         for (x = 0; x < 160; x++) {
           c = g_camera.getPixel(x, y) >= DEBUG_THRESHOLD ? 1 : 0;
           if (c == 1) {
             // 白（閾値以上）の部分は背景を青色にして表示
-            g_serial.printf("\x1b[44m%d\x1b[49m", c);
+            // \x1b[44m1\x1b[49m = 13文字
+            lineBuf[pos++] = '\x1b';
+            lineBuf[pos++] = '[';
+            lineBuf[pos++] = '4';
+            lineBuf[pos++] = '4';
+            lineBuf[pos++] = 'm';
+            lineBuf[pos++] = '1';
+            lineBuf[pos++] = '\x1b';
+            lineBuf[pos++] = '[';
+            lineBuf[pos++] = '4';
+            lineBuf[pos++] = '9';
+            lineBuf[pos++] = 'm';
           } else {
-            g_serial.printf("%d", c);
+            lineBuf[pos++] = '0';
           }
         }
-        g_serial.printf("  \r\n");
+        // 行末
+        lineBuf[pos++] = ' ';
+        lineBuf[pos++] = ' ';
+        lineBuf[pos++] = '\r';
+        lineBuf[pos++] = '\n';
+        lineBuf[pos] = '\0';
+        g_serial.print(lineBuf);
       }
     }
   }
