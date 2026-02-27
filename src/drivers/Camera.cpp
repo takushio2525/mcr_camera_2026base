@@ -37,7 +37,8 @@ Camera g_camera;
 // コンストラクタ
 // ====================================================================
 Camera::Camera()
-    : frameStep_(0), fieldToggle_(1), fieldToggleBuf_(0), frameReady_(false)
+    : frameStep_(0), fieldToggle_(1), fieldToggleBuf_(0), capturedField_(0),
+      frameReady_(false)
 {
   memset((void *)imageBuffer_, 0, sizeof(imageBuffer_));
   memset(ycbcrBuffer_, 0, sizeof(ycbcrBuffer_));
@@ -55,6 +56,7 @@ void Camera::init()
   frameStep_ = 0;
   fieldToggle_ = 1;
   fieldToggleBuf_ = 0;
+  capturedField_ = 0;
   frameReady_ = false;
   memset((void *)imageBuffer_, 0, sizeof(imageBuffer_));
   memset(ycbcrBuffer_, 0, sizeof(ycbcrBuffer_));
@@ -231,40 +233,32 @@ void Camera::vsyncCallback(DisplayBase::int_type_t int_type)
 // mbed-os(RAM実行+L1キャッシュ)では各ステップが1ms以内に完了するため、
 // Vfield(16.7ms間隔)ごとに余裕をもって4ステップを終えられる。
 // しかしXIP(SPIフラッシュ直接実行)ではimageCopyが重く、4ステップの
-// 合計が16.7msを超えることがある。
-// 従来のロジックではVfieldトグル変化で即座にframeStep_をリセットしていたため、
-// ステップ途中でリセットされフレーム処理が永遠に完了しない問題があった。
+// 合計が16.7msを超える。
 //
-// 修正: フレーム処理中(frameStep_ 0〜3)はVfieldリセットを行わず、
-// 処理完了後(frameStep_ >= 4)に次のVfield変化を待って新フレームを開始する。
+// 参考プロジェクトとの整合:
+// - フレーム開始時にs_vfieldToggleをcapturedField_にキャプチャし、
+//   4ステップ全体で同じフィールド値を使用する（参考では4ms以内に
+//   完了するため自然に同一値だが、XIPでは明示的に固定が必要）
+// - フレーム処理完了後はVfield待ちなしで即座に次フレームを開始する
+//   （XIPでは処理時間 > Vfield間隔のため、待つ必要がない）
 // ====================================================================
 void Camera::update()
 {
-  if (frameStep_ <= 3)
+  if (frameStep_ > 3)
   {
-    // フレーム処理中: Vfield変化を無視して現在のフレームを最後まで処理する
-    // XIP環境では各ステップが重いため、途中リセットを防止する
-  }
-  else
-  {
-    // フレーム処理完了後: 次のVfieldトグル変化を待って新フレームを開始
-    if ((int)s_vfieldToggle != fieldToggleBuf_)
-    {
-      fieldToggleBuf_ = (int)s_vfieldToggle;
-      frameStep_ = 0;
-      frameReady_ = false; // 新フレーム処理開始時にクリア
-    }
-    else
-    {
-      // まだVfieldが来ていない → 何もしない
-      return;
-    }
+    // フレーム処理完了 → 即座に次フレームを開始
+    // XIP環境では4ステップの合計が16.7msを超えるため、
+    // 処理完了時には必ず新しいVfieldが発生済み。待つ必要なし。
+    capturedField_ = (int)s_vfieldToggle;
+    frameStep_ = 0;
+    frameReady_ = false;
   }
 
   switch (frameStep_++)
   {
   case 0:
-    // ステップ0: YCbCr422 生データのコピー（前半0-59行）
+    // ステップ0: フィールド値をキャプチャし、YCbCr422コピー（前半0-59行）
+    capturedField_ = (int)s_vfieldToggle;
     imageCopy(0);
     break;
 
@@ -284,11 +278,7 @@ void Camera::update()
     frameReady_ = true;
     break;
 
-    // case 4〜: 追加の処理があればここに記述可能
-    // 例: エンコーダ更新、偏差計算、モーター制御値計算 etc.
-
   default:
-    // 上記以外のカウンタ値では何もしない（次フィールドを待つ）
     break;
   }
 }
@@ -304,8 +294,10 @@ void Camera::imageCopy(int half)
   // 参考プロジェクトと同様に、VDC5が書き込み中のバッファから直接読む
   // （s_saveBuf ではなく s_writeBuf を使用する）
   const volatile uint8_t *src = s_writeBuf;
-  // VDC5 Vfield割り込みで取得した実際のフィールド値を使用
-  const int frame = (int)s_vfieldToggle;
+  // フレーム開始時にキャプチャしたフィールド値を使用
+  // （参考プロジェクトでは4ステップが4ms以内に完了するため自然に同一値だが、
+  //  XIPでは各ステップが重く途中でVfieldが変わるため明示的に固定する）
+  const int frame = capturedField_;
 
   if (half == 0)
   {
@@ -350,8 +342,8 @@ void Camera::imageCopy(int half)
 void Camera::extractBrightness(int half)
 {
   const int hwTwice = CAM_PIXEL_HW * 2;
-  // VDC5 Vfield割り込みの実フィールド値を使用（参考プロジェクト準拠）
-  const int frame = (int)s_vfieldToggle;
+  // フレーム開始時にキャプチャしたフィールド値を使用（参考プロジェクト準拠）
+  const int frame = capturedField_;
   const int otherField = (frame == 0) ? 1 : 0;
 
   if (half == 0)

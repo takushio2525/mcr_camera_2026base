@@ -87,6 +87,10 @@ private:
   volatile int fieldToggle_;
   volatile int fieldToggleBuf_;
 
+  // フレーム処理開始時にキャプチャしたフィールド値
+  // 4ステップ全体で同じ値を使用するため
+  int capturedField_;
+
   // 新フレーム準備完了フラグ
   volatile bool frameReady_;
 
