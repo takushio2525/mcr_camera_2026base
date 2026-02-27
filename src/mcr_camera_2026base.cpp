@@ -180,6 +180,9 @@ int main(void) {
     if (g_cnt_printf >= DEBUG_PRINT_INTERVAL_MS) {
       g_cnt_printf = 0;
 
+      // カーソルを左上に移動して上書き描画（画面全体クリアよりチラつきが少ない）
+      g_serial.printf("\033[H");
+
       // ヘッダ行（参考プロジェクト準拠）
       g_serial.printf(
           "shi 0         0         0         0         0         0         0   "
@@ -199,11 +202,15 @@ int main(void) {
         g_serial.printf("%03d:", y);
         for (x = 0; x < 160; x++) {
           c = g_camera.getPixel(x, y) >= DEBUG_THRESHOLD ? 1 : 0;
-          g_serial.printf("%d", c);
+          if (c == 1) {
+            // 白（閾値以上）の部分は背景を青色にして表示
+            g_serial.printf("\x1b[44m%d\x1b[49m", c);
+          } else {
+            g_serial.printf("%d", c);
+          }
         }
         g_serial.printf("  \r\n");
       }
-      g_serial.printf("\033[H");
     }
   }
 
