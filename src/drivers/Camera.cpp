@@ -37,7 +37,8 @@ Camera g_camera;
 // コンストラクタ
 // ====================================================================
 Camera::Camera()
-    : frameStep_(0), fieldToggle_(1), fieldToggleBuf_(0), frameReady_(false) {
+    : frameStep_(0), fieldToggle_(1), fieldToggleBuf_(0), frameReady_(false)
+{
   memset((void *)imageBuffer_, 0, sizeof(imageBuffer_));
   memset(ycbcrBuffer_, 0, sizeof(ycbcrBuffer_));
 }
@@ -45,7 +46,8 @@ Camera::Camera()
 // ====================================================================
 // VDC5 + DVDEC 初期化
 // ====================================================================
-void Camera::init() {
+void Camera::init()
+{
   DisplayBase::graphics_error_t error;
 
   // グローバルコンストラクタが呼ばれない環境への対策として、ここで明示的に初期化する
@@ -60,7 +62,8 @@ void Camera::init() {
   g_serial.printf("[Camera::init] Start Graphics_init...\n");
   // 1. Graphics initialization process
   error = display_.Graphics_init(NULL);
-  if (error != DisplayBase::GRAPHICS_OK) {
+  if (error != DisplayBase::GRAPHICS_OK)
+  {
     g_serial.printf("[Camera::init] ERROR at Graphics_init: %d\n", error);
     while (1)
       ;
@@ -70,7 +73,8 @@ void Camera::init() {
   g_serial.printf("[Camera::init] Start Graphics_Video_init...\n");
   // 2. Video decoder initialization
   error = display_.Graphics_Video_init(DisplayBase::INPUT_SEL_VDEC, NULL);
-  if (error != DisplayBase::GRAPHICS_OK) {
+  if (error != DisplayBase::GRAPHICS_OK)
+  {
     g_serial.printf("[Camera::init] ERROR at Graphics_Video_init: %d\n", error);
     while (1)
       ;
@@ -81,7 +85,8 @@ void Camera::init() {
   // 3. Vsync callback setting
   error = display_.Graphics_Irq_Handler_Set(DisplayBase::INT_TYPE_S0_VI_VSYNC,
                                             0, vsyncCallback);
-  if (error != DisplayBase::GRAPHICS_OK) {
+  if (error != DisplayBase::GRAPHICS_OK)
+  {
     g_serial.printf(
         "[Camera::init] ERROR at Graphics_Irq_Handler_Set (VSYNC): %d\n",
         error);
@@ -97,7 +102,8 @@ void Camera::init() {
       (void *)s_frameBufA, CAM_VIDEO_BUFFER_STRIDE,
       DisplayBase::VIDEO_FORMAT_YCBCR422, DisplayBase::WR_RD_WRSWA_32_16BIT,
       CAM_PIXEL_VW, CAM_PIXEL_HW);
-  if (error != DisplayBase::GRAPHICS_OK) {
+  if (error != DisplayBase::GRAPHICS_OK)
+  {
     g_serial.printf("[Camera::init] ERROR at Video_Write_Setting: %d\n", error);
     while (1)
       ;
@@ -109,7 +115,8 @@ void Camera::init() {
   // 5. Vfield callback setting (VIDEO_INT_TYPE = INT_TYPE_S0_VFIELD)
   error = display_.Graphics_Irq_Handler_Set(DisplayBase::INT_TYPE_S0_VFIELD, 0,
                                             vfieldCallback);
-  if (error != DisplayBase::GRAPHICS_OK) {
+  if (error != DisplayBase::GRAPHICS_OK)
+  {
     g_serial.printf(
         "[Camera::init] ERROR at Graphics_Irq_Handler_Set (VFIELD): %d\n",
         error);
@@ -120,7 +127,8 @@ void Camera::init() {
 
   g_serial.printf("[Camera::init] Waiting for video signal to stabilize...\n");
   // 映像信号安定待ち（約200ms）
-  for (volatile int i = 0; i < 6000000; i++) {
+  for (volatile int i = 0; i < 6000000; i++)
+  {
   }
   g_serial.printf("[Camera::init] Wait done.\n");
 
@@ -136,14 +144,16 @@ void Camera::init() {
   // WaitVsync(1) 相当: Vsyncが1回発生するまで待つ
   s_vsyncCount = 1;
   for (volatile int timeout = 0; s_vsyncCount > 0 && timeout < 5000000;
-       timeout++) {
+       timeout++)
+  {
   }
   g_serial.printf("[Camera::init] WaitVsync done.\n");
 
   // WaitVfield(2) 相当: Vfieldが2回発生するまで待つ
   s_vfieldCount = 2;
   for (volatile int timeout = 0; s_vfieldCount > 0 && timeout < 10000000;
-       timeout++) {
+       timeout++)
+  {
   }
   g_serial.printf(
       "[Camera::init] All initialization completed successfully.\n");
@@ -152,25 +162,31 @@ void Camera::init() {
 // ====================================================================
 // ビデオキャプチャ開始
 // ====================================================================
-void Camera::startCapture() {
+void Camera::startCapture()
+{
   display_.Video_Start(DisplayBase::VIDEO_INPUT_CHANNEL_0);
 }
 
 // ====================================================================
 // ビデオキャプチャ停止
 // ====================================================================
-void Camera::stopCapture() {
+void Camera::stopCapture()
+{
   display_.Video_Stop(DisplayBase::VIDEO_INPUT_CHANNEL_0);
 }
 
 // ====================================================================
 // フレームバッファ切替（ダブルバッファ方式）
 // ====================================================================
-void Camera::changeFrameBuffer() {
-  if (s_writeBuf == s_frameBufA) {
+void Camera::changeFrameBuffer()
+{
+  if (s_writeBuf == s_frameBufA)
+  {
     s_writeBuf = s_frameBufB;
     s_saveBuf = s_frameBufA;
-  } else {
+  }
+  else
+  {
     s_writeBuf = s_frameBufA;
     s_saveBuf = s_frameBufB;
   }
@@ -183,9 +199,11 @@ void Camera::changeFrameBuffer() {
 // ====================================================================
 // Vfieldコールバック（VDC5割り込みから呼ばれる）
 // ====================================================================
-void Camera::vfieldCallback(DisplayBase::int_type_t int_type) {
+void Camera::vfieldCallback(DisplayBase::int_type_t int_type)
+{
   (void)int_type;
-  if (s_vfieldCount > 0) {
+  if (s_vfieldCount > 0)
+  {
     s_vfieldCount--;
   }
   // トップ/ボトムフィールドのトグル
@@ -195,9 +213,11 @@ void Camera::vfieldCallback(DisplayBase::int_type_t int_type) {
 // ====================================================================
 // Vsyncコールバック
 // ====================================================================
-void Camera::vsyncCallback(DisplayBase::int_type_t int_type) {
+void Camera::vsyncCallback(DisplayBase::int_type_t int_type)
+{
   (void)int_type;
-  if (s_vsyncCount > 0) {
+  if (s_vsyncCount > 0)
+  {
     s_vsyncCount--;
   }
 }
@@ -207,17 +227,20 @@ void Camera::vsyncCallback(DisplayBase::int_type_t int_type) {
 // 1ms割り込みから毎回呼ばれ、ステップごとに画像処理を分割実行
 // 参考プロジェクト(2.38m-s)の intTimer() 内 switch(counter++) と同等
 // ====================================================================
-void Camera::update() {
+void Camera::update()
+{
   // 参考プロジェクトと同じ方式:
   // VDC5 Vfield割り込みでトグルされる s_vfieldToggle を監視し、
   // フィールドが切り替わったタイミングで frameStep_ をリセットする。
   // これにより画像処理がNTSCフィールド信号と同期する。
-  if ((int)s_vfieldToggle != fieldToggleBuf_) {
+  if ((int)s_vfieldToggle != fieldToggleBuf_)
+  {
     fieldToggleBuf_ = (int)s_vfieldToggle;
     frameStep_ = 0;
   }
 
-  switch (frameStep_++) {
+  switch (frameStep_++)
+  {
   case 0:
     // 0ms目: YCbCr422 生データのコピー（前半0-59行）
     imageCopy(0);
@@ -253,7 +276,8 @@ void Camera::update() {
 // インターレース対応：トップ/ボトムフィールドを交互に取得
 // half: 0=前半(0-59行), 1=後半(60-119行)
 // ====================================================================
-void Camera::imageCopy(int half) {
+void Camera::imageCopy(int half)
+{
   const int hwTwice = CAM_PIXEL_HW * 2; // YCbCr422は2バイト/ピクセル
   // 参考プロジェクトと同様に、VDC5が書き込み中のバッファから直接読む
   // （s_saveBuf ではなく s_writeBuf を使用する）
@@ -261,24 +285,33 @@ void Camera::imageCopy(int half) {
   // VDC5 Vfield割り込みで取得した実際のフィールド値を使用
   const int frame = (int)s_vfieldToggle;
 
-  if (half == 0) {
+  if (half == 0)
+  {
     // 前半: トップ/ボトムフィールドの前半(0〜59行)をコピー
-    for (int y = frame; y < (int)(CAM_PIXEL_VW / 2); y += 2) {
-      for (int x = 0; x < hwTwice; x++) {
+    for (int y = frame; y < (int)(CAM_PIXEL_VW / 2); y += 2)
+    {
+      for (int x = 0; x < hwTwice; x++)
+      {
         ycbcrBuffer_[y * hwTwice + x] = src[y * hwTwice + x];
       }
     }
-  } else {
+  }
+  else
+  {
     // 後半: トップ/ボトムフィールドの後半(60〜119行)をコピー
-    for (int y = (int)(CAM_PIXEL_VW / 2) + frame; y < (int)CAM_PIXEL_VW; y += 2) {
-      for (int x = 0; x < hwTwice; x++) {
+    for (int y = (int)(CAM_PIXEL_VW / 2) + frame; y < (int)CAM_PIXEL_VW; y += 2)
+    {
+      for (int x = 0; x < hwTwice; x++)
+      {
         ycbcrBuffer_[y * hwTwice + x] = src[y * hwTwice + x];
       }
     }
     // もう一方のフィールドラインを黒で埋める（参考プロジェクトと同じ）
     int otherField = (frame == 0) ? 1 : 0;
-    for (int y = otherField; y < (int)CAM_PIXEL_VW; y += 2) {
-      for (int x = 0; x < hwTwice; x += 2) {
+    for (int y = otherField; y < (int)CAM_PIXEL_VW; y += 2)
+    {
+      for (int x = 0; x < hwTwice; x += 2)
+      {
         ycbcrBuffer_[y * hwTwice + x + 0] = 0;   // Y = 0 (黒)
         ycbcrBuffer_[y * hwTwice + x + 1] = 128; // Cb/Cr = 128 (ニュートラル)
       }
@@ -292,59 +325,81 @@ void Camera::imageCopy(int half) {
 // → 偶数バイト位置がY成分
 // half: 0=前半(0-59行), 1=後半(60-119行)
 // ====================================================================
-void Camera::extractBrightness(int half) {
+void Camera::extractBrightness(int half)
+{
   const int hwTwice = CAM_PIXEL_HW * 2;
   // VDC5 Vfield割り込みの実フィールド値を使用（参考プロジェクト準拠）
   const int frame = (int)s_vfieldToggle;
   const int otherField = (frame == 0) ? 1 : 0;
 
-  if (half == 0) {
+  if (half == 0)
+  {
     // 前半: 自フィールドのY成分を抽出 (0-59行)
-    for (int y = frame; y < (int)(CAM_PIXEL_VW / 2); y += 2) {
+    for (int y = frame; y < (int)(CAM_PIXEL_VW / 2); y += 2)
+    {
       int px = 0;
-      for (int x = 0; x < hwTwice; x += 2, px++) {
+      for (int x = 0; x < hwTwice; x += 2, px++)
+      {
         imageBuffer_[y * CAM_PIXEL_HW + px] = ycbcrBuffer_[y * hwTwice + x];
       }
     }
     // 他フィールド行をバイリニア補間 (0-59行)
-    for (int y = otherField; y < (int)(CAM_PIXEL_VW / 2); y += 2) {
-      for (int x = 0; x < (int)CAM_PIXEL_HW; x++) {
-        if (y <= 0) {
+    for (int y = otherField; y < (int)(CAM_PIXEL_VW / 2); y += 2)
+    {
+      for (int x = 0; x < (int)CAM_PIXEL_HW; x++)
+      {
+        if (y <= 0)
+        {
           imageBuffer_[y * CAM_PIXEL_HW + x] =
               imageBuffer_[(y + 1) * CAM_PIXEL_HW + x];
-        } else if (y < (int)(CAM_PIXEL_VW / 2) - 1 && y > 0) {
+        }
+        else if (y < (int)(CAM_PIXEL_VW / 2) - 1 && y > 0)
+        {
           imageBuffer_[y * CAM_PIXEL_HW + x] =
               (unsigned char)(((int)imageBuffer_[(y - 1) * CAM_PIXEL_HW + x] +
                                (int)imageBuffer_[(y + 1) * CAM_PIXEL_HW + x]) /
                               2);
-        } else {
+        }
+        else
+        {
           imageBuffer_[y * CAM_PIXEL_HW + x] =
               imageBuffer_[(y - 1) * CAM_PIXEL_HW + x];
         }
       }
     }
-  } else {
+  }
+  else
+  {
     // 後半: 自フィールドのY成分を抽出 (60-119行)
     for (int y = (int)(CAM_PIXEL_VW / 2) + frame; y < (int)CAM_PIXEL_VW;
-         y += 2) {
+         y += 2)
+    {
       int px = 0;
-      for (int x = 0; x < hwTwice; x += 2, px++) {
+      for (int x = 0; x < hwTwice; x += 2, px++)
+      {
         imageBuffer_[y * CAM_PIXEL_HW + px] = ycbcrBuffer_[y * hwTwice + x];
       }
     }
     // 他フィールド行をバイリニア補間 (60-119行)
     for (int y = (int)(CAM_PIXEL_VW / 2) + otherField; y < (int)CAM_PIXEL_VW;
-         y += 2) {
-      for (int x = 0; x < (int)CAM_PIXEL_HW; x++) {
-        if (y <= 0) {
+         y += 2)
+    {
+      for (int x = 0; x < (int)CAM_PIXEL_HW; x++)
+      {
+        if (y <= 0)
+        {
           imageBuffer_[y * CAM_PIXEL_HW + x] =
               imageBuffer_[(y + 1) * CAM_PIXEL_HW + x];
-        } else if (y < (int)CAM_PIXEL_VW - 1 && y > 0) {
+        }
+        else if (y < (int)CAM_PIXEL_VW - 1 && y > 0)
+        {
           imageBuffer_[y * CAM_PIXEL_HW + x] =
               (unsigned char)(((int)imageBuffer_[(y - 1) * CAM_PIXEL_HW + x] +
                                (int)imageBuffer_[(y + 1) * CAM_PIXEL_HW + x]) /
                               2);
-        } else {
+        }
+        else
+        {
           imageBuffer_[y * CAM_PIXEL_HW + x] =
               imageBuffer_[(y - 1) * CAM_PIXEL_HW + x];
         }
@@ -356,8 +411,10 @@ void Camera::extractBrightness(int half) {
 // ====================================================================
 // getPixel: 指定座標のピクセル輝度値を取得
 // ====================================================================
-unsigned char Camera::getPixel(int x, int y) const {
-  if (x < 0 || x >= (int)CAM_PIXEL_HW || y < 0 || y >= (int)CAM_PIXEL_VW) {
+unsigned char Camera::getPixel(int x, int y) const
+{
+  if (x < 0 || x >= (int)CAM_PIXEL_HW || y < 0 || y >= (int)CAM_PIXEL_VW)
+  {
     return 0;
   }
   return imageBuffer_[x + CAM_PIXEL_HW * y];
@@ -366,7 +423,8 @@ unsigned char Camera::getPixel(int x, int y) const {
 // ====================================================================
 // getImageBuffer: 輝度バッファへの直接アクセス
 // ====================================================================
-const volatile unsigned char *Camera::getImageBuffer() const {
+const volatile unsigned char *Camera::getImageBuffer() const
+{
   return imageBuffer_;
 }
 
@@ -382,7 +440,8 @@ bool Camera::isFrameReady() const { return frameReady_; }
 // gyou: 行番号(0-119), threshold: 閾値, diff: 隣接差分閾値
 // ====================================================================
 unsigned char Camera::thresholdConvert(int gyou, int threshold,
-                                       int diff) const {
+                                       int diff) const
+{
   int d[8];
 
   // センサ配置に対応する8点のX座標（参考プロジェクト準拠）
@@ -397,7 +456,8 @@ unsigned char Camera::thresholdConvert(int gyou, int threshold,
 
   // 最大値・最小値を求める
   int minVal = d[0], maxVal = d[0];
-  for (int i = 1; i < 8; i++) {
+  for (int i = 1; i < 8; i++)
+  {
     if (maxVal <= d[i])
       maxVal = d[i];
     if (minVal >= d[i])
@@ -406,28 +466,37 @@ unsigned char Camera::thresholdConvert(int gyou, int threshold,
 
   // 隣同士の差の絶対値
   int sa[7];
-  for (int i = 0; i < 7; i++) {
+  for (int i = 0; i < 7; i++)
+  {
     sa[i] = abs(d[i + 1] - d[i]);
   }
 
   // 閾値の自動調整
   int shikiVal;
-  if (maxVal >= threshold) {
+  if (maxVal >= threshold)
+  {
     // 最大値が閾値以上→閾値をそのまま使用
     shikiVal = threshold;
-  } else {
+  }
+  else
+  {
     // 隣同士の差が1つでもdiff以上なら動的閾値
     bool hasDiff = false;
-    for (int i = 0; i < 7; i++) {
-      if (sa[i] >= diff) {
+    for (int i = 0; i < 7; i++)
+    {
+      if (sa[i] >= diff)
+      {
         hasDiff = true;
         break;
       }
     }
-    if (hasDiff) {
+    if (hasDiff)
+    {
       // (最大値 - 最小値) * 0.7 + 最小値
       shikiVal = (maxVal - minVal) * 7 / 10 + minVal;
-    } else {
+    }
+    else
+    {
       // すべて0にする（閾値を最大に）
       shikiVal = 256;
     }
@@ -435,7 +504,8 @@ unsigned char Camera::thresholdConvert(int gyou, int threshold,
 
   // 8ビット変換: d[7]→bit7 ... d[0]→bit0
   unsigned char ret = 0;
-  for (int i = 7; i >= 0; i--) {
+  for (int i = 7; i >= 0; i--)
+  {
     ret <<= 1;
     ret |= (d[i] >= shikiVal ? 1 : 0);
   }

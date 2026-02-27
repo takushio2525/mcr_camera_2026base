@@ -11,7 +11,8 @@
 
 #include "../core/IModule.h"
 
-class Serial : public IModule {
+class Serial : public IModule
+{
 public:
   // Constructor
   Serial();

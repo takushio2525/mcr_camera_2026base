@@ -12,9 +12,11 @@
 
 #ifdef CPPAPP
 // グローバルコンストラクタの初期化
-extern void __main() {
+extern void __main()
+{
   static int initialized;
-  if (!initialized) {
+  if (!initialized)
+  {
     typedef void (*pfunc)();
     extern pfunc __ctors[];
     extern pfunc __ctors_end[];
@@ -53,7 +55,8 @@ Onboard g_onboard;
 extern "C" void ostm0_interrupt_callback(void);
 
 // OSTM0タイマー初期化 (1ms周期インターバルタイマー)
-static void initOSTM0(void) {
+static void initOSTM0(void)
+{
   // OSTMのスタンバイ解除 (STBCR5 bit1 = OSTM0)
   CPG.STBCR5 &= ~(0x02);
 
@@ -125,7 +128,8 @@ static void initOSTM0(void) {
 
 // OSTM0割り込みコールバック
 // inthandler.c の INT_Excep_OSTMI0() から呼ばれる
-void ostm0_interrupt_callback(void) {
+void ostm0_interrupt_callback(void)
+{
   g_timer_1ms++;
   g_cnt_printf++;
 
@@ -133,23 +137,28 @@ void ostm0_interrupt_callback(void) {
   g_camera.update();
 
   // 1秒ごとにUSER LEDをトグル
-  if (g_timer_1ms % 1000 == 0) {
+  if (g_timer_1ms % 1000 == 0)
+  {
     static int toggle = 0;
     toggle = !toggle;
     g_onboard.setUserLed(toggle);
   }
 
   // スイッチ状態でフルカラーLEDを制御
-  if (g_onboard.sw()) {
+  if (g_onboard.sw())
+  {
     g_onboard.setColorLed(1, 1, 1);
-  } else {
+  }
+  else
+  {
     g_onboard.setColorLed(0, 0, 0);
   }
 
   g_onboard.update();
 }
 
-int main(void) {
+int main(void)
+{
   // オンボードLED/SWの初期化
   g_onboard.init();
 
@@ -180,9 +189,11 @@ int main(void) {
   // 160px * 13 + ヘッダ4文字 + 末尾6文字 + 余裕 = 約2200文字
   static char lineBuf[2560];
 
-  while (1) {
+  while (1)
+  {
     // 一定間隔でシリアル出力（参考プロジェクトと同じ 200ms）
-    if (g_cnt_printf >= DEBUG_PRINT_INTERVAL_MS) {
+    if (g_cnt_printf >= DEBUG_PRINT_INTERVAL_MS)
+    {
       g_cnt_printf = 0;
 
       // カーソルを左上に移動して上書き描画（画面全体クリアよりチラつきが少ない）
@@ -198,12 +209,13 @@ int main(void) {
           "      7         8         9         0         1         2         3 "
           "        4         5        5\r\n");
       g_serial.print("200 "
-                      "01234567890123456789012345678901234567890123456789012345"
-                      "67890123456789012345678901234567890123456789012345678901"
-                      "234567890123456789012345678901234567890123456789\r\n");
+                     "01234567890123456789012345678901234567890123456789012345"
+                     "67890123456789012345678901234567890123456789012345678901"
+                     "234567890123456789012345678901234567890123456789\r\n");
 
       // 30行目〜100行目を2行飛ばしで表示（参考プロジェクトと同じ）
-      for (y = 30; y < 100; y += 2) {
+      for (y = 30; y < 100; y += 2)
+      {
         // 行ヘッダを書き込み
         int pos = 0;
         lineBuf[pos++] = '0' + (y / 100) % 10;
@@ -211,9 +223,11 @@ int main(void) {
         lineBuf[pos++] = '0' + y % 10;
         lineBuf[pos++] = ':';
 
-        for (x = 0; x < 160; x++) {
+        for (x = 0; x < 160; x++)
+        {
           c = g_camera.getPixel(x, y) >= DEBUG_THRESHOLD ? 1 : 0;
-          if (c == 1) {
+          if (c == 1)
+          {
             // 白（閾値以上）の部分は背景を青色にして表示
             // \x1b[44m1\x1b[49m = 13文字
             lineBuf[pos++] = '\x1b';
@@ -227,7 +241,9 @@ int main(void) {
             lineBuf[pos++] = '4';
             lineBuf[pos++] = '9';
             lineBuf[pos++] = 'm';
-          } else {
+          }
+          else
+          {
             lineBuf[pos++] = '0';
           }
         }

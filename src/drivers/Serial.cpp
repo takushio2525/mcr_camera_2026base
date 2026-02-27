@@ -13,16 +13,16 @@
 #include <string.h>
 
 // SCIF2 settings for GR-PEACH USB Serial
-// P0 phi = 33.3333... MHz
-// Baud rate: 115200 bps
-// N = ((P0 / (64 * 2^(2n-1) * B)) * 10^6) - 1
-// For 115200: n=0 (clock P0), N = approx 8.04 -> 8
+// SCIFのボーレートジェネレータは P1φ を使用（P0φではない）
+// GR-PEACH Clock Mode 0: P1φ = 66,666,666 Hz
+// mbed serial_api.c の serial_baud() と同一設定で 230400bps を実現
 
 Serial g_serial;
 
 Serial::Serial() {}
 
-void Serial::init() {
+void Serial::init()
+{
   // 1. SCIF2 のモジュールストップ解除 (STBCR4 bit5)
   CPG.STBCR4 &= ~(1 << 5);
   volatile uint8_t dummy = CPG.STBCR4; // Dummy read
@@ -63,17 +63,19 @@ void Serial::init() {
   // SCSMR: 8-bit data, 1 stop bit, no parity, P0 clock
   SCIF2.SCSMR = 0x0000;
 
-  // SCEMR: BGDM=1 (倍速モード) -> N calculation uses P0phi/16
-  // 参考プロジェクト(2.38m-s)は 230400bps を使用
-  SCIF2.SCEMR = 0x0080;
+  // SCEMR: mbed serial_api.c と完全一致の設定
+  // BGDM=1 (bit7), ABCS=1 (bit0) → 除算比 = 8
+  // B = P1φ / (8 × (BRR+1))
+  SCIF2.SCEMR = 0x0081;
 
-  // BRR (Baud Rate Register) for 230400 target
-  // BGDM=1, n=0: B = P0φ / (16 * (BRR+1))
-  // B = 33333333 / (16 * 9) = 231481 ≈ 230400bps (誤差0.47%)
-  SCIF2.SCBRR = 8;
+  // BRR (Baud Rate Register) for 230400bps target
+  // B = 66666666 / (8 × 36) = 231481 ≈ 230400bps (誤差0.47%)
+  // mbed の DL = (P1CLK + 4*baud) / (8*baud) - 1 = 35 と同一
+  SCIF2.SCBRR = 35;
 
   // Delay for a while (at least 1 bit time)
-  for (volatile int i = 0; i < 1000; i++) {
+  for (volatile int i = 0; i < 1000; i++)
+  {
   }
 
   // Clear FIFO reset
@@ -83,15 +85,18 @@ void Serial::init() {
   SCIF2.SCSCR = 0x0030; // TE=1, RE=1
 }
 
-void Serial::update() {
+void Serial::update()
+{
   // Dummy (do nothing, polling instant transmit is used instead)
 }
 
-void Serial::putChar(char c) {
+void Serial::putChar(char c)
+{
   // SCIF2 の送信FIFOに空きがあるまで待つ
   // SCFDR下位5bit = 送信FIFOに入っているデータ数（最大16）
   // FIFOに空きがあれば待たずに即座に書き込み
-  while ((SCIF2.SCFDR >> 8) >= 16) {
+  while ((SCIF2.SCFDR >> 8) >= 16)
+  {
     // 送信FIFO満杯の場合のみ待つ
   }
 
@@ -102,17 +107,21 @@ void Serial::putChar(char c) {
   SCIF2.SCFSR &= ~0x0060; // TDFE, TENDをクリア
 }
 
-void Serial::print(const char *str) {
-  while (*str != '\0') {
+void Serial::print(const char *str)
+{
+  while (*str != '\0')
+  {
     // Convert \n to \r\n for standard serial terminal viewing
-    if (*str == '\n') {
+    if (*str == '\n')
+    {
       putChar('\r');
     }
     putChar(*str++);
   }
 }
 
-void Serial::printf(const char *fmt, ...) {
+void Serial::printf(const char *fmt, ...)
+{
   va_list args;
   va_start(args, fmt);
   vsnprintf(buffer_, sizeof(buffer_), fmt, args);
@@ -121,7 +130,8 @@ void Serial::printf(const char *fmt, ...) {
   print(buffer_);
 }
 
-extern "C" void c_printf(const char *fmt, ...) {
+extern "C" void c_printf(const char *fmt, ...)
+{
   char buf[256];
   va_list args;
   va_start(args, fmt);
