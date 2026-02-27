@@ -12,7 +12,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-
 // ====================================================================
 // VDC5ビデオキャプチャ用フレームバッファ（NonCacheable領域に配置）
 // ダブルバッファ方式: VDC5が書き込む先とソフトウェアが読む先を分離
@@ -48,6 +47,15 @@ Camera::Camera()
 // ====================================================================
 void Camera::init() {
   DisplayBase::graphics_error_t error;
+
+  // グローバルコンストラクタが呼ばれない環境への対策として、ここで明示的に初期化する
+  display_ = DisplayBase();
+  frameStep_ = 0;
+  fieldToggle_ = 1;
+  fieldToggleBuf_ = 0;
+  frameReady_ = false;
+  memset((void *)imageBuffer_, 0, sizeof(imageBuffer_));
+  memset(ycbcrBuffer_, 0, sizeof(ycbcrBuffer_));
 
   g_serial.printf("[Camera::init] Start Graphics_init...\n");
   // 1. Graphics initialization process

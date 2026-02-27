@@ -59,7 +59,8 @@ Macro definitions
 /******************************************************************************
 Typedef definitions
 ******************************************************************************/
-typedef enum {
+typedef enum
+{
   VDC5_CH0,
   VDC5_CH1,
 } VDC5Name;
@@ -184,14 +185,14 @@ static const PinMap PinMap_LVDS_DISP_PIN[] = {
     {NC, NC, 0}};
 
 static const IRQn_Type vdc5_irq_set_tbl[] = {
-    S0_VI_VSYNC0_IRQn,  S0_LO_VSYNC0_IRQn,  S0_VSYNCERR0_IRQn,
-    GR3_VLINE0_IRQn,    S0_VFIELD0_IRQn,    IV1_VBUFERR0_IRQn,
-    IV3_VBUFERR0_IRQn,  IV5_VBUFERR0_IRQn,  IV6_VBUFERR0_IRQn,
-    S0_WLINE0_IRQn,     S1_VI_VSYNC0_IRQn,  S1_LO_VSYNC0_IRQn,
-    S1_VSYNCERR0_IRQn,  S1_VFIELD0_IRQn,    IV2_VBUFERR0_IRQn,
-    IV4_VBUFERR0_IRQn,  S1_WLINE0_IRQn,     OIR_VI_VSYNC0_IRQn,
+    S0_VI_VSYNC0_IRQn, S0_LO_VSYNC0_IRQn, S0_VSYNCERR0_IRQn,
+    GR3_VLINE0_IRQn, S0_VFIELD0_IRQn, IV1_VBUFERR0_IRQn,
+    IV3_VBUFERR0_IRQn, IV5_VBUFERR0_IRQn, IV6_VBUFERR0_IRQn,
+    S0_WLINE0_IRQn, S1_VI_VSYNC0_IRQn, S1_LO_VSYNC0_IRQn,
+    S1_VSYNCERR0_IRQn, S1_VFIELD0_IRQn, IV2_VBUFERR0_IRQn,
+    IV4_VBUFERR0_IRQn, S1_WLINE0_IRQn, OIR_VI_VSYNC0_IRQn,
     OIR_LO_VSYNC0_IRQn, OIR_VSYNCERR0_IRQn, OIR_VFIELD0_IRQn,
-    IV7_VBUFERR0_IRQn,  IV8_VBUFERR0_IRQn};
+    IV7_VBUFERR0_IRQn, IV8_VBUFERR0_IRQn};
 
 /******************************************************************************
 Private global variables and functions
@@ -204,12 +205,14 @@ static void DRV_Graphics_Irq_Set(vdc5_int_type_t irq, uint32_t enable);
                                                                               * @param[in]   user_num                : VDC5 channel
                                                                               * @retval      None
                                                                               ******************************************************************************/
-static void init_func(const uint32_t user_num) {
+static void init_func(const uint32_t user_num)
+{
   uint32_t reg_data;
   volatile uint8_t dummy_read;
 
   c_printf("[init_func] Enter. user_num=%u\n", user_num);
-  if ((vdc5_channel_t)user_num == VDC5_CHANNEL_0) {
+  if ((vdc5_channel_t)user_num == VDC5_CHANNEL_0)
+  {
 
     /* Standby control register 9 (STBCR9)
         b1      ------0-;  MSTP91 : 0 : Video display controller channel 0 &
@@ -228,7 +231,8 @@ static void init_func(const uint32_t user_num) {
         b5      --*-----;  STBAK25 : Standby acknowledgement from VDC5 channel
        0. */
     c_printf("[init_func] Waiting for STBAK25 to clear...\n");
-    while (((uint32_t)CPG.STBACK2 & (uint32_t)STBAK25_BIT) != 0u) {
+    while (((uint32_t)CPG.STBACK2 & (uint32_t)STBAK25_BIT) != 0u)
+    {
       /* Wait for the STBAK25 to be cleared to 0. */
     }
     c_printf("[init_func] STBAK25 cleared.\n");
@@ -250,7 +254,8 @@ static void init_func(const uint32_t user_num) {
         b4      ---*----;  STBAK24 : Standby acknowledgement from VDC5
        channel 1. */
     c_printf("[init_func] Waiting for STBAK24 to clear...\n");
-    while (((uint32_t)CPG.STBACK2 & (uint32_t)STBAK24_BIT) != 0u) {
+    while (((uint32_t)CPG.STBACK2 & (uint32_t)STBAK24_BIT) != 0u)
+    {
       /* Wait for the STBAK24 to be cleared to 0. */
     }
     c_printf("[init_func] STBAK24 cleared.\n");
@@ -266,7 +271,8 @@ static void init_func(const uint32_t user_num) {
                                                                               * @param[in]   enable                  : VDC5 interrupt enable
                                                                               * @retval      None
                                                                               ******************************************************************************/
-static void DRV_Graphics_Irq_Set(vdc5_int_type_t irq, uint32_t enable) {
+static void DRV_Graphics_Irq_Set(vdc5_int_type_t irq, uint32_t enable)
+{
   vdc5_channel_t ch = VDC5_CHANNEL_0;
   IRQn_Type IRQn;
   IRQHandler handler;
@@ -274,11 +280,14 @@ static void DRV_Graphics_Irq_Set(vdc5_int_type_t irq, uint32_t enable) {
   IRQn = vdc5_irq_set_tbl[irq];
   handler = R_VDC5_GetISR(ch, irq);
 
-  if (enable) {
+  if (enable)
+  {
     InterruptHandlerRegister(IRQn, (void (*)(uint32_t))handler);
     GIC_SetPriority(IRQn, 5);
     GIC_EnableIRQ(IRQn);
-  } else {
+  }
+  else
+  {
     GIC_DisableIRQ(IRQn);
   }
 } /* End of function DRV_Graphics_Irq_Set() */
@@ -297,15 +306,19 @@ static void DRV_Graphics_Irq_Set(vdc5_int_type_t irq, uint32_t enable) {
                                                                               ******************************************************************************/
 drv_graphics_error_t
 DRV_Graphics_Irq_Handler_Set(vdc5_int_type_t irq, uint16_t num,
-                             void (*callback)(vdc5_int_type_t)) {
+                             void (*callback)(vdc5_int_type_t))
+{
   vdc5_channel_t ch = VDC5_CHANNEL_0;
   drv_graphics_error_t drv_error = DRV_GRAPHICS_OK;
   vdc5_error_t error;
   vdc5_int_t interrupt;
 
-  if (callback == NULL) {
+  if (callback == NULL)
+  {
     DRV_Graphics_Irq_Set(irq, 0);
-  } else {
+  }
+  else
+  {
     DRV_Graphics_Irq_Set(irq, 1);
   }
 
@@ -317,7 +330,8 @@ DRV_Graphics_Irq_Handler_Set(vdc5_int_type_t irq, uint16_t num,
   interrupt.callback = callback; /* Callback function pointer */
   /* Set interrupt service routine */
   error = R_VDC5_CallbackISR(ch, &interrupt);
-  if (error != VDC5_OK) {
+  if (error != VDC5_OK)
+  {
     drv_error = DRV_GRAPHICS_VDC5_ERR;
   }
   return drv_error;
@@ -330,11 +344,13 @@ DRV_Graphics_Irq_Handler_Set(vdc5_int_type_t irq, uint16_t num,
                                                                               * @retval      Error code
                                                                               ******************************************************************************/
 drv_graphics_error_t DRV_Graphics_Lcd_Port_Init(PinName *pin,
-                                                uint32_t pin_count) {
+                                                uint32_t pin_count)
+{
   drv_graphics_error_t drv_error = DRV_GRAPHICS_OK;
   uint32_t count;
 
-  for (count = 0; count < pin_count; count++) {
+  for (count = 0; count < pin_count; count++)
+  {
     pinmap_peripheral(pin[count], PinMap_LCD_DISP_PIN);
     pinmap_pinout(pin[count], PinMap_LCD_DISP_PIN);
   }
@@ -348,11 +364,13 @@ drv_graphics_error_t DRV_Graphics_Lcd_Port_Init(PinName *pin,
                                                                               * @retval      Error code
                                                                               ******************************************************************************/
 drv_graphics_error_t DRV_Graphics_Lvds_Port_Init(PinName *pin,
-                                                 uint32_t pin_count) {
+                                                 uint32_t pin_count)
+{
   drv_graphics_error_t drv_error = DRV_GRAPHICS_OK;
   uint32_t count;
 
-  for (count = 0; count < pin_count; count++) {
+  for (count = 0; count < pin_count; count++)
+  {
     pinmap_peripheral(pin[count], PinMap_LVDS_DISP_PIN);
     pinmap_pinout(pin[count], PinMap_LVDS_DISP_PIN);
   }
@@ -366,11 +384,13 @@ drv_graphics_error_t DRV_Graphics_Lvds_Port_Init(PinName *pin,
                                                                               * @retval      Error code
                                                                               ******************************************************************************/
 drv_graphics_error_t DRV_Graphics_Dvinput_Port_Init(PinName *pin,
-                                                    uint32_t pin_count) {
+                                                    uint32_t pin_count)
+{
   drv_graphics_error_t drv_error = DRV_GRAPHICS_OK;
   uint32_t count;
 
-  for (count = 0; count < pin_count; count++) {
+  for (count = 0; count < pin_count; count++)
+  {
     pinmap_peripheral(pin[count], PinMap_DV_INPUT_PIN);
     pinmap_pinout(pin[count], PinMap_DV_INPUT_PIN);
   }
@@ -382,7 +402,8 @@ drv_graphics_error_t DRV_Graphics_Dvinput_Port_Init(PinName *pin,
                                                                               * @param[in]   drv_lcd_config          : LCD configuration
                                                                               * @retval      Error code
                                                                               ******************************************************************************/
-drv_graphics_error_t DRV_Graphics_Init(drv_lcd_config_t *drv_lcd_config) {
+drv_graphics_error_t DRV_Graphics_Init(drv_lcd_config_t *drv_lcd_config)
+{
   drv_graphics_error_t drv_error = DRV_GRAPHICS_OK;
   vdc5_channel_t ch = VDC5_CHANNEL_0;
   vdc5_error_t error;
@@ -397,17 +418,21 @@ drv_graphics_error_t DRV_Graphics_Init(drv_lcd_config_t *drv_lcd_config) {
   init.panel_icksel = VDC5_PANEL_ICKSEL_PERI; /* デフォルト: P1ペリフェラルクロック */
   init.panel_dcdr =
       VDC5_PANEL_CLKDIV_1_1; /* Panel clock frequency division ratio */
-  init.lvds = NULL; /* デフォルト: LVDS未使用 */
+  init.lvds = NULL;          /* デフォルト: LVDS未使用 */
 
-  if (drv_lcd_config != NULL) {
+  if (drv_lcd_config != NULL)
+  {
     InputClock = drv_lcd_config->intputClock;
     OutputClock = drv_lcd_config->outputClock;
 
     /* LVDS PLL Setting Calculation */
-    if (drv_lcd_config->lcd_type == DRV_LCD_TYPE_LVDS) {
+    if (drv_lcd_config->lcd_type == DRV_LCD_TYPE_LVDS)
+    {
       LvdsUsed = LVDS_IF_USE;
       init.panel_icksel = VDC5_PANEL_ICKSEL_LVDS_DIV7; /* Panel clock select */
-    } else {
+    }
+    else
+    {
       LvdsUsed = LVDS_IF_NOT_USE;
       init.panel_icksel =
           VDC5_PANEL_ICKSEL_PERI; /* 非LVDS: P1ペリフェラルクロック使用 */
@@ -415,7 +440,8 @@ drv_graphics_error_t DRV_Graphics_Init(drv_lcd_config_t *drv_lcd_config) {
   }
 
   /* LVDS使用時のみPLL設定を行う */
-  if (LvdsUsed == LVDS_IF_USE) {
+  if (LvdsUsed == LVDS_IF_USE)
+  {
     int pll_ret =
         lvds_pll_calc(InputClock, OutputClock, LvdsUsed, &pll_parameter);
     c_printf("[DRV_Graphics_Init] lvds_pll_calc ret=%d\n", pll_ret);
@@ -430,7 +456,9 @@ drv_graphics_error_t DRV_Graphics_Init(drv_lcd_config_t *drv_lcd_config) {
     vdc5_lvds.lvdspll_rd = pll_parameter.nrd;
     vdc5_lvds.lvdspll_od = (vdc5_lvds_pll_nod_t)pll_parameter.nod;
     init.lvds = &vdc5_lvds; /* LVDS parameter */
-  } else {
+  }
+  else
+  {
     c_printf(
         "[DRV_Graphics_Init] LVDS not used, using P1 peripheral clock.\n");
   }
@@ -438,12 +466,14 @@ drv_graphics_error_t DRV_Graphics_Init(drv_lcd_config_t *drv_lcd_config) {
   /* Initialize (Set module clock to VDC5) */
   c_printf("[DRV_Graphics_Init] Calling R_VDC5_Initialize...\n");
   error = R_VDC5_Initialize(ch, &init, &init_func, (uint32_t)ch);
-  if (error != VDC5_OK) {
+  if (error != VDC5_OK)
+  {
     c_printf("[DRV_Graphics_Init] R_VDC5_Initialize failed: %d\n", error);
     drv_error = DRV_GRAPHICS_VDC5_ERR;
   }
 
-  if (drv_error == DRV_GRAPHICS_OK) {
+  if (drv_error == DRV_GRAPHICS_OK)
+  {
     vdc5_sync_ctrl_t sync_ctrl;
 
     /* Sync signal control */
@@ -465,13 +495,15 @@ drv_graphics_error_t DRV_Graphics_Init(drv_lcd_config_t *drv_lcd_config) {
     /* Sync control */
     c_printf("[DRV_Graphics_Init] Calling R_VDC5_SyncControl...\n");
     error = R_VDC5_SyncControl(ch, &sync_ctrl);
-    if (error != VDC5_OK) {
+    if (error != VDC5_OK)
+    {
       c_printf("[DRV_Graphics_Init] R_VDC5_SyncControl failed: %d\n", error);
       drv_error = DRV_GRAPHICS_VDC5_ERR;
     }
   }
 
-  if (drv_error == DRV_GRAPHICS_OK) {
+  if (drv_error == DRV_GRAPHICS_OK)
+  {
     vdc5_output_t output;
     vdc5_lcd_tcon_timing_t lcd_tcon_timing_VS;
     vdc5_lcd_tcon_timing_t lcd_tcon_timing_VE;
@@ -486,7 +518,8 @@ drv_graphics_error_t DRV_Graphics_Init(drv_lcd_config_t *drv_lcd_config) {
         0; /* TCON reference timing, offset Hsync signal timing */
 
     /* LCD TCON timing setting */
-    if (drv_lcd_config->v_sync_port != DRV_LCD_TCON_PIN_NON) {
+    if (drv_lcd_config->v_sync_port != DRV_LCD_TCON_PIN_NON)
+    {
       lcd_tcon_timing_VS.tcon_hsvs = 0u;
       lcd_tcon_timing_VS.tcon_hwvw = (drv_lcd_config->v_sync_width * 2u);
       lcd_tcon_timing_VS.tcon_md = VDC5_LCD_TCON_POLMD_NORMAL;
@@ -498,11 +531,14 @@ drv_graphics_error_t DRV_Graphics_Init(drv_lcd_config_t *drv_lcd_config) {
       lcd_tcon_timing_VS.outcnt_edge = VDC5_EDGE_FALLING;
       output.outctrl[VDC5_LCD_TCONSIG_STVA_VS] =
           &lcd_tcon_timing_VS; /* STVA/VS: Vsync      */
-    } else {
+    }
+    else
+    {
       output.outctrl[VDC5_LCD_TCONSIG_STVA_VS] = NULL; /* STVA/VS: Vsync      */
     }
 
-    if (drv_lcd_config->h_sync_port != DRV_LCD_TCON_PIN_NON) {
+    if (drv_lcd_config->h_sync_port != DRV_LCD_TCON_PIN_NON)
+    {
       lcd_tcon_timing_HS.tcon_hsvs = 0u;
       lcd_tcon_timing_HS.tcon_hwvw = drv_lcd_config->h_sync_width;
       lcd_tcon_timing_HS.tcon_md = VDC5_LCD_TCON_POLMD_NORMAL;
@@ -514,11 +550,14 @@ drv_graphics_error_t DRV_Graphics_Init(drv_lcd_config_t *drv_lcd_config) {
       lcd_tcon_timing_HS.outcnt_edge = VDC5_EDGE_FALLING;
       output.outctrl[VDC5_LCD_TCONSIG_STH_SP_HS] =
           &lcd_tcon_timing_HS; /* STH/SP/HS: Hsync       */
-    } else {
+    }
+    else
+    {
       output.outctrl[VDC5_LCD_TCONSIG_STH_SP_HS] = NULL; /* STH/SP/HS: Hsync */
     }
 
-    if (drv_lcd_config->de_port != DRV_LCD_TCON_PIN_NON) {
+    if (drv_lcd_config->de_port != DRV_LCD_TCON_PIN_NON)
+    {
       lcd_tcon_timing_VE.tcon_hsvs = (drv_lcd_config->v_back_porch * 2u);
       lcd_tcon_timing_VE.tcon_hwvw = (drv_lcd_config->v_disp_widht * 2u);
       lcd_tcon_timing_VE.tcon_md = VDC5_LCD_TCON_POLMD_NORMAL;
@@ -551,7 +590,9 @@ drv_graphics_error_t DRV_Graphics_Init(drv_lcd_config_t *drv_lcd_config) {
           (vdc5_lcd_tcon_pin_t)drv_lcd_config->de_port;
       lcd_tcon_timing_DE.outcnt_edge = VDC5_EDGE_FALLING;
       output.outctrl[VDC5_LCD_TCONSIG_DE] = &lcd_tcon_timing_DE; /* DE      */
-    } else {
+    }
+    else
+    {
       output.outctrl[VDC5_LCD_TCONSIG_STVB_VE] = NULL; /* STVB/VE: Not used   */
       output.outctrl[VDC5_LCD_TCONSIG_STB_LP_HE] =
           NULL;                                   /* STB/LP/HE: Not used */
@@ -565,8 +606,8 @@ drv_graphics_error_t DRV_Graphics_Init(drv_lcd_config_t *drv_lcd_config) {
     output.outcnt_lcd_edge =
         (vdc5_edge_t)drv_lcd_config->lcd_edge; /* Output phase control of
                                                   LCD_DATA23 to LCD_DATA0 pin */
-    output.out_endian_on = VDC5_OFF; /* Bit endian change on/off control */
-    output.out_swap_on = VDC5_OFF;   /* B/R signal swap on/off control */
+    output.out_endian_on = VDC5_OFF;           /* Bit endian change on/off control */
+    output.out_swap_on = VDC5_OFF;             /* B/R signal swap on/off control */
     output.out_format =
         (vdc5_lcd_outformat_t)
             drv_lcd_config->lcd_outformat; /* Output format select */
@@ -580,7 +621,8 @@ drv_graphics_error_t DRV_Graphics_Init(drv_lcd_config_t *drv_lcd_config) {
     /* Display output */
     c_printf("[DRV_Graphics_Init] Calling R_VDC5_DisplayOutput...\n");
     error = R_VDC5_DisplayOutput(ch, &output);
-    if (error != VDC5_OK) {
+    if (error != VDC5_OK)
+    {
       c_printf("[DRV_Graphics_Init] R_VDC5_DisplayOutput failed: %d\n", error);
       drv_error = DRV_GRAPHICS_VDC5_ERR;
     }
@@ -596,7 +638,8 @@ drv_graphics_error_t DRV_Graphics_Init(drv_lcd_config_t *drv_lcd_config) {
                                                                               ******************************************************************************/
 drv_graphics_error_t
 DRV_Graphics_Video_init(drv_video_input_sel_t drv_video_input_sel,
-                        drv_video_ext_in_config_t *drv_video_ext_in_config) {
+                        drv_video_ext_in_config_t *drv_video_ext_in_config)
+{
   drv_graphics_error_t drv_error = DRV_GRAPHICS_OK;
   vdc5_error_t error;
   vdc5_input_t input;
@@ -609,10 +652,13 @@ DRV_Graphics_Video_init(drv_video_input_sel_t drv_video_input_sel,
   input.inp_fh25 =
       (uint16_t)VSYNC_1_4_FH_TIMING; /* Vsync signal 1/4fH phase timing */
 
-  if (drv_video_input_sel == DRV_INPUT_SEL_VDEC) {
+  if (drv_video_input_sel == DRV_INPUT_SEL_VDEC)
+  {
     input.dly = NULL;     /* Sync signal delay adjustment */
     input.ext_sig = NULL; /* External input signal        */
-  } else {
+  }
+  else
+  {
     ext_in_sig.inp_format =
         (vdc5_extin_format_t)drv_video_ext_in_config->inp_format;
     ext_in_sig.inp_pxd_edge =
@@ -641,15 +687,19 @@ DRV_Graphics_Video_init(drv_video_input_sel_t drv_video_input_sel,
   }
   /* Video input 0ch */
   error = R_VDC5_VideoInput(VDC5_CHANNEL_0, &input);
-  if (error != VDC5_OK) {
+  if (error != VDC5_OK)
+  {
     drv_error = DRV_GRAPHICS_VDC5_ERR;
   }
 
-  if (drv_video_input_sel == DRV_INPUT_SEL_VDEC) {
-    if (drv_error == DRV_GRAPHICS_OK) {
+  if (drv_video_input_sel == DRV_INPUT_SEL_VDEC)
+  {
+    if (drv_error == DRV_GRAPHICS_OK)
+    {
       /* Video input 1ch */
       error = R_VDC5_VideoInput(VDC5_CHANNEL_1, &input);
-      if (error != VDC5_OK) {
+      if (error != VDC5_OK)
+      {
         drv_error = DRV_GRAPHICS_VDC5_ERR;
       }
     }
@@ -662,7 +712,8 @@ DRV_Graphics_Video_init(drv_video_input_sel_t drv_video_input_sel,
                                                                               * @param[in]   layer_id                : Graphics layer ID
                                                                               * @retval      drv_graphics_error_t
                                                                               ******************************************************************************/
-drv_graphics_error_t DRV_Graphics_Start(drv_graphics_layer_t layer_id) {
+drv_graphics_error_t DRV_Graphics_Start(drv_graphics_layer_t layer_id)
+{
   drv_graphics_error_t drv_error = DRV_GRAPHICS_OK;
   vdc5_channel_t ch = VDC5_CHANNEL_0;
   vdc5_error_t error;
@@ -670,7 +721,8 @@ drv_graphics_error_t DRV_Graphics_Start(drv_graphics_layer_t layer_id) {
   vdc5_gr_disp_sel_t gr_disp_sel;
   vdc5_layer_id_t vdc5_layer_id;
 
-  switch (layer_id) {
+  switch (layer_id)
+  {
   case DRV_GRAPHICS_LAYER_0:
     vdc5_layer_id = VDC5_LAYER_ID_0_RD;
     gr_disp_sel = VDC5_DISPSEL_CURRENT;
@@ -692,11 +744,13 @@ drv_graphics_error_t DRV_Graphics_Start(drv_graphics_layer_t layer_id) {
     break;
   }
 
-  if (drv_error == DRV_GRAPHICS_OK) {
+  if (drv_error == DRV_GRAPHICS_OK)
+  {
     /* Start process */
     start.gr_disp_sel = &gr_disp_sel;
     error = R_VDC5_StartProcess(ch, vdc5_layer_id, &start);
-    if (error != VDC5_OK) {
+    if (error != VDC5_OK)
+    {
       drv_error = DRV_GRAPHICS_VDC5_ERR;
     }
   }
@@ -708,13 +762,15 @@ drv_graphics_error_t DRV_Graphics_Start(drv_graphics_layer_t layer_id) {
                                                                               * @param[in]   layer_id                : Graphics layer ID
                                                                               * @retval      Error code
                                                                               ******************************************************************************/
-drv_graphics_error_t DRV_Graphics_Stop(drv_graphics_layer_t layer_id) {
+drv_graphics_error_t DRV_Graphics_Stop(drv_graphics_layer_t layer_id)
+{
   drv_graphics_error_t drv_error = DRV_GRAPHICS_OK;
   vdc5_channel_t ch = VDC5_CHANNEL_0;
   vdc5_error_t error;
   vdc5_layer_id_t vdc5_layer_id;
 
-  switch (layer_id) {
+  switch (layer_id)
+  {
   case DRV_GRAPHICS_LAYER_0:
     vdc5_layer_id = VDC5_LAYER_ID_0_RD;
     break;
@@ -732,10 +788,12 @@ drv_graphics_error_t DRV_Graphics_Stop(drv_graphics_layer_t layer_id) {
     break;
   }
 
-  if (drv_error == DRV_GRAPHICS_OK) {
+  if (drv_error == DRV_GRAPHICS_OK)
+  {
     /* Stop process */
     error = R_VDC5_StopProcess(ch, vdc5_layer_id);
-    if (error != VDC5_OK) {
+    if (error != VDC5_OK)
+    {
       drv_error = DRV_GRAPHICS_VDC5_ERR;
     }
   }
@@ -747,7 +805,8 @@ drv_graphics_error_t DRV_Graphics_Stop(drv_graphics_layer_t layer_id) {
                                                                               * @param[in]   video_input_ch          : Video input channel
                                                                               * @retval      Error code
                                                                               ******************************************************************************/
-drv_graphics_error_t DRV_Video_Start(drv_video_input_channel_t video_input_ch) {
+drv_graphics_error_t DRV_Video_Start(drv_video_input_channel_t video_input_ch)
+{
   drv_graphics_error_t drv_error = DRV_GRAPHICS_OK;
   vdc5_channel_t ch = VDC5_CHANNEL_0;
   vdc5_error_t error;
@@ -755,20 +814,27 @@ drv_graphics_error_t DRV_Video_Start(drv_video_input_channel_t video_input_ch) {
   vdc5_gr_disp_sel_t gr_disp_sel;
   vdc5_layer_id_t vdc5_layer_id;
 
-  if (video_input_ch == DRV_VIDEO_INPUT_CHANNEL_0) {
+  if (video_input_ch == DRV_VIDEO_INPUT_CHANNEL_0)
+  {
     vdc5_layer_id = VDC5_LAYER_ID_0_WR;
-  } else if (video_input_ch == DRV_VIDEO_INPUT_CHANNEL_1) {
+  }
+  else if (video_input_ch == DRV_VIDEO_INPUT_CHANNEL_1)
+  {
     vdc5_layer_id = VDC5_LAYER_ID_1_WR;
-  } else {
+  }
+  else
+  {
     drv_error = DRV_GRAPHICS_LAYER_ERR;
   }
 
-  if (drv_error == DRV_GRAPHICS_OK) {
+  if (drv_error == DRV_GRAPHICS_OK)
+  {
     /* Start process */
     gr_disp_sel = VDC5_DISPSEL_CURRENT; /* CURRENT fixed for weave input mode */
     start.gr_disp_sel = &gr_disp_sel;
     error = R_VDC5_StartProcess(ch, vdc5_layer_id, &start);
-    if (error != VDC5_OK) {
+    if (error != VDC5_OK)
+    {
       drv_error = DRV_GRAPHICS_VDC5_ERR;
     }
   }
@@ -780,13 +846,15 @@ drv_graphics_error_t DRV_Video_Start(drv_video_input_channel_t video_input_ch) {
                                                                               * @param[in]   video_input_ch          : Video input channel
                                                                               * @retval      Error code
                                                                               ******************************************************************************/
-drv_graphics_error_t DRV_Video_Stop(drv_video_input_channel_t video_input_ch) {
+drv_graphics_error_t DRV_Video_Stop(drv_video_input_channel_t video_input_ch)
+{
   drv_graphics_error_t drv_error = DRV_GRAPHICS_OK;
   vdc5_channel_t ch = VDC5_CHANNEL_0;
   vdc5_error_t error;
   vdc5_layer_id_t vdc5_layer_id;
 
-  switch (video_input_ch) {
+  switch (video_input_ch)
+  {
   case DRV_VIDEO_INPUT_CHANNEL_0:
     vdc5_layer_id = VDC5_LAYER_ID_0_WR;
     break;
@@ -798,10 +866,12 @@ drv_graphics_error_t DRV_Video_Stop(drv_video_input_channel_t video_input_ch) {
     break;
   }
 
-  if (drv_error == DRV_GRAPHICS_OK) {
+  if (drv_error == DRV_GRAPHICS_OK)
+  {
     /* Stop process */
     error = R_VDC5_StopProcess(ch, vdc5_layer_id);
-    if (error != VDC5_OK) {
+    if (error != VDC5_OK)
+    {
       drv_error = DRV_GRAPHICS_VDC5_ERR;
     }
   }
@@ -824,7 +894,8 @@ drv_graphics_error_t DRV_Video_Stop(drv_video_input_channel_t video_input_ch) {
 drv_graphics_error_t
 DRV_Graphics_Read_Setting(drv_graphics_layer_t layer_id, void *framebuff,
                           uint32_t fb_stride, drv_graphics_format_t gr_format,
-                          drv_wr_rd_swa_t wr_rd_swa, drv_rect_t *gr_rect) {
+                          drv_wr_rd_swa_t wr_rd_swa, drv_rect_t *gr_rect)
+{
   drv_graphics_error_t drv_error = DRV_GRAPHICS_OK;
   vdc5_channel_t ch = VDC5_CHANNEL_0;
   vdc5_error_t error;
@@ -832,7 +903,8 @@ DRV_Graphics_Read_Setting(drv_graphics_layer_t layer_id, void *framebuff,
   vdc5_gr_format_t vdc5_gr_format;
   vdc5_read_t read;
 
-  switch (layer_id) {
+  switch (layer_id)
+  {
   case DRV_GRAPHICS_LAYER_0:
     vdc5_layer_id = VDC5_LAYER_ID_0_RD;
     break;
@@ -850,8 +922,10 @@ DRV_Graphics_Read_Setting(drv_graphics_layer_t layer_id, void *framebuff,
     break;
   }
 
-  if (drv_error == DRV_GRAPHICS_OK) {
-    switch (gr_format) {
+  if (drv_error == DRV_GRAPHICS_OK)
+  {
+    switch (gr_format)
+    {
     case DRV_GRAPHICS_FORMAT_YCBCR422:
       vdc5_gr_format = VDC5_GR_FORMAT_YCBCR422;
       break;
@@ -873,15 +947,16 @@ DRV_Graphics_Read_Setting(drv_graphics_layer_t layer_id, void *framebuff,
     }
   }
 
-  if (drv_error == DRV_GRAPHICS_OK) {
+  if (drv_error == DRV_GRAPHICS_OK)
+  {
     /* Read data parameter */
     read.gr_ln_off_dir =
-        VDC5_GR_LN_OFF_DIR_INC; /* Line offset address direction of the frame
-                                   buffer */
+        VDC5_GR_LN_OFF_DIR_INC;                /* Line offset address direction of the frame
+                                                  buffer */
     read.gr_flm_sel = VDC5_GR_FLM_SEL_FLM_NUM; /* Selects a frame buffer address
                                                   setting signal */
     read.gr_imr_flm_inv =
-        VDC5_OFF; /* Frame buffer number for distortion correction */
+        VDC5_OFF;                        /* Frame buffer number for distortion correction */
     read.gr_bst_md = VDC5_BST_MD_32BYTE; /* Frame buffer burst transfer mode */
     read.gr_base = framebuff;            /* Frame buffer base address */
     read.gr_ln_off = fb_stride;          /* Frame buffer line offset address */
@@ -893,8 +968,8 @@ DRV_Graphics_Read_Setting(drv_graphics_layer_t layer_id, void *framebuff,
     read.gr_format =
         vdc5_gr_format; /* Format of the frame buffer read signal */
     read.gr_ycc_swap =
-        VDC5_GR_YCCSWAP_CBY0CRY1; /* Controls swapping of data read from buffer
-                                     in the YCbCr422 format */
+        VDC5_GR_YCCSWAP_CBY0CRY1;                /* Controls swapping of data read from buffer
+                                                    in the YCbCr422 format */
     read.gr_rdswa = (vdc5_wr_rd_swa_t)wr_rd_swa; /* Frame buffer swap setting */
     /* Display area */
     read.gr_grc.vs = gr_rect->vs;
@@ -904,7 +979,8 @@ DRV_Graphics_Read_Setting(drv_graphics_layer_t layer_id, void *framebuff,
 
     /* Read data control */
     error = R_VDC5_ReadDataControl(ch, vdc5_layer_id, &read);
-    if (error != VDC5_OK) {
+    if (error != VDC5_OK)
+    {
       drv_error = DRV_GRAPHICS_VDC5_ERR;
     }
   }
@@ -918,14 +994,16 @@ DRV_Graphics_Read_Setting(drv_graphics_layer_t layer_id, void *framebuff,
                                                                               * @retval      Error code
                                                                               ******************************************************************************/
 drv_graphics_error_t DRV_Graphics_Read_Change(drv_graphics_layer_t layer_id,
-                                              void *framebuff) {
+                                              void *framebuff)
+{
   drv_graphics_error_t drv_error = DRV_GRAPHICS_OK;
   vdc5_channel_t ch = VDC5_CHANNEL_0;
   vdc5_error_t error;
   vdc5_layer_id_t vdc5_layer_id;
   vdc5_read_chg_t read_chg;
 
-  switch (layer_id) {
+  switch (layer_id)
+  {
   case DRV_GRAPHICS_LAYER_0:
     vdc5_layer_id = VDC5_LAYER_ID_0_RD;
     break;
@@ -943,17 +1021,19 @@ drv_graphics_error_t DRV_Graphics_Read_Change(drv_graphics_layer_t layer_id,
     break;
   }
 
-  if (drv_error == DRV_GRAPHICS_OK) {
+  if (drv_error == DRV_GRAPHICS_OK)
+  {
     /* Read data parameter */
     read_chg.width_read_fb =
-        NULL;                    /* Width of the image read from frame buffer */
-    read_chg.gr_grc = NULL;      /* Display area */
-    read_chg.gr_disp_sel = NULL; /* Graphics display mode */
+        NULL;                     /* Width of the image read from frame buffer */
+    read_chg.gr_grc = NULL;       /* Display area */
+    read_chg.gr_disp_sel = NULL;  /* Graphics display mode */
     read_chg.gr_base = framebuff; /* Frame buffer base address */
 
     /* Change read process */
     error = R_VDC5_ChangeReadProcess(ch, vdc5_layer_id, &read_chg);
-    if (error != VDC5_OK) {
+    if (error != VDC5_OK)
+    {
       drv_error = DRV_GRAPHICS_VDC5_ERR;
     }
   }
@@ -986,7 +1066,8 @@ DRV_Video_Write_Setting(drv_video_input_channel_t video_input_ch,
                         uint32_t fb_stride, drv_video_format_t video_format,
                         drv_wr_rd_swa_t wr_rd_swa, uint16_t video_write_buff_vw,
                         uint16_t video_write_buff_hw,
-                        drv_video_adc_vinsel_t video_adc_vinsel) {
+                        drv_video_adc_vinsel_t video_adc_vinsel)
+{
   drv_graphics_error_t drv_error = DRV_GRAPHICS_OK;
   vdc5_channel_t ch = VDC5_CHANNEL_0;
   vdc5_error_t error;
@@ -998,71 +1079,102 @@ DRV_Video_Write_Setting(drv_video_input_channel_t video_input_ch,
   uint8_t *framebuffer_t;
   uint8_t *framebuffer_b;
 
-  if (video_input_ch == DRV_VIDEO_INPUT_CHANNEL_0) {
+  if (video_input_ch == DRV_VIDEO_INPUT_CHANNEL_0)
+  {
     GRAPHICS_VideoDecoderInit((vdec_adc_vinsel_t)video_adc_vinsel,
                               VDEC_CHANNEL_0, (graphics_col_sys_t)col_sys);
-  } else if (video_input_ch == DRV_VIDEO_INPUT_CHANNEL_1) {
+  }
+  else if (video_input_ch == DRV_VIDEO_INPUT_CHANNEL_1)
+  {
     GRAPHICS_VideoDecoderInit((vdec_adc_vinsel_t)video_adc_vinsel,
                               VDEC_CHANNEL_1, (graphics_col_sys_t)col_sys);
-  } else {
+  }
+  else
+  {
     drv_error = DRV_GRAPHICS_CHANNEL_ERR;
   }
 
-  if (drv_error == DRV_GRAPHICS_OK) {
-    if (video_input_ch == DRV_VIDEO_INPUT_CHANNEL_0) {
+  if (drv_error == DRV_GRAPHICS_OK)
+  {
+    if (video_input_ch == DRV_VIDEO_INPUT_CHANNEL_0)
+    {
       vdc5_layer_id = VDC5_LAYER_ID_0_WR;
-    } else if (video_input_ch == DRV_VIDEO_INPUT_CHANNEL_1) {
+    }
+    else if (video_input_ch == DRV_VIDEO_INPUT_CHANNEL_1)
+    {
       vdc5_layer_id = VDC5_LAYER_ID_1_WR;
-    } else {
+    }
+    else
+    {
       drv_error = DRV_GRAPHICS_CHANNEL_ERR;
     }
   }
 
-  if (drv_error == DRV_GRAPHICS_OK) {
-    if (video_format == DRV_VIDEO_FORMAT_YCBCR422) {
+  if (drv_error == DRV_GRAPHICS_OK)
+  {
+    if (video_format == DRV_VIDEO_FORMAT_YCBCR422)
+    {
       res_md = VDC5_RES_MD_YCBCR422;
-    } else if (video_format == DRV_VIDEO_FORMAT_RGB888) {
+    }
+    else if (video_format == DRV_VIDEO_FORMAT_RGB888)
+    {
       res_md = VDC5_RES_MD_RGB888;
-    } else if (video_format == DRV_VIDEO_FORMAT_RGB565) {
+    }
+    else if (video_format == DRV_VIDEO_FORMAT_RGB565)
+    {
       res_md = VDC5_RES_MD_RGB565;
-    } else {
+    }
+    else
+    {
       drv_error = DRV_GRAPHICS_FORMAT_ERR;
     }
   }
 
   if (col_sys == DRV_COL_SYS_NTSC_358 || col_sys == DVV_COL_SYS_NTSC_443 ||
-      col_sys == DRV_COL_SYS_NTSC_443_60) {
+      col_sys == DRV_COL_SYS_NTSC_443_60)
+  {
     video_in_rect.hs = IMGCAP_SIZE_NTSC_HS * 2;
     video_in_rect.hw = IMGCAP_SIZE_NTSC_HW * 2;
     video_in_rect.vs = IMGCAP_SIZE_NTSC_VS;
     video_in_rect.vw = IMGCAP_SIZE_NTSC_VW;
-  } else {
+  }
+  else
+  {
     video_in_rect.hs = IMGCAP_SIZE_PAL_HS * 2;
     video_in_rect.hw = IMGCAP_SIZE_PAL_HW * 2;
     video_in_rect.vs = IMGCAP_SIZE_PAL_VS;
     video_in_rect.vw = IMGCAP_SIZE_PAL_VW;
   }
 
-  if (drv_error == DRV_GRAPHICS_OK) {
+  if (drv_error == DRV_GRAPHICS_OK)
+  {
     if (col_sys == DRV_COL_SYS_NTSC_358 || col_sys == DVV_COL_SYS_NTSC_443 ||
-        col_sys == DRV_COL_SYS_NTSC_443_60) {
-      if ((video_write_buff_vw / 2u) > video_in_rect.vw) {
+        col_sys == DRV_COL_SYS_NTSC_443_60)
+    {
+      if ((video_write_buff_vw / 2u) > video_in_rect.vw)
+      {
         drv_error = DRV_GRAPHICS_VIDEO_NTSC_SIZE_ERR;
       }
-    } else {
-      if ((video_write_buff_vw / 2u) > video_in_rect.vw) {
+    }
+    else
+    {
+      if ((video_write_buff_vw / 2u) > video_in_rect.vw)
+      {
         drv_error = DRV_GRAPHICS_VIDEO_PAL_SIZE_ERR;
       }
     }
   }
 
-  if (drv_error == DRV_GRAPHICS_OK) {
-    if (video_write_buff_hw > 800) {
+  if (drv_error == DRV_GRAPHICS_OK)
+  {
+    if (video_write_buff_hw > 800)
+    {
       drv_error = DRV_GRAPHICS_PARAM_RANGE_ERR;
     }
   }
 
-  if (drv_error == DRV_GRAPHICS_OK) {
+  if (drv_error == DRV_GRAPHICS_OK)
+  {
     /* Scaling-down and rotation parameter */
     scldw_rot = &write.scalingdown_rot;
     /* Image area to be captured */
@@ -1080,14 +1192,14 @@ DRV_Video_Write_Setting(drv_video_input_channel_t video_input_ch,
         video_write_buff_vw / 2u; /* Number of valid lines in vertical direction
                                      output by scaling-down control block */
     scldw_rot->res_out_hw =
-        video_write_buff_hw;      /* Number of valid horizontal pixels
-                                     output by scaling-down control block */
-    scldw_rot->adj_sel = VDC5_ON; /* Measures to decrease the influence
-                                     by lack of last-input line (on/off) */
+        video_write_buff_hw;                     /* Number of valid horizontal pixels
+                                                    output by scaling-down control block */
+    scldw_rot->adj_sel = VDC5_ON;                /* Measures to decrease the influence
+                                                    by lack of last-input line (on/off) */
     scldw_rot->res_ds_wr_md = VDC5_WR_MD_NORMAL; /* Frame buffer writing mode */
     write.res_wrswa =
         (vdc5_wr_rd_swa_t)wr_rd_swa; /* Frame buffer swap setting */
-    write.res_md = res_md; /* Frame buffer video-signal writing format */
+    write.res_md = res_md;           /* Frame buffer video-signal writing format */
     write.res_bst_md =
         VDC5_BST_MD_32BYTE; /* Transfer burst length for frame buffer */
     write.res_inter =
@@ -1096,7 +1208,7 @@ DRV_Video_Write_Setting(drv_video_input_channel_t video_input_ch,
     write.res_fld_sel = VDC5_RES_FLD_SEL_TOP;  /* Write field select */
     write.res_dth_on = VDC5_ON;                /* Dither correction on/off */
     write.base = framebuff;                    /* Frame buffer base address */
-    write.ln_off = fb_stride * 2u; /* Frame buffer line offset address [byte] */
+    write.ln_off = fb_stride * 2u;             /* Frame buffer line offset address [byte] */
     write.flm_num =
         (uint32_t)(1u - 1u); /* Number of frames of buffer (res_flm_num + 1) */
     /* Frame buffer frame offset address */
@@ -1105,7 +1217,8 @@ DRV_Video_Write_Setting(drv_video_input_channel_t video_input_ch,
 
     /* Write data control */
     error = R_VDC5_WriteDataControl(ch, vdc5_layer_id, &write);
-    if (error != VDC5_OK) {
+    if (error != VDC5_OK)
+    {
       drv_error = DRV_GRAPHICS_VDC5_ERR;
     }
   }
@@ -1131,7 +1244,8 @@ DRV_Video_Write_Setting(drv_video_input_channel_t video_input_ch,
 drv_graphics_error_t DRV_Video_Write_Setting_Digital(
     void *framebuff, uint32_t fb_stride, drv_video_format_t video_format,
     drv_wr_rd_swa_t wr_rd_swa, uint16_t video_write_buff_vw,
-    uint16_t video_write_buff_hw, drv_rect_t *cap_area) {
+    uint16_t video_write_buff_hw, drv_rect_t *cap_area)
+{
   drv_graphics_error_t drv_error = DRV_GRAPHICS_OK;
   vdc5_channel_t ch = VDC5_CHANNEL_0;
   vdc5_error_t error;
@@ -1142,19 +1256,28 @@ drv_graphics_error_t DRV_Video_Write_Setting_Digital(
 
   vdc5_layer_id = VDC5_LAYER_ID_0_WR;
 
-  if (drv_error == DRV_GRAPHICS_OK) {
-    if (video_format == DRV_VIDEO_FORMAT_YCBCR422) {
+  if (drv_error == DRV_GRAPHICS_OK)
+  {
+    if (video_format == DRV_VIDEO_FORMAT_YCBCR422)
+    {
       res_md = VDC5_RES_MD_YCBCR422;
-    } else if (video_format == DRV_VIDEO_FORMAT_RGB888) {
+    }
+    else if (video_format == DRV_VIDEO_FORMAT_RGB888)
+    {
       res_md = VDC5_RES_MD_RGB888;
-    } else if (video_format == DRV_VIDEO_FORMAT_RGB565) {
+    }
+    else if (video_format == DRV_VIDEO_FORMAT_RGB565)
+    {
       res_md = VDC5_RES_MD_RGB565;
-    } else {
+    }
+    else
+    {
       drv_error = DRV_GRAPHICS_FORMAT_ERR;
     }
   }
 
-  if (drv_error == DRV_GRAPHICS_OK) {
+  if (drv_error == DRV_GRAPHICS_OK)
+  {
     /* Scaling-down and rotation parameter */
     scldw_rot = &write.scalingdown_rot;
     /* Image area to be captured */
@@ -1170,14 +1293,14 @@ drv_graphics_error_t DRV_Video_Write_Setting_Digital(
         video_write_buff_vw; /* Number of valid lines in vertical direction
                                 output by scaling-down control block */
     scldw_rot->res_out_hw =
-        video_write_buff_hw;      /* Number of valid horizontal pixels
-                                     output by scaling-down control block */
-    scldw_rot->adj_sel = VDC5_ON; /* Measures to decrease the influence
-                                     by lack of last-input line (on/off) */
+        video_write_buff_hw;                     /* Number of valid horizontal pixels
+                                                    output by scaling-down control block */
+    scldw_rot->adj_sel = VDC5_ON;                /* Measures to decrease the influence
+                                                    by lack of last-input line (on/off) */
     scldw_rot->res_ds_wr_md = VDC5_WR_MD_NORMAL; /* Frame buffer writing mode */
     write.res_wrswa =
         (vdc5_wr_rd_swa_t)wr_rd_swa; /* Frame buffer swap setting */
-    write.res_md = res_md; /* Frame buffer video-signal writing format */
+    write.res_md = res_md;           /* Frame buffer video-signal writing format */
     write.res_bst_md =
         VDC5_BST_MD_32BYTE; /* Transfer burst length for frame buffer */
     write.res_inter =
@@ -1196,7 +1319,8 @@ drv_graphics_error_t DRV_Video_Write_Setting_Digital(
 
     /* Write data control */
     error = R_VDC5_WriteDataControl(ch, vdc5_layer_id, &write);
-    if (error != VDC5_OK) {
+    if (error != VDC5_OK)
+    {
       drv_error = DRV_GRAPHICS_VDC5_ERR;
     }
   }
@@ -1212,7 +1336,8 @@ drv_graphics_error_t DRV_Video_Write_Setting_Digital(
                                                                               ******************************************************************************/
 drv_graphics_error_t
 DRV_Video_Write_Change(drv_video_input_channel_t video_input_ch,
-                       void *framebuff, uint32_t fb_stride) {
+                       void *framebuff, uint32_t fb_stride)
+{
   drv_graphics_error_t drv_error = DRV_GRAPHICS_OK;
   uint8_t *framebuffer_t;
   uint8_t *framebuffer_b;
@@ -1220,15 +1345,20 @@ DRV_Video_Write_Change(drv_video_input_channel_t video_input_ch,
   framebuffer_t = (uint8_t *)((uint32_t)framebuff & ~0x1F);
   framebuffer_b = &framebuffer_t[fb_stride];
 
-  if (video_input_ch == DRV_VIDEO_INPUT_CHANNEL_0) {
+  if (video_input_ch == DRV_VIDEO_INPUT_CHANNEL_0)
+  {
     VDC50.SC0_SCL1_WR2 = (uint32_t)framebuffer_t;
     VDC50.SC0_SCL1_WR8 = (uint32_t)framebuffer_b;
     VDC50.SC0_SCL1_UPDATE = 0x10;
-  } else if (video_input_ch == DRV_VIDEO_INPUT_CHANNEL_1) {
+  }
+  else if (video_input_ch == DRV_VIDEO_INPUT_CHANNEL_1)
+  {
     VDC50.SC1_SCL1_WR2 = (uint32_t)framebuffer_t;
     VDC50.SC1_SCL1_WR8 = (uint32_t)framebuffer_b;
     VDC50.SC1_SCL1_UPDATE = 0x10;
-  } else {
+  }
+  else
+  {
     drv_error = DRV_GRAPHICS_CHANNEL_ERR;
   }
   return drv_error;
