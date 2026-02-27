@@ -4,7 +4,7 @@
 /*      FILE         :  mcr_camera_2026base.cpp                */
 /*      DESCRIPTION  :  Main Program                           */
 /*                                                             */
-/*      USER_LED点灯テスト                                      */
+/*      カメラ入力 + デバッグ表示                                */
 /*                                                             */
 /***************************************************************/
 #include "iodefine.h"
@@ -27,6 +27,7 @@ extern void __main() {
 }
 #endif
 
+#include "drivers/Camera.h"
 #include "drivers/Onboard.h"
 #include "drivers/Serial.h"
 
@@ -35,8 +36,16 @@ extern void __main() {
 // 1ms = 33333 カウント (P0 = 33.33MHz に戻す)
 #define OSTM0_CMP_1MS 33333
 
+// デバッグ表示用: 閾値設定
+#define DEBUG_THRESHOLD 200         // 画像二値化の閾値
+#define DEBUG_DISPLAY_ROW 60        // 表示行（画像の中央付近）
+#define DEBUG_PRINT_INTERVAL_MS 200 // シリアル出力間隔(ms)
+
 // グローバルタイマーカウンタ
 volatile unsigned long g_timer_1ms = 0;
+
+// シリアル出力用カウンタ
+volatile unsigned long g_cnt_printf = 0;
 
 // Onboardインスタンス（グローバル）
 Onboard g_onboard;
@@ -118,21 +127,23 @@ static void initOSTM0(void) {
 // inthandler.c の INT_Excep_OSTMI0() から呼ばれる
 void ostm0_interrupt_callback(void) {
   g_timer_1ms++;
+  g_cnt_printf++;
 
-  // スイッチが押されていたらREDを点灯
+  // カメラのフレーム周期処理（ステップ実行）
+  g_camera.update();
 
-  // 500ミリ秒(0.5秒)ごとにUSER LEDをトグル（1秒周期の点滅）
-  // ※ 1ms割り込みなので 500回 = 500ms
+  // 1秒ごとにUSER LEDをトグル
   if (g_timer_1ms % 1000 == 0) {
     static int toggle = 0;
     toggle = !toggle;
-    g_onboard.setUserLed(toggle); // USER LED
+    g_onboard.setUserLed(toggle);
   }
 
+  // スイッチ状態でフルカラーLEDを制御
   if (g_onboard.sw()) {
-    g_onboard.setColorLed(1, 1, 1); // RED, GREEN, BLUE ON
+    g_onboard.setColorLed(1, 1, 1);
   } else {
-    g_onboard.setColorLed(0, 0, 0); // RED, GREEN, BLUE OFF
+    g_onboard.setColorLed(0, 0, 0);
   }
 
   g_onboard.update();
@@ -145,42 +156,72 @@ int main(void) {
   // シリアル通信初期化 (115200bps)
   g_serial.init();
   g_serial.printf("\033[2J\033[H"); // 画面クリア & カーソルホーム
-  g_serial.printf("\x1b[36m--- System Booting ---\x1b[39m\n");
+  g_serial.printf("\x1b[36m--- MCR Camera 2026 Base ---\x1b[39m\n");
+  g_serial.printf("カメラ初期化中...\n");
+
+  // カメラ初期化（VDC5 + DVDEC）
+  g_camera.init();
+  g_serial.printf("カメラ初期化完了\n");
 
   // OSTM0タイマー割り込みを設定・開始（1ms周期）
   initOSTM0();
 
-  int counter = 0;
+  g_serial.printf("タイマー開始\n");
+  g_serial.printf("デバッグ表示: 閾値=%d, 行=%d\n", DEBUG_THRESHOLD,
+                  DEBUG_DISPLAY_ROW);
+  g_serial.printf("0/1表示: 0=暗い, 1=明るい（閾値以上）\n\n");
 
-  // メインループ
-  // 基本的な処理は1ms割り込み内で行われるが、
-  // ここではシリアルの色変えや連続出力のテストを行う
+  // メインループ: カメラ映像のデバッグ表示
+  // 割り込み内で画像処理が進行し、ここでは定期的にシリアル出力を行う
   while (1) {
-    // スイッチを押している間は高速で出力、そうでない場合は1秒おき程度にするためのウェイト
-    int wait_time = g_onboard.sw() ? 100000 : 5000000;
+    // 一定間隔でシリアル出力
+    if (g_cnt_printf >= DEBUG_PRINT_INTERVAL_MS) {
+      g_cnt_printf = 0;
 
-    for (volatile int i = 0; i < wait_time; i++) {
-    } // 簡易ウェイト
+      // 画面先頭にカーソルを移動（上書き表示）
+      g_serial.printf("\033[H");
 
-    counter++;
+      // ヘッダ行: X座標の目盛り
+      g_serial.printf(
+          "    0         1         2         3         4         5         "
+          "6         7         8         9         0         1         2  "
+          "       3         4         5        \r\n");
+      g_serial.printf(
+          "    0123456789012345678901234567890123456789012345678901234567890"
+          "123456789012345678901234567890123456789012345678901234567890123456"
+          "789012345678901234567890123456789\r\n");
 
-    // ANSIエスケープシーケンスを用いた色変えテスト
-    // \x1b[31m 赤, \x1b[32m 緑, \x1b[33m 黄, \x1b[34m 青, \x1b[35m マゼンタ,
-    // \x1b[36m シアン, \x1b[39m デフォルト
-    // \x1b[41m などの40番台は背景色
+      // 60行目〜100行目を2行飛ばしで表示
+      // 各ピクセルを閾値で二値化して 0/1 で表示
+      for (int y = 30; y < 100; y += 2) {
+        g_serial.printf("%03d:", y);
+        for (int x = 0; x < (int)CAM_PIXEL_HW; x++) {
+          int val = g_camera.getPixel(x, y);
+          char c = (val >= DEBUG_THRESHOLD) ? '1' : '0';
 
-    int color = (counter % 6) + 31; // 31〜36 の色を順番に使う
+          // 白線（閾値以上）の部分を背景色付きで表示
+          if (val >= DEBUG_THRESHOLD) {
+            g_serial.printf("\x1b[44m%c\x1b[49m", c); // 青背景
+          } else {
+            g_serial.printf("%c", c);
+          }
+        }
+        g_serial.printf("  \r\n");
+      }
 
-    g_serial.printf("Count: %5d | ", counter);
-    g_serial.printf("\x1b[%dm[COLOR TEST %d]\x1b[39m ", color, color);
-
-    if (counter % 2 == 0) {
-      g_serial.printf("\x1b[43m\x1b[30m[BG YELLOW / FG BLACK]\x1b[49m\x1b[39m");
-    } else {
-      g_serial.printf("\x1b[44m\x1b[37m[BG BLUE / FG WHITE]\x1b[49m\x1b[39m");
+      // 閾値変換による8点センサ表示（参考プロジェクト互換）
+      g_serial.printf("\r\n--- 8点センサ (shikiichi_henkan互換) ---\r\n");
+      for (int row = 40; row <= 100; row += 20) {
+        unsigned char sensor =
+            g_camera.thresholdConvert(row, DEBUG_THRESHOLD, 8);
+        // 8ビットを2進表示
+        g_serial.printf("行%3d: ", row);
+        for (int b = 7; b >= 0; b--) {
+          g_serial.printf("%d", (sensor >> b) & 1);
+        }
+        g_serial.printf("  \r\n");
+      }
     }
-
-    g_serial.printf("\n");
   }
 
   return 0;

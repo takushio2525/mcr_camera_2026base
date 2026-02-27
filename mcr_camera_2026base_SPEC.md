@@ -2,7 +2,7 @@
 
 ## 1. 概要
 GR-PEACH (RZ/A1H) をベースとしたマイクロマウス／ロボットカメラーカー向け制御用ベースプロジェクト。
-割り込み駆動のアーキテクチャを採用し、Onboardクラスを用いたLEDラッチ表示制御と、1msタイマーによる周期的な処理基盤を提供します。
+割り込み駆動のアーキテクチャを採用し、Onboardクラスを用いたLEDラッチ表示制御、Cameraクラスによるカメラ入力処理、1msタイマーによる周期的な処理基盤を提供します。
 
 ## 3. 目的
 本ベースプロジェクトを活用し、カメラモジュールやモータ制御といった高機能なロボット制御基盤を効率的に実装できるようにする。
@@ -31,8 +31,10 @@ GR-PEACH (RZ/A1H) をベースとしたマイクロマウス／ロボットカ�
 | ファイル | 役割 |
 |----------|------|
 | `.devcontainer/` | LaTeXドキュメントビルド用のコンテナ環境設定 |
-| `src/mcr_camera_2026base.cpp` | メインの初期化と 1msタイマー設定、コールバックを実装 |
+| `src/mcr_camera_2026base.cpp` | メインの初期化と 1msタイマー設定、カメラ・デバッグ表示、コールバックを実装 |
 | `src/core/IModule.h` | 全モジュール共通の基底インターフェース |
+| `src/drivers/Camera.h` | NTSCカメラ入力ドライバ（VDC5/DVDEC）の定義 |
+| `src/drivers/Camera.cpp` | Cameraクラスの実装（VDC5/DVDECレジスタ直叩き、画像処理、閾値変換） |
 | `src/drivers/Onboard.h` | オンボードのLED / SWを抽象化したラッチ管理ドライバ の定義 |
 | `src/drivers/Onboard.cpp` | Onboardクラスのハードウェア（GPIO）操作の実装 |
 | `src/drivers/Serial.h` | デバッグ用シリアル通信（即時出力）ドライバの定義 |
@@ -44,6 +46,7 @@ GR-PEACH (RZ/A1H) をベースとしたマイクロマウス／ロボットカ�
 
 | 機能 | メインファイル | 関連ファイル |
 |------|----------------|--------------|
+| NTSCカメラ入力・画像処理 | `src/drivers/Camera.cpp` | `src/drivers/Camera.h`, `mcr_camera_2026base.cpp` |
 | オンボードLED・SW操作 | `src/drivers/Onboard.cpp` | `src/drivers/Onboard.h`, `mcr_camera_2026base.cpp` |
 | デバッグシリアル通信 | `src/drivers/Serial.cpp` | `src/drivers/Serial.h`, `mcr_camera_2026base.cpp` |
 | 1msタイマー割り込み処理 | `src/mcr_camera_2026base.cpp` | `generate/inthandler.c` |
@@ -57,14 +60,37 @@ GR-PEACH (RZ/A1H) をベースとしたマイクロマウス／ロボットカ�
 - **`Onboard::sw()`**: SWのプッシュ状態をポーリングで監視し、押下時1(Active-High)を返す。
 - **`g_onboard`**: `Onboard`クラスのグローバルインスタンス。割り込みハンドラ等各所からハードウェア操作を行うために使用。
 - **`initOSTM0()`**: RZ/A1HのOSTM0を1ms用に設定し、GIC(INTC)へ登録。
-- **`ostm0_interrupt_callback()`**: `INT_Excep_OSTMI0` から呼ばれ、実時間をカウント(`g_timer_1ms`)し、`g_onboard` 経由でLED制御を行う。
+- **`ostm0_interrupt_callback()`**: `INT_Excep_OSTMI0` から呼ばれ、実時間をカウント(`g_timer_1ms`)し、`g_camera.update()` と `g_onboard.update()` を実行する。
 - **`INT_Excep_IRQ()`**: GIC(INTC)を用いたベクタ割り込みディスパッチャ。ICCIARから要因IDを取得し、`RelocatableVectors` から適切なハンドラへ分岐・EIOを通知する実装。
+- **`Camera::init()`**: VDC5チャネル0のモジュールストップ解除、パネルクロック設定、入力セレクタ設定（VDEC入力）、スケーラ0/1のフレームバッファ書き込み設定（160x120 YCbCr422）、DVDEC0のNTSC 3.58MHzカラーデコーダ初期化を行い、ビデオキャプチャを開始する。
+- **`Camera::update()`**: 1ms割り込みから呼ばれ、フレーム処理をステップ分割で実行する。ステップ0-1: `imageCopy`（VDC5フレームバッファからYCbCr422データをコピー）、ステップ2-3: `extractBrightness`（Y成分のみ抽出し`imageBuffer_`に格納）。Vfieldコールバックによるフレーム切替検出でステップをリセット。
+- **`Camera::getPixel(x, y)`**: 輝度バッファ`imageBuffer_`から座標(x, y)のピクセル値(0-255)を返す。
+- **`Camera::thresholdConvert(gyou, threshold, diff)`**: 参考プロジェクトの`shikiichi_henkan`と同等の処理。指定行の8点（x=31,43,54,71,88,105,116,128）の輝度値を取得し、閾値を自動調整して2進数8ビットに変換する。
+- **`Camera::isFrameReady()`**: 新しいフレームの処理が完了したかを返す。
+- **`g_camera`**: `Camera`クラスのグローバルインスタンス。割り込みハンドラからのフレーム周期処理とメインループからの画像データ取得に使用。
 - **`Serial::init()`**: STBCR4 bit5をクリアしSCIF2モジュールストップを解除後、ピンマルチプレクス設定（P3_0=TxD2 Alt6, P3_2=RxD2 Alt4）、SCIF2レジスタ初期化（ボーレート115200bps、BRR=8）を行う。
 - **`Serial::printf(fmt, ...)`**: 書式付き文字列をフォーマットし、送出可能になるまでポーリング待機しながらSCIFへ1文字ずつ即時出力する。
 - **`Serial::update()`**: IModule準拠のためのダミー関数（何も行わない）。
 - **`g_serial`**: `Serial`クラスのグローバルインスタンス。デバッグ出力の用途として各所で使用する。
 
 ## 24. 修正履歴
+
+### 2026-02-27 13:45: カメラ入力クラス（Camera）の実装
+
+**変更内容:**
+- `src/drivers/Camera.h` / `Camera.cpp` を新規作成し、NTSCカメラ入力ドライバを実装
+- VDC5チャネル0 + DVDEC0 のレジスタ直叩きによるNTSCビデオキャプチャ（160x120 YCbCr422）
+- ダブルバッファ方式のフレームバッファ管理
+- `update()` でフレーム処理をステップ分割実行（ImageCopy → 輝度抽出）
+- `getPixel(x, y)` / `thresholdConvert()` による画像データアクセスAPI
+- `mcr_camera_2026base.cpp` にカメラ統合: 割り込み内で `g_camera.update()` を呼び出し
+- メインループにデバッグ表示を実装: 閾値変換による0/1白黒パターンのシリアル出力
+
+**解消した問題/不満:**
+- カメラ入力機能がなく、映像ベースのライントレース制御ができなかった
+
+**解決方法:**
+- 参考プロジェクト（MCR_SHIOZAWA_CCLASS_2.38m-s）のmbed-os/DisplayBaseベースのカメラ処理を、ベアメタル環境（VDC5/DVDECレジスタ直叩き）に移植。IModuleインターフェースに準拠したCameraクラスとして再設計し、update()によるフレーム周期管理と二次元輝度バッファを提供する構成とした。
 
 ### 2026-02-26 21:12: シリアル通信ピンをDAPLink接続先(P6_3/P6_2)に変更
 **変更内容:**
