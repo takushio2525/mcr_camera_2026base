@@ -39,7 +39,7 @@ extern void __main()
 #define OSTM0_CMP_1MS 33333
 
 // デバッグ表示用: 閾値設定
-#define DEBUG_THRESHOLD 200         // 画像二値化の閾値
+#define DEBUG_THRESHOLD 170         // 画像二値化の閾値
 #define DEBUG_DISPLAY_ROW 60        // 表示行（画像の中央付近）
 #define DEBUG_PRINT_INTERVAL_MS 200 // シリアル出力間隔(ms)
 

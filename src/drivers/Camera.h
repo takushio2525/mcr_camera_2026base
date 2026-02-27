@@ -21,10 +21,11 @@
 #define CAM_DATA_SIZE_PER_PIC 2u
 
 // フレームバッファストライド（32バイト境界にアライン）
-#define CAM_VIDEO_BUFFER_STRIDE                                                \
+#define CAM_VIDEO_BUFFER_STRIDE \
   (((CAM_PIXEL_HW * CAM_DATA_SIZE_PER_PIC) + 31u) & ~31u)
 
-class Camera : public IModule {
+class Camera : public IModule
+{
 public:
   // コンストラクタ
   Camera();
