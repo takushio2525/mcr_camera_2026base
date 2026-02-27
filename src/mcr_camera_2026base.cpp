@@ -138,13 +138,16 @@ static void initOSTM0(void)
 
 // OSTM0割り込みコールバック
 // inthandler.c の INT_Excep_OSTMI0() から呼ばれる
-// ※重い処理（画像コピー等）は含めない。コードがSPIフラッシュから直接実行される
-//  ため、imageCopyのループは1ms周期を超えてメインループを飢餓させる。
-//  mbed-osではRAM実行+L1キャッシュ有効のため同様の処理が1ms以内に完了する。
+// 参考プロジェクト(2.38m-s)の intTimer() と同等の役割。
+// XIP環境ではimageCopy等が1msを超過するが、フレーム処理完了後の
+// Vfield待ち期間にメインループにCPU時間が返る。
 void ostm0_interrupt_callback(void)
 {
   g_timer_1ms++;
   g_cnt_printf++;
+
+  // カメラのフレーム周期処理（参考プロジェクトと同じく割り込み内で実行）
+  g_camera.update();
 
   // 1秒ごとにUSER LEDをトグル
   if (g_timer_1ms % 1000 == 0)
@@ -210,14 +213,7 @@ int main(void)
 
   while (1)
   {
-    // カメラのフレーム周期処理（ステップ実行）
-    // ※SPIフラッシュ直接実行環境では imageCopy のループが遅い（>1ms）ため、
-    //  1ms割り込み内ではなくメインループで実行する。
-    //  mbed-os（RAM実行+キャッシュ）では割り込み内で動作するが、
-    //  ベアメタル+XIPではメインループが適切。
-    g_camera.update();
-
-    // フレーム更新完了をカウント（frameReady_は毎フレームtrueになる）
+    // フレーム更新完了をカウント（カメラ更新は割り込み内で実行される）
     if (g_camera.isFrameReady())
     {
       s_frameCount++;
@@ -253,12 +249,6 @@ int main(void)
       // 30行目〜100行目を2行飛ばしで表示（参考プロジェクトと同じ）
       for (y = 30; y < 100; y += 2)
       {
-        // シリアル出力中もフレーム更新を継続する
-        // （参考プロジェクトでは割り込み内で画像処理が行われるため
-        //  シリアル出力と並行して動作するが、XIPメインループ方式では
-        //  明示的にupdate()を呼ぶ必要がある）
-        g_camera.update();
-
         // 行ヘッダを書き込み
         int pos = 0;
         lineBuf[pos++] = '0' + (y / 100) % 10;

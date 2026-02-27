@@ -226,32 +226,32 @@ void Camera::vsyncCallback(DisplayBase::int_type_t int_type)
 
 // ====================================================================
 // update(): フレーム周期ステップ処理
-// メインループから毎回呼ばれ、ステップごとに画像処理を分割実行
+// 1ms割り込み(OSTM0)から呼ばれ、ステップごとに画像処理を分割実行
 // 参考プロジェクト(2.38m-s)の intTimer() 内 switch(counter++) と同等
 //
-// 【XIP環境対応】
-// mbed-os(RAM実行+L1キャッシュ)では各ステップが1ms以内に完了するため、
-// Vfield(16.7ms間隔)ごとに余裕をもって4ステップを終えられる。
-// しかしXIP(SPIフラッシュ直接実行)ではimageCopyが重く、4ステップの
-// 合計が16.7msを超える。
-//
-// 参考プロジェクトとの整合:
+// 参考プロジェクトと同じ割り込み内実行方式:
+// - 1回の割り込みで1ステップ（imageCopyまたはextractBrightness）を実行
+// - XIPではstep毎に~8msかかるが、4ステップ完了後のVfield待ち期間に
+//   default:break で即リターンし、メインループにCPU時間を返す
 // - フレーム開始時にs_vfieldToggleをcapturedField_にキャプチャし、
-//   4ステップ全体で同じフィールド値を使用する（参考では4ms以内に
-//   完了するため自然に同一値だが、XIPでは明示的に固定が必要）
-// - フレーム処理完了後はVfield待ちなしで即座に次フレームを開始する
-//   （XIPでは処理時間 > Vfield間隔のため、待つ必要がない）
+//   4ステップ全体で同じフィールド値を使用する
 // ====================================================================
 void Camera::update()
 {
+  // フレーム処理完了後: 次のVfieldトグル変化を待って新フレームを開始
+  // 待ち中はすぐにリターンするため、メインループにCPU時間が返る
   if (frameStep_ > 3)
   {
-    // フレーム処理完了 → 即座に次フレームを開始
-    // XIP環境では4ステップの合計が16.7msを超えるため、
-    // 処理完了時には必ず新しいVfieldが発生済み。待つ必要なし。
-    capturedField_ = (int)s_vfieldToggle;
-    frameStep_ = 0;
-    frameReady_ = false;
+    if ((int)s_vfieldToggle != fieldToggleBuf_)
+    {
+      fieldToggleBuf_ = (int)s_vfieldToggle;
+      frameStep_ = 0;
+      frameReady_ = false;
+    }
+    else
+    {
+      return; // Vfield待ち: 即リターン
+    }
   }
 
   switch (frameStep_++)

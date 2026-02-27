@@ -61,10 +61,10 @@ GR-PEACH (RZ/A1H) をベースとしたマイクロマウス／ロボットカ�
 - **`g_onboard`**: `Onboard`クラスのグローバルインスタンス。割り込みハンドラ等各所からハードウェア操作を行うために使用。
 - **`initGIC()`**: GICディストリビュータ(ICDDCR)、CPUインターフェース(ICCICR)、割り込み優先度マスク(ICCPMR)を有効化し、CPSIE iでCPU IRQを許可する。カメラ初期化の前に呼ぶ必要がある（VDC5割り込みが正常動作するため）。mbed-osではブートコードが同等の処理を行っている。
 - **`initOSTM0()`**: RZ/A1HのOSTM0を1ms用に設定し、OSTM0固有のGIC設定（ICDISER, ICDICFR, ICDIPR, ICDIPTR）を行い、タイマーを開始する。GICグローバル有効化(initGIC)は事前に呼び出し済みの前提。
-- **`ostm0_interrupt_callback()`**: `INT_Excep_OSTMI0` から呼ばれ、実時間をカウント(`g_timer_1ms`)し、`g_onboard.update()` を実行する。画像処理(`g_camera.update()`) はSPIフラッシュ直接実行環境で1msを超過するためメインループで実行する。
+- **`ostm0_interrupt_callback()`**: `INT_Excep_OSTMI0` から呼ばれ、実時間をカウント(`g_timer_1ms`)し、`g_camera.update()`および`g_onboard.update()` を実行する。参考プロジェクト(2.38m-s)のintTimer()と同等の役割。XIP環境ではimageCopy等が1msを超過するが、フレーム処理完了後のVfield待ち期間にメインループにCPU時間が返る。
 - **`INT_Excep_IRQ()`**: GIC(INTC)を用いたベクタ割り込みディスパッチャ。ICCIARから要因IDを取得し、`RelocatableVectors` から適切なハンドラへ分岐・EIOを通知する実装。
 - **`Camera::init()`**: `mbed-gr-libs`由来の`DisplayBase` API（`Graphics_init`, `Graphics_Video_init`, `Video_Write_Setting`等）を使用し、VDC5およびDVDECの初期化（NTSC 160x120 YCbCr422入力）とメモリ書き込み設定を行い、ビデオキャプチャを開始する。
-- **`Camera::update()`**: メインループから呼ばれ、フレーム処理をステップ分割で実行する。ステップ0でフィールド値を`capturedField_`にキャプチャし、4ステップ全体で同じ値を使用する（参考プロジェクトでは4ms以内に完了するため自然に同一値だが、XIPでは明示的に固定が必要）。ステップ0-1: `imageCopy`、ステップ2-3: `extractBrightness`。フレーム処理完了後はVfield待ちなしで即座に次フレームを開始する（XIPでは処理時間 > Vfield間隔のため待つ必要がない）。シリアル出力ループ内でも`update()`を呼び出し、画像更新を継続する。※SPIフラッシュ直接実行環境ではimageCopyのループが1msを超過するため、1ms割り込み内ではなくメインループから実行する。
+- **`Camera::update()`**: 1ms割り込み(OSTM0)から呼ばれ、フレーム処理をステップ分割で実行する。参考プロジェクト(2.38m-s)のintTimer()内switch(counter++)と同等。ステップ0でフィールド値を`capturedField_`にキャプチャし、4ステップ全体で同じ値を使用。ステップ0-1: `imageCopy`、ステップ2-3: `extractBrightness`。フレーム処理完了後はVfieldトグル変化を待ち、待ち中は即リターンしてメインループにCPU時間を返す。XIP環境では各ステップが~8msかかるが、4ステップ完了後のVfield待ち期間にメインループが実行される。
 - **`Camera::getPixel(x, y)`**: 輝度バッファ`imageBuffer_`から座標(x, y)のピクセル値(0-255)を返す。
 - **`Camera::thresholdConvert(gyou, threshold, diff)`**: 参考プロジェクトの`shikiichi_henkan`と同等の処理。指定行の8点（x=31,43,54,71,88,105,116,128）の輝度値を取得し、閾値を自動調整して2進数8ビットに変換する。
 - **`Camera::isFrameReady()`**: 新しいフレームの処理が完了したかを返す。
@@ -76,6 +76,25 @@ GR-PEACH (RZ/A1H) をベースとしたマイクロマウス／ロボットカ�
 - **`g_serial`**: `Serial`クラスのグローバルインスタンス。デバッグ出力の用途として各所で使用する。
 
 ## 24. 修正履歴
+
+### 2026-02-27: Camera::update()を割り込み内実行に復帰（参考プロジェクトと同一構造）
+
+**変更内容:**
+- `g_camera.update()`をメインループから`ostm0_interrupt_callback()`（1ms割り込み）に移動。参考プロジェクト(2.38m-s)のintTimer()と同じ構造に復帰。
+- `Camera::update()`にフレーム処理完了後のVfield待ちを復活。待ち中は即リターンしてメインループにCPU時間を返す。
+- メインループから`g_camera.update()`の全呼び出しを除去。
+
+**解消した問題/不満:**
+- フレーム更新がメインループのシリアル出力にブロックされ、安定したフレーム更新ができない問題。
+
+**原因分析:**
+- メインループでカメラ更新を行う方式では、シリアル出力中（~250ms）にフレーム更新が停止・不安定になる。
+- 参考プロジェクトでは画像処理が1ms割り込み内で実行されるため、メインループの状態に関係なく安定してフレームが更新される。
+
+**解決方法:**
+- 参考プロジェクトと同じく、`ostm0_interrupt_callback()`内で`g_camera.update()`を実行。
+- XIP環境では各ステップが~8msかかるが、フレーム処理完了後のVfield待ち期間（default:breakで即リターン）にメインループが実行される。
+- g_timer_1msはフレーム処理中に実際の1msより遅くインクリメントされるが、カメラ更新の安定性を優先する。
 
 ### 2026-02-27: Camera::update()のフレーム更新速度改善（参考プロジェクトとの差分解消）
 
