@@ -172,36 +172,66 @@ int main(void) {
   g_serial.printf("0/1表示: 0=暗い, 1=明るい（閾値以上）\n\n");
 
   // メインループ: カメラ映像のデバッグ表示
-  // 参考プロジェクト debug_mode case 3 と同じパターン
-  int x, y, c;
+  // 行バッファ方式: 1行分をバッファに溜めてから一括出力
+  // ANSIカラー付きでも高速
+  int x, y;
+  // 1行あたり最大: 4(行番号) + 160*(12文字のANSIシーケンス) + 10(末尾) + 余裕
+  char lineBuf[2048];
+  int pos;
 
   while (1) {
     // 一定間隔でシリアル出力
     if (g_cnt_printf >= DEBUG_PRINT_INTERVAL_MS) {
       g_cnt_printf = 0;
 
-      // ヘッダ行（参考プロジェクト準拠）
+      // ヘッダ行
       g_serial.printf(
-          "shi 0         0         0         0         0         0  "
-          "       0         0         0         0         1         "
-          "1         1         1         1         1        1\r\n");
-      g_serial.printf(
-          "kii 0         1         2         3         4         5  "
+          "    0         1         2         3         4         5  "
           "       6         7         8         9         0         "
-          "1         2         3         4         5        5\r\n");
+          "1         2         3         4         5        \r\n");
       g_serial.printf(
-          "200 01234567890123456789012345678901234567890123456789012345"
-          "67890123456789012345678901234567890123456789012345678901234567"
-          "8901234567890123456789012345678901234567890123456789\r\n");
+          "    0123456789012345678901234567890123456789012345678901234"
+          "567890123456789012345678901234567890123456789012345678901234"
+          "56789012345678901234567890123456789\r\n");
 
-      // 30行目〜100行目を2行飛ばしで表示（参考プロジェクトと同じ）
+      // 30行目〜100行目を2行飛ばしで表示
       for (y = 30; y < 100; y += 2) {
-        g_serial.printf("%03d:", y);
+        // 行バッファを構築
+        pos = 0;
+        // 行番号
+        lineBuf[pos++] = '0' + (y / 100) % 10;
+        lineBuf[pos++] = '0' + (y / 10) % 10;
+        lineBuf[pos++] = '0' + y % 10;
+        lineBuf[pos++] = ':';
+
         for (x = 0; x < 160; x++) {
-          c = g_camera.getPixel(x, y) >= DEBUG_THRESHOLD ? 1 : 0;
-          g_serial.printf("%d", c);
+          int val = g_camera.getPixel(x, y);
+          if (val >= DEBUG_THRESHOLD) {
+            // 青背景で '1' を表示: \x1b[44m1\x1b[49m
+            lineBuf[pos++] = '\x1b';
+            lineBuf[pos++] = '[';
+            lineBuf[pos++] = '4';
+            lineBuf[pos++] = '4';
+            lineBuf[pos++] = 'm';
+            lineBuf[pos++] = '1';
+            lineBuf[pos++] = '\x1b';
+            lineBuf[pos++] = '[';
+            lineBuf[pos++] = '4';
+            lineBuf[pos++] = '9';
+            lineBuf[pos++] = 'm';
+          } else {
+            lineBuf[pos++] = '0';
+          }
         }
-        g_serial.printf("  \r\n");
+
+        // 行末
+        lineBuf[pos++] = ' ';
+        lineBuf[pos++] = ' ';
+        lineBuf[pos++] = '\r';
+        lineBuf[pos++] = '\n';
+        lineBuf[pos] = '\0';
+
+        g_serial.printf("%s", lineBuf);
       }
 
       // カーソルをホームに戻す（次の表示で上書き）
