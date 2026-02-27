@@ -303,47 +303,50 @@ void Camera::vsyncCallback() {
 // 参考プロジェクトの intTimer() 内 switch(counter++) と同等
 // ====================================================================
 void Camera::update() {
-  // フレーム処理のステップ分割実行
-  // VDC5割り込み非使用のため、タイマーベースで4ステップを順次実行し、
-  // 完了後にリセットして次フレームを処理する
+  // 参考プロジェクトの intTimer() 内 switch(counter++) と同じパターン
+  // 1ms割り込みから呼ばれるたびに counter_ をインクリメントし、
+  // 特定のカウンタ値で処理を実行する
+  //
+  // NTSC 1フィールド ≒ 16.7ms なので、counter_ == 17 で自動リセット
+  // （VDC5 Vfield割り込みが使えないため、タイマーベースでフレーム周期を作る）
 
-  switch (frameStep_) {
+  switch (frameStep_++) {
   case 0:
-    // ステップ0: YCbCr422 生データのコピー（前半60行）
+    // 0ms目: YCbCr422 生データのコピー（前半0-59行）
     imageCopy(0);
-    frameStep_++;
     break;
 
   case 1:
-    // ステップ1: YCbCr422 生データのコピー（後半60行）
+    // 1ms目: YCbCr422 生データのコピー（後半60-119行）
     imageCopy(1);
-    frameStep_++;
     break;
 
   case 2:
-    // ステップ2: 輝度抽出（前半60行）
+    // 2ms目: 輝度抽出（前半0-59行）
     extractBrightness(0);
-    frameStep_++;
     break;
 
   case 3:
-    // ステップ3: 輝度抽出（後半60行）→ フレーム完了
+    // 3ms目: 輝度抽出（後半60-119行）→ フレームデータ確定
     extractBrightness(1);
     frameReady_ = true;
-    frameStep_++;
+    break;
+
+    // case 4〜16: 追加の処理があればここに記述可能
+    // 例: エンコーダ更新、偏差計算、モーター制御値計算 etc.
+    // case 5:
+    //   // ここに追加処理を書ける
+    //   break;
+
+  case 17:
+    // 17ms目: 1フィールド分の時間が経過 → カウンタリセット
+    // フィールドトグルを切り替えて次フレームの処理を開始
+    fieldToggle_ = (fieldToggle_ == 0) ? 1 : 0;
+    frameStep_ = 0;
     break;
 
   default:
-    // フレーム処理完了後、少し待ってから次フレームの処理を開始
-    // NTSC: 約16.7ms/フレーム → 4ステップ(4ms)完了後、
-    // 残りの約12msは待機してからリセット
-    frameStep_++;
-    if (frameStep_ >= 20) {
-      // 約20ms経過後に次フレームの処理を開始
-      // フィールドトグルも切り替え
-      fieldToggle_ = (fieldToggle_ == 0) ? 1 : 0;
-      frameStep_ = 0;
-    }
+    // 上記以外のカウンタ値では何もしない（次の1msを待つ）
     break;
   }
 }
