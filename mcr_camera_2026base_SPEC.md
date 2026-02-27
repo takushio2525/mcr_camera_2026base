@@ -75,6 +75,18 @@ GR-PEACH (RZ/A1H) をベースとしたマイクロマウス／ロボットカ�
 
 ## 24. 修正履歴
 
+### 2026-02-27 ?:??: VDC5初期化のLVDS PLL設定エラー(error=6)を修正
+
+**変更内容:**
+- `src/drivers/video/gr_peach_vdc5.c` の `DRV_Graphics_Init()` において、LCD未使用（カメラ専用）時のVDC5パネルクロック設定を修正。
+
+**解消した問題/不満:**
+- カメラ初期化時に `R_VDC5_Initialize` がエラーコード6（`VDC5_ERR_PARAM_EXCEED_RANGE`）を返し、`Graphics_init` が失敗してカメラが使えない問題。
+- 原因: `lcd_type` が `PARALLEL_RGB`（非LVDS）の場合でも `panel_icksel` が `VDC5_PANEL_ICKSEL_LVDS` のまま残り、さらに `lvds_pll_calc()` で計算されたPLLパラメータ（`double`型の`nfd`等）が `uint16_t` に変換される際に、ベアメタル環境での浮動小数点演算結果が禁止範囲に入っていたため、LVDS PLLフィードバック分周値（NFD）の範囲チェックに引っかかっていた。
+
+**解決方法:**
+- LCD未使用時は `panel_icksel = VDC5_PANEL_ICKSEL_PERI`（P1ペリフェラルクロック）を使用し、`init.lvds = NULL` としてLVDS PLL初期化自体をスキップするように変更。カメラNTSCキャプチャにはLVDS PLLは不要であり、P1クロックで十分動作する。
+
 ### 2026-02-27 15:20: Camera.cppの初期化処理をDisplayBase APIに置換
 
 **変更内容:**
