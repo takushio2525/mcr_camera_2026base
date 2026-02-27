@@ -30,6 +30,9 @@ void INT_Excep_Reserved(void) { /* brk(); */ }
 typedef void (*fp_irq)(void);
 extern const fp_irq RelocatableVectors[];
 
+// ==== Dynamic IRQ Handlers for VDC5 etc. ====
+void (*g_irq_handlers[256])(uint32_t) = {0};
+
 void INT_Excep_IRQ(void) __attribute__((interrupt("IRQ")));
 void INT_Excep_IRQ(void) {
   volatile uint32_t *ICCIAR = (volatile uint32_t *)0xE820200C;
@@ -39,7 +42,9 @@ void INT_Excep_IRQ(void) {
   uint32_t irq = *ICCIAR;
   uint32_t id = irq & 0x3FF;
 
-  if (id < 1020) {
+  if (id < 256 && g_irq_handlers[id] != 0) {
+    g_irq_handlers[id](0);
+  } else if (id < 1020) {
     if (RelocatableVectors[id] != 0) {
       RelocatableVectors[id]();
     }
