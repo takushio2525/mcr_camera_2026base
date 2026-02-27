@@ -55,14 +55,10 @@ void Camera::init() {
 
   startCapture();
 
-  // Vsync待ち
-  s_vsyncCount = 1;
-  while (s_vsyncCount > 0) {
-  }
-
-  // Vfield 2回待ち
-  s_vfieldCount = 2;
-  while (s_vfieldCount > 0) {
+  // キャプチャ開始後の安定待ち（約100ms）
+  // ※ VDC5割り込みがGICに未登録のため、Vsync/Vfield待ちの
+  //    代わりに簡易ウェイトでフレーム取得を待つ
+  for (volatile int i = 0; i < 3000000; i++) {
   }
 }
 
@@ -307,37 +303,47 @@ void Camera::vsyncCallback() {
 // 参考プロジェクトの intTimer() 内 switch(counter++) と同等
 // ====================================================================
 void Camera::update() {
-  // フィールド切替検出: 新しいフレームが来たらステップをリセット
-  if (s_vfieldToggle != fieldToggleBuf_) {
-    fieldToggleBuf_ = s_vfieldToggle;
-    fieldToggle_ = s_vfieldToggle;
-    frameStep_ = 0;
-  }
+  // フレーム処理のステップ分割実行
+  // VDC5割り込み非使用のため、タイマーベースで4ステップを順次実行し、
+  // 完了後にリセットして次フレームを処理する
 
-  switch (frameStep_++) {
+  switch (frameStep_) {
   case 0:
     // ステップ0: YCbCr422 生データのコピー（前半60行）
     imageCopy(0);
+    frameStep_++;
     break;
 
   case 1:
     // ステップ1: YCbCr422 生データのコピー（後半60行）
     imageCopy(1);
+    frameStep_++;
     break;
 
   case 2:
     // ステップ2: 輝度抽出（前半60行）
     extractBrightness(0);
+    frameStep_++;
     break;
 
   case 3:
     // ステップ3: 輝度抽出（後半60行）→ フレーム完了
     extractBrightness(1);
     frameReady_ = true;
+    frameStep_++;
     break;
 
   default:
-    // フレーム処理完了後は何もしない（次のVfieldリセットを待つ）
+    // フレーム処理完了後、少し待ってから次フレームの処理を開始
+    // NTSC: 約16.7ms/フレーム → 4ステップ(4ms)完了後、
+    // 残りの約12msは待機してからリセット
+    frameStep_++;
+    if (frameStep_ >= 20) {
+      // 約20ms経過後に次フレームの処理を開始
+      // フィールドトグルも切り替え
+      fieldToggle_ = (fieldToggle_ == 0) ? 1 : 0;
+      frameStep_ = 0;
+    }
     break;
   }
 }

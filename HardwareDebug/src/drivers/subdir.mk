@@ -4,14 +4,17 @@
 
 # Add inputs and outputs from these tool invocations to the build variables 
 CPP_SRCS += \
+../src/drivers/Camera.cpp \
 ../src/drivers/Onboard.cpp \
 ../src/drivers/Serial.cpp 
 
 LST += \
+Camera.lst \
 Onboard.lst \
 Serial.lst 
 
 OBJS += \
+./src/drivers/Camera.o \
 ./src/drivers/Onboard.o \
 ./src/drivers/Serial.o 
 
@@ -19,6 +22,7 @@ MAP += \
 mcr_camera_2026base.map 
 
 CPP_DEPS += \
+./src/drivers/Camera.d \
 ./src/drivers/Onboard.d \
 ./src/drivers/Serial.d 
 
