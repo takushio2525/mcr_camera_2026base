@@ -46,6 +46,86 @@
   },
   {
     "directory": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug",
+    "command": "\"C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/13.3 rel1/bin/arm-none-eabi-g++.exe\" -mcpu\u003dcortex-a9 -marm -mlittle-endian -mfloat-abi\u003dhard -mfpu\u003dvfpv3-d16 -fdiagnostics-parseable-fixits -O0 -fmessage-length\u003d0 -fsigned-char -ffunction-sections -fdata-sections -fno-strict-aliasing -Wnull-dereference -Wstack-usage\u003d100 -g -gdwarf-4 -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src -fabi-version\u003d0 -c -o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug/src/drivers/video/DisplayBase.o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/drivers/video/DisplayBase.cpp",
+    "file": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/drivers/video/DisplayBase.cpp"
+  },
+  {
+    "directory": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug",
+    "command": "\"C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/13.3 rel1/bin/arm-none-eabi-gcc.exe\" -mcpu\u003dcortex-a9 -marm -mlittle-endian -mfloat-abi\u003dhard -mfpu\u003dvfpv3-d16 -fdiagnostics-parseable-fixits -O0 -fmessage-length\u003d0 -fsigned-char -ffunction-sections -fdata-sections -fno-strict-aliasing -Wnull-dereference -Wstack-usage\u003d100 -g -gdwarf-4 -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src -std\u003dgnu11 -c -o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug/src/drivers/video/gr_peach_vdc5.o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/drivers/video/gr_peach_vdc5.c",
+    "file": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/drivers/video/gr_peach_vdc5.c"
+  },
+  {
+    "directory": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug",
+    "command": "\"C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/13.3 rel1/bin/arm-none-eabi-gcc.exe\" -mcpu\u003dcortex-a9 -marm -mlittle-endian -mfloat-abi\u003dhard -mfpu\u003dvfpv3-d16 -fdiagnostics-parseable-fixits -O0 -fmessage-length\u003d0 -fsigned-char -ffunction-sections -fdata-sections -fno-strict-aliasing -Wnull-dereference -Wstack-usage\u003d100 -g -gdwarf-4 -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src -std\u003dgnu11 -c -o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug/src/drivers/video/lcd_settings.o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/drivers/video/lcd_settings.c",
+    "file": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/drivers/video/lcd_settings.c"
+  },
+  {
+    "directory": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug",
+    "command": "\"C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/13.3 rel1/bin/arm-none-eabi-gcc.exe\" -mcpu\u003dcortex-a9 -marm -mlittle-endian -mfloat-abi\u003dhard -mfpu\u003dvfpv3-d16 -fdiagnostics-parseable-fixits -O0 -fmessage-length\u003d0 -fsigned-char -ffunction-sections -fdata-sections -fno-strict-aliasing -Wnull-dereference -Wstack-usage\u003d100 -g -gdwarf-4 -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src -std\u003dgnu11 -c -o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug/src/drivers/video/lvds/lvds_pll_data.o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/drivers/video/lvds/lvds_pll_data.c",
+    "file": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/drivers/video/lvds/lvds_pll_data.c"
+  },
+  {
+    "directory": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug",
+    "command": "\"C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/13.3 rel1/bin/arm-none-eabi-gcc.exe\" -mcpu\u003dcortex-a9 -marm -mlittle-endian -mfloat-abi\u003dhard -mfpu\u003dvfpv3-d16 -fdiagnostics-parseable-fixits -O0 -fmessage-length\u003d0 -fsigned-char -ffunction-sections -fdata-sections -fno-strict-aliasing -Wnull-dereference -Wstack-usage\u003d100 -g -gdwarf-4 -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src -std\u003dgnu11 -c -o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug/src/drivers/video/lvds/lvds_pll_main.o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/drivers/video/lvds/lvds_pll_main.c",
+    "file": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/drivers/video/lvds/lvds_pll_main.c"
+  },
+  {
+    "directory": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug",
+    "command": "\"C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/13.3 rel1/bin/arm-none-eabi-gcc.exe\" -mcpu\u003dcortex-a9 -marm -mlittle-endian -mfloat-abi\u003dhard -mfpu\u003dvfpv3-d16 -fdiagnostics-parseable-fixits -O0 -fmessage-length\u003d0 -fsigned-char -ffunction-sections -fdata-sections -fno-strict-aliasing -Wnull-dereference -Wstack-usage\u003d100 -g -gdwarf-4 -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src -std\u003dgnu11 -c -o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug/src/drivers/video/vdc5/src/r_vdc5.o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/drivers/video/vdc5/src/r_vdc5.c",
+    "file": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/drivers/video/vdc5/src/r_vdc5.c"
+  },
+  {
+    "directory": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug",
+    "command": "\"C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/13.3 rel1/bin/arm-none-eabi-gcc.exe\" -mcpu\u003dcortex-a9 -marm -mlittle-endian -mfloat-abi\u003dhard -mfpu\u003dvfpv3-d16 -fdiagnostics-parseable-fixits -O0 -fmessage-length\u003d0 -fsigned-char -ffunction-sections -fdata-sections -fno-strict-aliasing -Wnull-dereference -Wstack-usage\u003d100 -g -gdwarf-4 -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src -std\u003dgnu11 -c -o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug/src/drivers/video/vdc5/src/r_vdc5_check_parameter.o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/drivers/video/vdc5/src/r_vdc5_check_parameter.c",
+    "file": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/drivers/video/vdc5/src/r_vdc5_check_parameter.c"
+  },
+  {
+    "directory": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug",
+    "command": "\"C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/13.3 rel1/bin/arm-none-eabi-gcc.exe\" -mcpu\u003dcortex-a9 -marm -mlittle-endian -mfloat-abi\u003dhard -mfpu\u003dvfpv3-d16 -fdiagnostics-parseable-fixits -O0 -fmessage-length\u003d0 -fsigned-char -ffunction-sections -fdata-sections -fno-strict-aliasing -Wnull-dereference -Wstack-usage\u003d100 -g -gdwarf-4 -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src -std\u003dgnu11 -c -o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug/src/drivers/video/vdc5/src/r_vdc5_interrupt.o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/drivers/video/vdc5/src/r_vdc5_interrupt.c",
+    "file": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/drivers/video/vdc5/src/r_vdc5_interrupt.c"
+  },
+  {
+    "directory": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug",
+    "command": "\"C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/13.3 rel1/bin/arm-none-eabi-gcc.exe\" -mcpu\u003dcortex-a9 -marm -mlittle-endian -mfloat-abi\u003dhard -mfpu\u003dvfpv3-d16 -fdiagnostics-parseable-fixits -O0 -fmessage-length\u003d0 -fsigned-char -ffunction-sections -fdata-sections -fno-strict-aliasing -Wnull-dereference -Wstack-usage\u003d100 -g -gdwarf-4 -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src -std\u003dgnu11 -c -o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug/src/drivers/video/vdc5/src/r_vdc5_register.o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/drivers/video/vdc5/src/r_vdc5_register.c",
+    "file": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/drivers/video/vdc5/src/r_vdc5_register.c"
+  },
+  {
+    "directory": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug",
+    "command": "\"C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/13.3 rel1/bin/arm-none-eabi-gcc.exe\" -mcpu\u003dcortex-a9 -marm -mlittle-endian -mfloat-abi\u003dhard -mfpu\u003dvfpv3-d16 -fdiagnostics-parseable-fixits -O0 -fmessage-length\u003d0 -fsigned-char -ffunction-sections -fdata-sections -fno-strict-aliasing -Wnull-dereference -Wstack-usage\u003d100 -g -gdwarf-4 -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src -std\u003dgnu11 -c -o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug/src/drivers/video/vdc5/src/r_vdc5_register_address.o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/drivers/video/vdc5/src/r_vdc5_register_address.c",
+    "file": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/drivers/video/vdc5/src/r_vdc5_register_address.c"
+  },
+  {
+    "directory": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug",
+    "command": "\"C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/13.3 rel1/bin/arm-none-eabi-gcc.exe\" -mcpu\u003dcortex-a9 -marm -mlittle-endian -mfloat-abi\u003dhard -mfpu\u003dvfpv3-d16 -fdiagnostics-parseable-fixits -O0 -fmessage-length\u003d0 -fsigned-char -ffunction-sections -fdata-sections -fno-strict-aliasing -Wnull-dereference -Wstack-usage\u003d100 -g -gdwarf-4 -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src -std\u003dgnu11 -c -o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug/src/drivers/video/vdc5/src/r_vdc5_shared_param.o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/drivers/video/vdc5/src/r_vdc5_shared_param.c",
+    "file": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/drivers/video/vdc5/src/r_vdc5_shared_param.c"
+  },
+  {
+    "directory": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug",
+    "command": "\"C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/13.3 rel1/bin/arm-none-eabi-gcc.exe\" -mcpu\u003dcortex-a9 -marm -mlittle-endian -mfloat-abi\u003dhard -mfpu\u003dvfpv3-d16 -fdiagnostics-parseable-fixits -O0 -fmessage-length\u003d0 -fsigned-char -ffunction-sections -fdata-sections -fno-strict-aliasing -Wnull-dereference -Wstack-usage\u003d100 -g -gdwarf-4 -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src -std\u003dgnu11 -c -o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug/src/drivers/video/vdec/src/r_vdec.o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/drivers/video/vdec/src/r_vdec.c",
+    "file": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/drivers/video/vdec/src/r_vdec.c"
+  },
+  {
+    "directory": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug",
+    "command": "\"C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/13.3 rel1/bin/arm-none-eabi-gcc.exe\" -mcpu\u003dcortex-a9 -marm -mlittle-endian -mfloat-abi\u003dhard -mfpu\u003dvfpv3-d16 -fdiagnostics-parseable-fixits -O0 -fmessage-length\u003d0 -fsigned-char -ffunction-sections -fdata-sections -fno-strict-aliasing -Wnull-dereference -Wstack-usage\u003d100 -g -gdwarf-4 -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src -std\u003dgnu11 -c -o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug/src/drivers/video/vdec/src/r_vdec_check_parameter.o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/drivers/video/vdec/src/r_vdec_check_parameter.c",
+    "file": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/drivers/video/vdec/src/r_vdec_check_parameter.c"
+  },
+  {
+    "directory": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug",
+    "command": "\"C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/13.3 rel1/bin/arm-none-eabi-gcc.exe\" -mcpu\u003dcortex-a9 -marm -mlittle-endian -mfloat-abi\u003dhard -mfpu\u003dvfpv3-d16 -fdiagnostics-parseable-fixits -O0 -fmessage-length\u003d0 -fsigned-char -ffunction-sections -fdata-sections -fno-strict-aliasing -Wnull-dereference -Wstack-usage\u003d100 -g -gdwarf-4 -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src -std\u003dgnu11 -c -o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug/src/drivers/video/vdec/src/r_vdec_register.o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/drivers/video/vdec/src/r_vdec_register.c",
+    "file": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/drivers/video/vdec/src/r_vdec_register.c"
+  },
+  {
+    "directory": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug",
+    "command": "\"C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/13.3 rel1/bin/arm-none-eabi-gcc.exe\" -mcpu\u003dcortex-a9 -marm -mlittle-endian -mfloat-abi\u003dhard -mfpu\u003dvfpv3-d16 -fdiagnostics-parseable-fixits -O0 -fmessage-length\u003d0 -fsigned-char -ffunction-sections -fdata-sections -fno-strict-aliasing -Wnull-dereference -Wstack-usage\u003d100 -g -gdwarf-4 -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src -std\u003dgnu11 -c -o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug/src/drivers/video/vdec/src/r_vdec_register_address.o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/drivers/video/vdec/src/r_vdec_register_address.c",
+    "file": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/drivers/video/vdec/src/r_vdec_register_address.c"
+  },
+  {
+    "directory": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug",
+    "command": "\"C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/13.3 rel1/bin/arm-none-eabi-gcc.exe\" -mcpu\u003dcortex-a9 -marm -mlittle-endian -mfloat-abi\u003dhard -mfpu\u003dvfpv3-d16 -fdiagnostics-parseable-fixits -O0 -fmessage-length\u003d0 -fsigned-char -ffunction-sections -fdata-sections -fno-strict-aliasing -Wnull-dereference -Wstack-usage\u003d100 -g -gdwarf-4 -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src -std\u003dgnu11 -c -o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug/src/drivers/video/video_decoder/video_decoder.o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/drivers/video/video_decoder/video_decoder.c",
+    "file": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/drivers/video/video_decoder/video_decoder.c"
+  },
+  {
+    "directory": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug",
     "command": "\"C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/13.3 rel1/bin/arm-none-eabi-g++.exe\" -mcpu\u003dcortex-a9 -marm -mlittle-endian -mfloat-abi\u003dhard -mfpu\u003dvfpv3-d16 -fdiagnostics-parseable-fixits -O0 -fmessage-length\u003d0 -fsigned-char -ffunction-sections -fdata-sections -fno-strict-aliasing -Wnull-dereference -Wstack-usage\u003d100 -g -gdwarf-4 -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate -IC:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src -fabi-version\u003d0 -c -o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/HardwareDebug/src/mcr_camera_2026base.o C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/mcr_camera_2026base.cpp",
     "file": "C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/src/mcr_camera_2026base.cpp"
   },

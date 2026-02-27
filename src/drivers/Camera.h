@@ -10,6 +10,7 @@
 #define DRIVERS_CAMERA_H_
 
 #include "../core/IModule.h"
+#include "video/DisplayBace.h"
 #include <stdint.h>
 
 // 画像サイズ定義
@@ -50,17 +51,11 @@ public:
   // 新フレーム準備完了フラグ
   bool isFrameReady() const;
 
-  // Vfieldコールバック（割り込みから呼ばれる静的関数）
-  static void vfieldCallback();
-  static void vsyncCallback();
+  // Vfield/Vsyncコールバック（割り込みから呼ばれる関数）
+  static void vfieldCallback(DisplayBase::int_type_t int_type);
+  static void vsyncCallback(DisplayBase::int_type_t int_type);
 
 private:
-  // VDC5初期化サブルーチン
-  void initVDC5();
-
-  // DVDEC初期化サブルーチン（NTSC 3.58MHz）
-  void initDVDEC();
-
   // ビデオキャプチャ開始
   void startCapture();
 
@@ -77,6 +72,9 @@ private:
   // 輝度抽出: YCbCr422からY成分のみを抽出
   // half: 0=前半(0-59行), 1=後半(60-119行)
   void extractBrightness(int half);
+
+  // DisplayBaseのインスタンス
+  DisplayBase display_;
 
   // フレーム処理ステップカウンタ
   int frameStep_;

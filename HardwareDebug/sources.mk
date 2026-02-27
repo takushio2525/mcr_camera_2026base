@@ -83,5 +83,10 @@ CPP_DEPS :=
 SUBDIRS := \
 generate \
 src/drivers \
+src/drivers/video \
+src/drivers/video/lvds \
+src/drivers/video/vdc5/src \
+src/drivers/video/vdec/src \
+src/drivers/video/video_decoder \
 src \
 

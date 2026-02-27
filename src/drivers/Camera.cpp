@@ -7,9 +7,11 @@
  */
 
 #include "Camera.h"
+#include "Serial.h"
 #include "iodefine.h"
 #include <stdlib.h>
 #include <string.h>
+
 
 // ====================================================================
 // VDC5ビデオキャプチャ用フレームバッファ（NonCacheable領域に配置）
@@ -45,219 +47,102 @@ Camera::Camera()
 // VDC5 + DVDEC 初期化
 // ====================================================================
 void Camera::init() {
-  initVDC5();
-  initDVDEC();
+  DisplayBase::graphics_error_t error;
 
+  g_serial.printf("[Camera::init] Start Graphics_init...\n");
+  // 1. Graphics initialization process
+  error = display_.Graphics_init(NULL);
+  if (error != DisplayBase::GRAPHICS_OK) {
+    g_serial.printf("[Camera::init] ERROR at Graphics_init: %d\n", error);
+    while (1)
+      ;
+  }
+  g_serial.printf("[Camera::init] Graphics_init OK.\n");
+
+  g_serial.printf("[Camera::init] Start Graphics_Video_init...\n");
+  // 2. Video decoder initialization
+  error = display_.Graphics_Video_init(DisplayBase::INPUT_SEL_VDEC, NULL);
+  if (error != DisplayBase::GRAPHICS_OK) {
+    g_serial.printf("[Camera::init] ERROR at Graphics_Video_init: %d\n", error);
+    while (1)
+      ;
+  }
+  g_serial.printf("[Camera::init] Graphics_Video_init OK.\n");
+
+  g_serial.printf("[Camera::init] Start Graphics_Irq_Handler_Set (VSYNC)...\n");
+  // 3. Vsync callback setting
+  error = display_.Graphics_Irq_Handler_Set(DisplayBase::INT_TYPE_S0_VI_VSYNC,
+                                            0, vsyncCallback);
+  if (error != DisplayBase::GRAPHICS_OK) {
+    g_serial.printf(
+        "[Camera::init] ERROR at Graphics_Irq_Handler_Set (VSYNC): %d\n",
+        error);
+    while (1)
+      ;
+  }
+  g_serial.printf("[Camera::init] Graphics_Irq_Handler_Set (VSYNC) OK.\n");
+
+  g_serial.printf("[Camera::init] Start Video_Write_Setting...\n");
+  // 4. Video write setting (NTSC, YCbCr422, 160x120)
+  error = display_.Video_Write_Setting(
+      DisplayBase::VIDEO_INPUT_CHANNEL_0, DisplayBase::COL_SYS_NTSC_358,
+      (void *)s_frameBufA, CAM_VIDEO_BUFFER_STRIDE,
+      DisplayBase::VIDEO_FORMAT_YCBCR422, DisplayBase::WR_RD_WRSWA_32_16BIT,
+      CAM_PIXEL_VW, CAM_PIXEL_HW);
+  if (error != DisplayBase::GRAPHICS_OK) {
+    g_serial.printf("[Camera::init] ERROR at Video_Write_Setting: %d\n", error);
+    while (1)
+      ;
+  }
+  g_serial.printf("[Camera::init] Video_Write_Setting OK.\n");
+
+  g_serial.printf(
+      "[Camera::init] Start Graphics_Irq_Handler_Set (VFIELD)...\n");
+  // 5. Vfield callback setting (VIDEO_INT_TYPE = INT_TYPE_S0_VFIELD)
+  error = display_.Graphics_Irq_Handler_Set(DisplayBase::INT_TYPE_S0_VFIELD, 0,
+                                            vfieldCallback);
+  if (error != DisplayBase::GRAPHICS_OK) {
+    g_serial.printf(
+        "[Camera::init] ERROR at Graphics_Irq_Handler_Set (VFIELD): %d\n",
+        error);
+    while (1)
+      ;
+  }
+  g_serial.printf("[Camera::init] Graphics_Irq_Handler_Set (VFIELD) OK.\n");
+
+  g_serial.printf("[Camera::init] Waiting for video signal to stabilize...\n");
   // 映像信号安定待ち（約200ms）
-  // ベアメタル環境なので簡易ウェイト
   for (volatile int i = 0; i < 6000000; i++) {
   }
+  g_serial.printf("[Camera::init] Wait done.\n");
 
-  startCapture();
+  g_serial.printf(
+      "[Camera::init] Capture Start -> Stop -> Start sequence...\n");
+  // 6. Capture Start -> Stop -> Start (初期化の確実性のためのシーケンス)
+  display_.Video_Start(DisplayBase::VIDEO_INPUT_CHANNEL_0);
+  display_.Video_Stop(DisplayBase::VIDEO_INPUT_CHANNEL_0);
+  display_.Video_Start(DisplayBase::VIDEO_INPUT_CHANNEL_0);
+  g_serial.printf("[Camera::init] Sequence done.\n");
 
-  // キャプチャ開始後の安定待ち（約100ms）
-  // ※ VDC5割り込みがGICに未登録のため、Vsync/Vfield待ちの
-  //    代わりに簡易ウェイトでフレーム取得を待つ
+  // Vsync/Vfield待ちの代わりに簡易ウェイト（割り込み有効化までの代替）
   for (volatile int i = 0; i < 3000000; i++) {
   }
-}
-
-// ====================================================================
-// VDC5初期化（VideoチャネルCh0, スケーラ0を使用）
-// NTSC 160x120 YCbCr422 キャプチャ設定
-// mbed-gr-libs の DisplayBase 実装を参考にベアメタル化
-// ====================================================================
-void Camera::initVDC5() {
-  // --- VDC5チャネル0のモジュールストップ解除 ---
-  // STBCR9 bit1 = VDC50
-  CPG.STBCR9 &= ~(1u << 1);
-  volatile uint8_t dummy_rd = CPG.STBCR9;
-  (void)dummy_rd;
-
-  // --- パネルクロック設定 ---
-  // NTSC入力の場合、外部同期信号を使用するため
-  // パネルクロック（ICKSEL）は適当なソースを選択
-  // P1φ(66.67MHz) を分周して使用: DCDR=2 → 33.33MHz
-  // SYSCNT_PANEL_CLK: bit15-12=ICKSEL(0001=P1クロック), bit9-0=DCDR
-  VDC50.SYSCNT_PANEL_CLK = (uint16_t)((0x01 << 12) | 0x0002);
-
-  // 設定反映待ち
-  for (volatile int i = 0; i < 1000; i++) {
-  }
-
-  // --- 入力セレクタ設定 ---
-  // INP_SEL_CNT: ビデオデコーダ(VDEC)からの入力を選択
-  // bit28-24: INP_SEL = 00000 (VideoDecoder Ch0 入力を選択)
-  // bit16: INP_FORMAT = 0 (インターレース)
-  // bit14-12: INP_PXD_EDGE = 000 (立ち上がりエッジ)
-  VDC50.INP_SEL_CNT = 0x00000000;
-
-  // --- 外部同期信号パラメータ ---
-  // NTSC基準タイミング: 水平858サンプル, 垂直262/263ライン
-  // INP_EXT_SYNC_CNT:
-  //   bit31: INP_ENDIAN_ON = 0 (リトルエンディアン)
-  //   bit28: INP_SWAP_ON = 0
-  //   bit27: INP_VS_INV = 0 (Vsync 非反転)
-  //   bit26: INP_HS_INV = 0 (Hsync 非反転)
-  //   bit20-16: INP_FLD_DLY = 0
-  //   bit15-0: INP_H_POS = 0
-  VDC50.INP_EXT_SYNC_CNT = 0x00000000;
-
-  // 垂直位相調整
-  VDC50.INP_VSYNC_PH_ADJ = 0x00000000;
-
-  // 入力遅延調整
-  VDC50.INP_DLY_ADJ = 0x00000000;
-
-  // 入力設定更新
-  VDC50.INP_UPDATE = 0x00000001;
-
-  // --- スケーラ0（SC0）設定: ビデオキャプチャの書き込み先設定 ---
-
-  // SC0_SCL0_FRC1: 自由走行カウンタ（水平方向）
-  // NTSC: 858サンプル
-  VDC50.SC0_SCL0_FRC1 = 858u - 1u; // 水平カウント最大値
-
-  // SC0_SCL0_FRC2: 垂直方向
-  // NTSC: 525ライン（2フィールド）→ 1フィールド262/263
-  VDC50.SC0_SCL0_FRC2 = 263u - 1u; // 垂直カウント最大値
-
-  // SC0_SCL0_FRC3: 水平アクティブ表示開始位置
-  VDC50.SC0_SCL0_FRC3 = (uint32_t)(0 << 16) | 0; // VS/HS 位置
-
-  // SC0_SCL0_FRC4: フレームサイクル
-  VDC50.SC0_SCL0_FRC4 = 0x00000000;
-
-  // SC0_SCL0_FRC5: 表示エリア（水平開始/終了）
-  VDC50.SC0_SCL0_FRC5 = 0x00000000;
-
-  // SC0_SCL0_FRC6: 表示エリア（垂直開始/終了）
-  VDC50.SC0_SCL0_FRC6 = 0x00000000;
-
-  // SC0_SCL0_FRC7: フレーム制御
-  VDC50.SC0_SCL0_FRC7 = 0x00000000;
-
-  // 更新
-  VDC50.SC0_SCL0_UPDATE = 0x00000100; // bit8: SC0_SCL0_VEN_A
-
-  // --- スケーラ1: フレームバッファ書き込み設定 ---
-
-  // SC0_SCL1_WR1: 書き込み制御
-  //   bit25: SC0_RES_DS_WR_MD = 0
-  //   bit20: SC0_RES_MD = 0 (ダウンスケーリングなし)
-  //   bit15-0: 書き込みモード
-  VDC50.SC0_SCL1_WR1 = 0x00000000;
-
-  // SC0_SCL1_WR2: フレームバッファベースアドレス
-  VDC50.SC0_SCL1_WR2 = (uint32_t)s_writeBuf;
-
-  // SC0_SCL1_WR3: フレームバッファストライド
-  //   ストライド = ((160*2) + 31) & ~31 = 352
-  VDC50.SC0_SCL1_WR3 = CAM_VIDEO_BUFFER_STRIDE;
-
-  // SC0_SCL1_WR4: フレームバッファ書き込みサイズ
-  //   bit31-16: ライン数, bit15-0: 水平サイズ(バイト)
-  VDC50.SC0_SCL1_WR4 =
-      ((uint32_t)CAM_PIXEL_VW << 16) | (CAM_PIXEL_HW * CAM_DATA_SIZE_PER_PIC);
-
-  // SC0_SCL1_WR5: フレームバッファ書き込み開始
-  //   bit0: SC0_FLM_NUM = 0 (単一フレーム)
-  VDC50.SC0_SCL1_WR5 = 0x00000000;
-
-  // SC0_SCL1_WR6: YCbCr変換設定
-  //   bit31-28: WR色フォーマット = 0001 (YCbCr422)
-  //   bit27-24: バスポート幅 = 0000 (32bit)
-  //   bit8: BSTバースト転送 = 0
-  //   bit5-4: 書き込みスワップ = 10 (32_16BIT)
-  VDC50.SC0_SCL1_WR6 = (0x01 << 28) | (0x02 << 4);
-
-  // SC0_SCL1_WR7: フレームバッファ書き込みサイズ（フィールド）
-  VDC50.SC0_SCL1_WR7 = 0x00000000;
-
-  // SC0_SCL1_WR8: 書き込みバッファリング制御
-  VDC50.SC0_SCL1_WR8 = 0x00000000;
-
-  // SC0_SCL1_WR9: 書き込み制御2
-  VDC50.SC0_SCL1_WR9 = 0x00000001; // 書き込みイネーブル
-
-  // SC0_SCL1_WR10: 書き込み制御3
-  VDC50.SC0_SCL1_WR10 = 0x00000000;
-
-  // 更新
-  VDC50.SC0_SCL1_UPDATE = 0x00000110; // 書き込み設定更新
-
-  // --- VField割り込み設定 ---
-  // SYSCNT_INT1: S0_VI_VSYNC割り込みクリア・イネーブル
-  // SYSCNT_INT2: S0_VFIELD割り込みクリア・イネーブル
-  VDC50.SYSCNT_INT1 = 0x00000000;
-  VDC50.SYSCNT_INT2 = 0x00000000;
-
-  // S0_VI_VSYNC割り込みイネーブル (bit0)
-  VDC50.SYSCNT_INT4 |= (1u << 0);
-
-  // S0_VFIELD割り込みイネーブル (bit1)
-  VDC50.SYSCNT_INT4 |= (1u << 1);
-}
-
-// ====================================================================
-// DVDEC初期化（NTSC 3.58MHz カラー信号デコード）
-// ====================================================================
-void Camera::initDVDEC() {
-  // DVDEC0（チャネル0）のモジュールストップ解除は CPG.STBCR9 のVDC5に含まれる
-
-  // --- ビデオデコーダ ADC設定 ---
-  // ADCCR1: ADC入力チャネル選択
-  DVDEC0.ADCCR1 = 0x0000; // デフォルト設定（入力Ch0)
-
-  // --- 同期信号検出設定 ---
-  // SYNSCR1〜5: 同期検出パラメータ（NTSC用デフォルト）
-  DVDEC0.SYNSCR1 = 0x0000; // Hカウンタリセット位置
-  DVDEC0.SYNSCR2 = 0x0000; // 同期スライスレベル
-  DVDEC0.SYNSCR3 = 0x0000;
-  DVDEC0.SYNSCR4 = 0x0000;
-  DVDEC0.SYNSCR5 = 0x0000;
-
-  // --- タイミングジェネレータ ---
-  // TGCR1〜3: NTSC 3.58MHz 基準
-  DVDEC0.TGCR1 = 0x0000;
-  DVDEC0.TGCR2 = 0x0000;
-  DVDEC0.TGCR3 = 0x0000;
-
-  // --- AGC (自動ゲイン制御) ---
-  DVDEC0.AGCCR1 = 0x0000;
-  DVDEC0.AGCCR2 = 0x0000;
-
-  // --- カラー信号処理 ---
-  // ACCCR1〜3: ACC（自動色制御）
-  DVDEC0.ACCCR1 = 0x0000;
-  DVDEC0.ACCCR2 = 0x0000;
-  DVDEC0.ACCCR3 = 0x0000;
-
-  // TINTCR: 色合い調整（デフォルト = 0）
-  DVDEC0.TINTCR = 0x0000;
-
-  // YCDCR: Y/C分離設定
-  DVDEC0.YCDCR = 0x0000;
-
-  // 更新レジスタ
-  DVDEC0.RUPDCR = 0x0001;
+  g_serial.printf(
+      "[Camera::init] All initialization completed successfully.\n");
 }
 
 // ====================================================================
 // ビデオキャプチャ開始
 // ====================================================================
 void Camera::startCapture() {
-  // SC0_SCL1_WR9: bit0 = 書き込みイネーブル
-  VDC50.SC0_SCL1_WR9 |= 0x00000001;
-  VDC50.SC0_SCL1_UPDATE = 0x00000110;
+  display_.Video_Start(DisplayBase::VIDEO_INPUT_CHANNEL_0);
 }
 
 // ====================================================================
 // ビデオキャプチャ停止
 // ====================================================================
 void Camera::stopCapture() {
-  VDC50.SC0_SCL1_WR9 &= ~0x00000001u;
-  VDC50.SC0_SCL1_UPDATE = 0x00000110;
+  display_.Video_Stop(DisplayBase::VIDEO_INPUT_CHANNEL_0);
 }
 
 // ====================================================================
@@ -273,14 +158,15 @@ void Camera::changeFrameBuffer() {
   }
 
   // 新しいバッファアドレスをVDC5に設定
-  VDC50.SC0_SCL1_WR2 = (uint32_t)s_writeBuf;
-  VDC50.SC0_SCL1_UPDATE = 0x00000110;
+  display_.Video_Write_Change(DisplayBase::VIDEO_INPUT_CHANNEL_0,
+                              (void *)s_writeBuf, CAM_VIDEO_BUFFER_STRIDE);
 }
 
 // ====================================================================
 // Vfieldコールバック（VDC5割り込みから呼ばれる）
 // ====================================================================
-void Camera::vfieldCallback() {
+void Camera::vfieldCallback(DisplayBase::int_type_t int_type) {
+  (void)int_type;
   if (s_vfieldCount > 0) {
     s_vfieldCount--;
   }
@@ -291,7 +177,8 @@ void Camera::vfieldCallback() {
 // ====================================================================
 // Vsyncコールバック
 // ====================================================================
-void Camera::vsyncCallback() {
+void Camera::vsyncCallback(DisplayBase::int_type_t int_type) {
+  (void)int_type;
   if (s_vsyncCount > 0) {
     s_vsyncCount--;
   }

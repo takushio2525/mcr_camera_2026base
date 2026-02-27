@@ -42,6 +42,7 @@ src/mcr_camera_2026base.o: ../src/mcr_camera_2026base.cpp \
  C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/iodefines/wdt_iodefine.h \
  C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/typedefine.h \
  ../src/drivers/Camera.h ../src/drivers/../core/IModule.h \
+ ../src/drivers/video/DisplayBace.h ../src/drivers/video/pinmap.h \
  ../src/drivers/Onboard.h ../src/drivers/Serial.h
 C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/iodefine.h:
 C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/typedefine.h:
@@ -87,5 +88,7 @@ C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/iodefines/wdt_io
 C:/Users/shioz/e2_studio/workspace/mcr_camera_2026base/generate/typedefine.h:
 ../src/drivers/Camera.h:
 ../src/drivers/../core/IModule.h:
+../src/drivers/video/DisplayBace.h:
+../src/drivers/video/pinmap.h:
 ../src/drivers/Onboard.h:
 ../src/drivers/Serial.h:

@@ -10,6 +10,11 @@ RM := rm -rf
 
 # All of the sources participating in the build are defined here
 -include sources.mk
+-include src/drivers/video/video_decoder/subdir.mk
+-include src/drivers/video/vdec/src/subdir.mk
+-include src/drivers/video/vdc5/src/subdir.mk
+-include src/drivers/video/lvds/subdir.mk
+-include src/drivers/video/subdir.mk
 -include src/drivers/subdir.mk
 -include src/subdir.mk
 -include generate/subdir.mk

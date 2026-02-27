@@ -62,7 +62,7 @@ GR-PEACH (RZ/A1H) をベースとしたマイクロマウス／ロボットカ�
 - **`initOSTM0()`**: RZ/A1HのOSTM0を1ms用に設定し、GIC(INTC)へ登録。
 - **`ostm0_interrupt_callback()`**: `INT_Excep_OSTMI0` から呼ばれ、実時間をカウント(`g_timer_1ms`)し、`g_camera.update()` と `g_onboard.update()` を実行する。
 - **`INT_Excep_IRQ()`**: GIC(INTC)を用いたベクタ割り込みディスパッチャ。ICCIARから要因IDを取得し、`RelocatableVectors` から適切なハンドラへ分岐・EIOを通知する実装。
-- **`Camera::init()`**: VDC5チャネル0のモジュールストップ解除、パネルクロック設定、入力セレクタ設定（VDEC入力）、スケーラ0/1のフレームバッファ書き込み設定（160x120 YCbCr422）、DVDEC0のNTSC 3.58MHzカラーデコーダ初期化を行い、ビデオキャプチャを開始する。
+- **`Camera::init()`**: `mbed-gr-libs`由来の`DisplayBase` API（`Graphics_init`, `Graphics_Video_init`, `Video_Write_Setting`等）を使用し、VDC5およびDVDECの初期化（NTSC 160x120 YCbCr422入力）とメモリ書き込み設定を行い、ビデオキャプチャを開始する。
 - **`Camera::update()`**: 1ms割り込みから呼ばれ、フレーム処理をステップ分割で実行する。ステップ0-1: `imageCopy`（VDC5フレームバッファからYCbCr422データをコピー）、ステップ2-3: `extractBrightness`（Y成分のみ抽出し`imageBuffer_`に格納）。Vfieldコールバックによるフレーム切替検出でステップをリセット。
 - **`Camera::getPixel(x, y)`**: 輝度バッファ`imageBuffer_`から座標(x, y)のピクセル値(0-255)を返す。
 - **`Camera::thresholdConvert(gyou, threshold, diff)`**: 参考プロジェクトの`shikiichi_henkan`と同等の処理。指定行の8点（x=31,43,54,71,88,105,116,128）の輝度値を取得し、閾値を自動調整して2進数8ビットに変換する。
@@ -74,6 +74,20 @@ GR-PEACH (RZ/A1H) をベースとしたマイクロマウス／ロボットカ�
 - **`g_serial`**: `Serial`クラスのグローバルインスタンス。デバッグ出力の用途として各所で使用する。
 
 ## 24. 修正履歴
+
+### 2026-02-27 15:20: Camera.cppの初期化処理をDisplayBase APIに置換
+
+**変更内容:**
+- `src/drivers/Camera.h` / `Camera.cpp` におけるVDC5およびDVDECのレジスタ直叩き処理を廃止。
+- `mbed-gr-libs` 由来の `DisplayBase` API を使った初期化（参考プロジェクトと同一フロー）に変更。
+- P10_0等のピン定義や `mbed_assert` など、必要なmbed-os依存ダミーヘッダ（`pinmap.h`, `mbed_assert.h`）を `src/drivers/video/` に追加。
+
+**解消した問題/不満:**
+- 以前のコードでは初期化レジスタ値がほぼ0に設定されており、カメラが正しく初期化されなかった問題。
+
+**解決方法:**
+- 実績のある `mbed-gr-libs` の `gr_peach_vdc5.c` 等を直接活用し、高レベルAPIである `Video_Write_Setting` 等を呼び出すことで正確なレジスタ設定を実現した。
+
 
 ### 2026-02-27 13:45: カメラ入力クラス（Camera）の実装
 
