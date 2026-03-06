@@ -233,8 +233,21 @@
 \toprule
 \textbf{版} & \textbf{日付} & \textbf{著者} & \textbf{変更内容} \\
 \midrule
-1.0 & 2026-02-19 & Shiozawa & 初版作成 \\
-1.1 & 2026-05-03 & Shiozawa & RunController クラス（メイン走行制御）追加。エンコーダ距離制御をタイマー（ms単位）に置換。 \\
+1.0  & 2026-02-19 & Shiozawa & 初版作成 \\
+1.1  & 2026-02-24 & Shiozawa & Onboardクラス・1msタイマーの実装 \\
+1.2  & 2026-02-24 & Shiozawa & オンボードクラスのインスタンス化・GPIO初期化修正 \\
+1.3  & 2026-02-24 & Shiozawa & GIC割り込みディスパッチャ（IRQ）の実装 \\
+1.4  & 2026-02-24 & Shiozawa & CPUベクタベースアドレス(VBAR)の初期化追加 \\
+1.5  & 2026-02-24 & Shiozawa & 割り込み動作の根本原因（Cortex-A9）修正 \\
+1.6  & 2026-02-24 & Shiozawa & OSTMタイマー周期がハードに反映されない問題の修正 \\
+1.7  & 2026-02-24 & Shiozawa & タイマー割り込みが1回しか発生しない不具合の修正 \\
+1.8  & 2026-02-24 & Shiozawa & 個別割り込みハンドラからの不正リターン命令修正 \\
+1.9  & 2026-02-24 & Shiozawa & IModuleインターフェース実装・Onboardグローバル化 \\
+1.10 & 2026-02-24 & Shiozawa & OnboardのsetLedをsetUserLed/setColorLedに分割 \\
+1.11 & 2026-02-24 & Shiozawa & シリアル通信（Serial）クラスの実装 \\
+1.12 & 2026-02-26 & Shiozawa & LaTeXコンパイル用DevContainer環境の統合 \\
+1.13 & 2026-03-06 & Shiozawa & SPEC.mdの内容をTeXに統合・README.md新規作成 \\
+1.14 & 2026-05-03 & Shiozawa & RunController クラス（メイン走行制御）追加。エンコーダ距離制御をタイマー（ms単位）に置換。 \\
 \bottomrule
 \end{tabularx}
 
@@ -1109,13 +1122,13 @@ MTU2レジスタ (TGRB\_0 / TGRD\_0) へパルス幅を書き込む。
 
 \apisection{概要}
 
-GR-PEACH ボード上のRGB LED (3個) + ユーザーLED (1個) およびユーザースイッチ (1個) を制御する。
+GR-PEACH ボード上のRGB LED (3色) + ユーザーLED (1個) およびユーザースイッチ (1個) を制御する。
 LED はラッチ方式、スイッチは即時読み取り。
 
 \apisection{機能一覧}
 
 \begin{itemize}[nosep]
-  \item RGB LED 3個 + ユーザーLED 1個の制御
+  \item フルカラーLED (RGB 3色) + ユーザーLED 1個の制御
   \item ラッチ方式によるLED出力
   \item ユーザースイッチの即時読み取り
 \end{itemize}
@@ -1126,7 +1139,10 @@ LED はラッチ方式、スイッチは即時読み取り。
 \toprule
 \textbf{変数名} & \textbf{型} & \textbf{初期値} & \textbf{説明} \\
 \midrule
-\texttt{\_ledState[4]} & \texttt{int[4]} & \texttt{\{0,0,0,0\}} & 各LED状態 (0:消灯, 1:点灯) \\
+\texttt{\_userLed}   & \texttt{int} & \texttt{0} & ユーザーLED状態 (0:消灯, 1:点灯) \\
+\texttt{\_colorR}    & \texttt{int} & \texttt{0} & フルカラーLED 赤 (0:消灯, 1:点灯) \\
+\texttt{\_colorG}    & \texttt{int} & \texttt{0} & フルカラーLED 緑 (0:消灯, 1:点灯) \\
+\texttt{\_colorB}    & \texttt{int} & \texttt{0} & フルカラーLED 青 (0:消灯, 1:点灯) \\
 \bottomrule
 \end{tabularx}
 
@@ -1144,19 +1160,30 @@ GPIO初期化を行う。全LEDを消灯し、スイッチを入力モードに�
 \texttt{void update(void)}
 
 \vspace{1.5mm}
-内部変数のLED状態をGPIOへ反映する。内部で \texttt{writeLed()} を各LED IDに対して呼び出す。
+内部変数のLED状態をGPIOへ反映する。Low Active（RGB LED）とHigh Active（ユーザーLED）を考慮して出力する。
 \end{funcblock}
 
-\begin{funcblock}{setLed(id, val)}
-\texttt{void setLed(int id, int val)}
+\begin{funcblock}{setUserLed(val)}
+\texttt{void setUserLed(int val)}
 
 \vspace{1.5mm}
-指定LEDの状態を内部変数に保存する（ラッチ方式）。
+ユーザーLEDの状態を内部変数に保存する（ラッチ方式）。ハードウェアにはまだ反映しない。
+
+\vspace{1.5mm}
+\textbf{引数:} \texttt{val} (\texttt{int}) --- 0:消灯, 1:点灯
+\end{funcblock}
+
+\begin{funcblock}{setColorLed(r, g, b)}
+\texttt{void setColorLed(int r, int g, int b)}
+
+\vspace{1.5mm}
+フルカラーLED（RGB）の状態を内部変数に保存する（ラッチ方式）。ハードウェアにはまだ反映しない。
 
 \vspace{1.5mm}
 \begin{itemize}[nosep, leftmargin=*]
-  \item \texttt{id} (\texttt{int}) --- LED番号 (0:Red, 1:Green, 2:Blue, 3:User)
-  \item \texttt{val} (\texttt{int}) --- 0:消灯, 1:点灯
+  \item \texttt{r} (\texttt{int}) --- 赤 (0:消灯, 1:点灯)
+  \item \texttt{g} (\texttt{int}) --- 緑 (0:消灯, 1:点灯)
+  \item \texttt{b} (\texttt{int}) --- 青 (0:消灯, 1:点灯)
 \end{itemize}
 \end{funcblock}
 
@@ -1165,30 +1192,6 @@ GPIO初期化を行う。全LEDを消灯し、スイッチを入力モードに�
 
 \vspace{1.5mm}
 ユーザースイッチの状態を即時読み取りで返す。ラッチ方式\textbf{ではなく}、呼び出し時にGPIOを直接読む。
-内部で \texttt{readSw()} を呼び出す。
-
-\vspace{1.5mm}
-\textbf{戻り値:} \texttt{int} --- 1:押下, 0:解放
-\end{funcblock}
-
-\begin{funcblock}{writeLed(id, val) \normalfont\small\color{gray}[内部]}
-\texttt{void writeLed(int id, int val)}
-
-\vspace{1.5mm}
-指定LEDのGPIOを直接操作する。RGB LEDはLow Active、ユーザーLEDはHigh Active。
-
-\vspace{1.5mm}
-\begin{itemize}[nosep, leftmargin=*]
-  \item \texttt{id} (\texttt{int}) --- LED番号
-  \item \texttt{val} (\texttt{int}) --- 論理的な点灯/消灯状態
-\end{itemize}
-\end{funcblock}
-
-\begin{funcblock}{readSw() \normalfont\small\color{gray}[内部]}
-\texttt{int readSw(void)}
-
-\vspace{1.5mm}
-SW用GPIO (P6\_0) を読み取り、論理値に変換して返す。Low = 押下。
 
 \vspace{1.5mm}
 \textbf{戻り値:} \texttt{int} --- 1:押下, 0:解放
@@ -1198,13 +1201,13 @@ SW用GPIO (P6\_0) を読み取り、論理値に変換して返す。Low = 押�
 
 \begin{tabularx}{\textwidth}{l l l l X}
 \toprule
-\textbf{デバイス} & \textbf{ID} & \textbf{ピン} & \textbf{論理} & \textbf{説明} \\
+\textbf{デバイス} & \textbf{ピン} & \textbf{論理} & \textbf{説明} \\
 \midrule
-LED Red    & 0 & P6\_13 & Low Active  & 赤色 LED \\
-LED Green  & 1 & P6\_14 & Low Active  & 緑色 LED \\
-LED Blue   & 2 & P6\_15 & Low Active  & 青色 LED \\
-LED User   & 3 & P6\_12 & High Active & ユーザー LED \\
-SW User    & -- & P6\_0   & Low = 押下   & プルアップ、GND 接続 \\
+LED Red    & P6\_13 & Low Active  & 赤色 LED \\
+LED Green  & P6\_14 & Low Active  & 緑色 LED \\
+LED Blue   & P6\_15 & Low Active  & 青色 LED \\
+LED User   & P6\_12 & High Active & ユーザー LED \\
+SW User    & P6\_0   & Low = 押下   & プルアップ、GND 接続 \\
 \bottomrule
 \end{tabularx}
 
