@@ -127,17 +127,22 @@ void Camera::init()
   }
   g_serial.printf("[Camera::init] Graphics_Irq_Handler_Set (VFIELD) OK.\n");
 
-  g_serial.printf("[Camera::init] Waiting for video signal to stabilize...\n");
-  // 映像信号安定待ち（約200ms）
-  for (volatile int i = 0; i < 6000000; i++)
+  // 6. Capture Start -> Stop -> Start (参考プロジェクトと同じ初期化シーケンス)
+  // XIP環境ではbusy-waitループが極めて遅い（L1キャッシュ無効でSPI Flashから
+  // 毎回フェッチするため実効2〜5MHz相当 → 6,000,000回で30秒以上かかる）。
+  // 代わりにVideo_Startを先に呼んでVsync割り込みを発生させ、
+  // 割り込みベースのカウントで約200msを測る（NTSC 60Hz × 12回 = 200ms）。
+  g_serial.printf("[Camera::init] Video_Start (for Vsync stabilize wait)...\n");
+  s_vsyncCount = 12; // Vsync 12回 ≈ 200ms
+  display_.Video_Start(DisplayBase::VIDEO_INPUT_CHANNEL_0);
+
+  // Vsync 12回分待ち（割り込み駆動: XIP速度に依存しない）
+  for (volatile int timeout = 0; s_vsyncCount > 0 && timeout < 50000000;
+       timeout++)
   {
   }
-  g_serial.printf("[Camera::init] Wait done.\n");
+  g_serial.printf("[Camera::init] Stabilized (12 Vsyncs). Restart...\n");
 
-  g_serial.printf(
-      "[Camera::init] Capture Start -> Stop -> Start sequence...\n");
-  // 6. Capture Start -> Stop -> Start (参考プロジェクトと同じ初期化シーケンス)
-  display_.Video_Start(DisplayBase::VIDEO_INPUT_CHANNEL_0);
   display_.Video_Stop(DisplayBase::VIDEO_INPUT_CHANNEL_0);
   display_.Video_Start(DisplayBase::VIDEO_INPUT_CHANNEL_0);
   g_serial.printf("[Camera::init] Sequence done.\n");
