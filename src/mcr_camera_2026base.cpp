@@ -206,10 +206,16 @@ int main(void)
   // 参考プロジェクト debug_mode case 3 と完全に同じパターン
   int x, y, c;
 
-  // 行バッファ: 1行分の出力を一括で行うことでprintf回数を削減
-  // ANSI色コード付き1ピクセル = 最大13文字 (\x1b[44m1\x1b[49m)
-  // 160px * 13 + ヘッダ4文字 + 末尾6文字 + 余裕 = 約2200文字
-  static char lineBuf[2560];
+  // センサーX座標テーブル: thresholdConvert の8点と同じ位置
+  // この8点のみ色付きで表示し、それ以外は '0'/'1' の1文字で出力する
+  // → 1行あたり最大 8×11 + 152×1 + ヘッダ4 + 末尾4 = 約248文字
+  static const int SENSOR_X[8] = {31, 43, 54, 71, 88, 105, 116, 128};
+  static bool s_isSensor[CAM_PIXEL_HW];
+  for (int i = 0; i < (int)CAM_PIXEL_HW; i++) s_isSensor[i] = false;
+  for (int i = 0; i < 8; i++) s_isSensor[SENSOR_X[i]] = true;
+
+  // 行バッファ: センサー位置(8点)×11文字 + 通常ピクセル(152)×1文字 + 余裕
+  static char lineBuf[512];
 
   while (1)
   {
@@ -259,16 +265,16 @@ int main(void)
         for (x = 0; x < 160; x++)
         {
           c = g_camera.getPixel(x, y) >= DEBUG_THRESHOLD ? 1 : 0;
-          if (c == 1)
+          if (s_isSensor[x])
           {
-            // 白（閾値以上）の部分は背景を青色にして表示
-            // \x1b[44m1\x1b[49m = 13文字
+            // センサー位置のみ色付き: 明るい=青背景, 暗い=赤背景
+            // \x1b[44m or \x1b[41m + '0'/'1' + \x1b[49m = 11文字
             lineBuf[pos++] = '\x1b';
             lineBuf[pos++] = '[';
             lineBuf[pos++] = '4';
-            lineBuf[pos++] = '4';
+            lineBuf[pos++] = (c == 1) ? '4' : '1'; // 44m=青, 41m=赤
             lineBuf[pos++] = 'm';
-            lineBuf[pos++] = '1';
+            lineBuf[pos++] = '0' + c;
             lineBuf[pos++] = '\x1b';
             lineBuf[pos++] = '[';
             lineBuf[pos++] = '4';
@@ -277,7 +283,8 @@ int main(void)
           }
           else
           {
-            lineBuf[pos++] = '0';
+            // センサー位置以外: 1文字のみ（データ量を大幅削減）
+            lineBuf[pos++] = '0' + c;
           }
         }
         // 行末
