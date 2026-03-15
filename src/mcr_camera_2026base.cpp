@@ -34,6 +34,7 @@ extern void __main()
 #include "drivers/Serial.h"
 #include "system/system_init.h"
 #include "drivers/Motor.h"
+#include "drivers/LineDetector.h"
 
 // OSTM0 タイマー割り込み (1ms周期)
 // GR-PEACH (RZ/A1H) の周辺クロック P0Φ は 33.33MHz
@@ -211,6 +212,10 @@ int main(void)
   g_motor.init();
   g_serial.printf("モーター初期化完了\n");
 
+  // ライン検出初期化
+  g_lineDetector.init();
+  g_serial.printf("ライン検出初期化完了\n");
+
   g_serial.printf("タイマー開始\n");
   g_serial.printf("デバッグ表示: 閾値=%d, 行=%d\n", DEBUG_THRESHOLD,
                   DEBUG_DISPLAY_ROW);
@@ -220,8 +225,9 @@ int main(void)
   // 参考プロジェクト debug_mode case 3 と完全に同じパターン
   int x, y, c;
 
-  // 行バッファ: 1検出時 11文字 × 160px + ヘッダ4 + 末尾4 = 最大 1768文字
-  static char lineBuf[2048];
+  // 行バッファ: ハイライト時 最大11文字 × 160px + ヘッダ4 + 末尾4 = 最大 1768文字
+  // + 偏差位置の黄色背景分の余裕
+  static char lineBuf[2560];
 
   while (1)
   {
@@ -230,6 +236,8 @@ int main(void)
     {
       s_frameCount++;
       g_camera.clearFrameReady();
+      // フレーム完了時にライン検出を実行
+      g_lineDetector.update();
     }
 
     // 一定間隔でシリアル出力（参考プロジェクトと同じ 200ms）
@@ -243,6 +251,15 @@ int main(void)
       // タイマー値・フレーム更新カウンタを表示（デバッグ用）
       g_serial.printf("T=%lu Frame=%lu              \r\n",
                       g_timer_1ms, s_frameCount);
+
+      // ライン検出フラグを表示
+      g_serial.printf("Cross=%d Left=%d Right=%d Center=%d Dev[%d]=%d        \r\n",
+                      g_lineDetector.isCrossLine() ? 1 : 0,
+                      g_lineDetector.isLeftLine() ? 1 : 0,
+                      g_lineDetector.isRightLine() ? 1 : 0,
+                      g_lineDetector.isCenterLine() ? 1 : 0,
+                      g_lineDetector.getDetectRow(),
+                      g_lineDetector.getDeviation(g_lineDetector.getDetectRow()));
 
       // ヘッダ行（参考プロジェクト準拠）
       g_serial.print(
@@ -271,7 +288,25 @@ int main(void)
         for (x = 0; x < 160; x++)
         {
           c = g_camera.getPixel(x, y) >= DEBUG_THRESHOLD ? 1 : 0;
-          if (c == 1)
+
+          // 偏差位置（検出されたライン中心）を黄色背景でハイライト
+          // 参考プロジェクト: if (x == -allDeviation[y] + 80) printf("\x1b[43m%d\x1b[49m", c);
+          if (x == -g_lineDetector.getDeviation(y) + LineDetector::CENTER)
+          {
+            // 黄色背景 \x1b[43m + 数字 + \x1b[49m
+            lineBuf[pos++] = '\x1b';
+            lineBuf[pos++] = '[';
+            lineBuf[pos++] = '4';
+            lineBuf[pos++] = '3';
+            lineBuf[pos++] = 'm';
+            lineBuf[pos++] = '0' + c;
+            lineBuf[pos++] = '\x1b';
+            lineBuf[pos++] = '[';
+            lineBuf[pos++] = '4';
+            lineBuf[pos++] = '9';
+            lineBuf[pos++] = 'm';
+          }
+          else if (c == 1)
           {
             // 1検出: 白背景 \x1b[47m + '1' + \x1b[49m
             lineBuf[pos++] = '\x1b';
