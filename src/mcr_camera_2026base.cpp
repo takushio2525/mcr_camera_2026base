@@ -213,7 +213,7 @@ int main(void)
   int x, y, c;
 
   // センサーX座標テーブル: thresholdConvert の8点と同じ位置
-  // この8点のみ色付きで表示し、それ以外は '0'/'1' の1文字で出力する
+  // この8点で1検出時のみ白背景で表示し、それ以外は '0'/'1' の1文字で出力する
   // → 1行あたり最大 8×11 + 152×1 + ヘッダ4 + 末尾4 = 約248文字
   static const int SENSOR_X[8] = {31, 43, 54, 71, 88, 105, 116, 128};
   static bool s_isSensor[CAM_PIXEL_HW];
@@ -273,19 +273,27 @@ int main(void)
           c = g_camera.getPixel(x, y) >= DEBUG_THRESHOLD ? 1 : 0;
           if (s_isSensor[x])
           {
-            // センサー位置のみ色付き: 明るい=青背景, 暗い=赤背景
-            // \x1b[44m or \x1b[41m + '0'/'1' + \x1b[49m = 11文字
-            lineBuf[pos++] = '\x1b';
-            lineBuf[pos++] = '[';
-            lineBuf[pos++] = '4';
-            lineBuf[pos++] = (c == 1) ? '4' : '1'; // 44m=青, 41m=赤
-            lineBuf[pos++] = 'm';
-            lineBuf[pos++] = '0' + c;
-            lineBuf[pos++] = '\x1b';
-            lineBuf[pos++] = '[';
-            lineBuf[pos++] = '4';
-            lineBuf[pos++] = '9';
-            lineBuf[pos++] = 'm';
+            if (c == 1)
+            {
+              // センサー位置で1検出: 白背景
+              // \x1b[47m + '1' + \x1b[49m = 11文字
+              lineBuf[pos++] = '\x1b';
+              lineBuf[pos++] = '[';
+              lineBuf[pos++] = '4';
+              lineBuf[pos++] = '7';
+              lineBuf[pos++] = 'm';
+              lineBuf[pos++] = '1';
+              lineBuf[pos++] = '\x1b';
+              lineBuf[pos++] = '[';
+              lineBuf[pos++] = '4';
+              lineBuf[pos++] = '9';
+              lineBuf[pos++] = 'm';
+            }
+            else
+            {
+              // センサー位置で0検出: 色なし
+              lineBuf[pos++] = '0';
+            }
           }
           else
           {
