@@ -81,10 +81,10 @@ void Onboard::update() {
 }
 
 int Onboard::sw() {
-  // ユーザースイッチ(P6_0)はMbed側ソースと実機挙動から active-high と推測。
-  // (PPR6 & 1) が 1 のとき押下と判定する。
-  if ((GPIO.PPR6 & (1 << PIN_SW)) != 0) {
-    return 1; // Pressed // Active High: 押すと1になる
+  // ユーザースイッチ(P6_0)は active-low（押すとLow）。
+  // (PPR6 & 1) が 0 のとき押下と判定する。
+  if ((GPIO.PPR6 & (1 << PIN_SW)) == 0) {
+    return 1; // Pressed（active-low: 押すと0になる）
   } else {
     return 0; // Released
   }

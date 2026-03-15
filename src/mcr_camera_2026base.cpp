@@ -161,16 +161,93 @@ void ostm0_interrupt_callback(void)
     g_onboard.setUserLed(toggle);
   }
 
-  // スイッチ状態でモーター＋フルカラーLEDを制御
-  if (g_onboard.sw())
+  // モーターランプ制御ステートマシン
+  // ボタン押下中: 正転加速→正転減速→停止→逆転加速→逆転減速→停止 を繰り返す
   {
-    g_motor.set(50, 50);
-    g_onboard.setColorLed(1, 1, 1);
-  }
-  else
-  {
-    g_motor.stop();
-    g_onboard.setColorLed(0, 0, 0);
+    // ステート定義
+    enum MotorPhase {
+      RAMP_UP_FWD,    // 正転加速 (2秒)
+      RAMP_DOWN_FWD,  // 正転減速 (2秒)
+      STOP_PAUSE1,    // 停止 (0.5秒)
+      RAMP_UP_REV,    // 逆転加速 (2秒)
+      RAMP_DOWN_REV,  // 逆転減速 (2秒)
+      STOP_PAUSE2     // 停止 (0.5秒)
+    };
+
+    static const int RAMP_TIME = 2000;   // 加減速時間 [ms]
+    static const int PAUSE_TIME = 500;   // 停止時間 [ms]
+    static const int MAX_SPEED = 100;    // 最大速度 [%]
+
+    static MotorPhase phase = RAMP_UP_FWD;
+    static int counter = 0;
+
+    if (g_onboard.sw())
+    {
+      int speed = 0;
+
+      switch (phase)
+      {
+      case RAMP_UP_FWD:
+        // 正転: 0→MAX_SPEED (2秒)
+        speed = MAX_SPEED * counter / RAMP_TIME;
+        g_motor.set(speed, speed);
+        g_onboard.setColorLed(0, 1, 0); // 緑: 正転加速
+        counter++;
+        if (counter >= RAMP_TIME) { counter = 0; phase = RAMP_DOWN_FWD; }
+        break;
+
+      case RAMP_DOWN_FWD:
+        // 正転: MAX_SPEED→0 (2秒)
+        speed = MAX_SPEED - MAX_SPEED * counter / RAMP_TIME;
+        g_motor.set(speed, speed);
+        g_onboard.setColorLed(0, 0, 1); // 青: 正転減速
+        counter++;
+        if (counter >= RAMP_TIME) { counter = 0; phase = STOP_PAUSE1; }
+        break;
+
+      case STOP_PAUSE1:
+        // 停止 (0.5秒)
+        g_motor.stop();
+        g_onboard.setColorLed(1, 0, 0); // 赤: 停止中
+        counter++;
+        if (counter >= PAUSE_TIME) { counter = 0; phase = RAMP_UP_REV; }
+        break;
+
+      case RAMP_UP_REV:
+        // 逆転: 0→-MAX_SPEED (2秒)
+        speed = MAX_SPEED * counter / RAMP_TIME;
+        g_motor.set(-speed, -speed);
+        g_onboard.setColorLed(0, 1, 1); // シアン: 逆転加速
+        counter++;
+        if (counter >= RAMP_TIME) { counter = 0; phase = RAMP_DOWN_REV; }
+        break;
+
+      case RAMP_DOWN_REV:
+        // 逆転: -MAX_SPEED→0 (2秒)
+        speed = MAX_SPEED - MAX_SPEED * counter / RAMP_TIME;
+        g_motor.set(-speed, -speed);
+        g_onboard.setColorLed(1, 0, 1); // マゼンタ: 逆転減速
+        counter++;
+        if (counter >= RAMP_TIME) { counter = 0; phase = STOP_PAUSE2; }
+        break;
+
+      case STOP_PAUSE2:
+        // 停止 (0.5秒)
+        g_motor.stop();
+        g_onboard.setColorLed(1, 0, 0); // 赤: 停止中
+        counter++;
+        if (counter >= PAUSE_TIME) { counter = 0; phase = RAMP_UP_FWD; }
+        break;
+      }
+    }
+    else
+    {
+      // ボタン離した: 即停止、ステートリセット
+      g_motor.stop();
+      g_onboard.setColorLed(0, 0, 0);
+      phase = RAMP_UP_FWD;
+      counter = 0;
+    }
   }
 
   g_onboard.update();
