@@ -83,9 +83,8 @@ private:
   // フレーム処理ステップカウンタ
   int frameStep_;
 
-  // トップ/ボトムフィールドトグル
+  // トップ/ボトムフィールドトグル (0=トップ, 1=ボトム)
   volatile int fieldToggle_;
-  volatile int fieldToggleBuf_;
 
   // フレーム処理開始時にキャプチャしたフィールド値
   // 4ステップ全体で同じ値を使用するため

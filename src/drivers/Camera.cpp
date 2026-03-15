@@ -37,7 +37,7 @@ Camera g_camera;
 // コンストラクタ
 // ====================================================================
 Camera::Camera()
-    : frameStep_(0), fieldToggle_(1), fieldToggleBuf_(0), capturedField_(0),
+    : frameStep_(0), fieldToggle_(1), capturedField_(0),
       frameReady_(false)
 {
   memset((void *)imageBuffer_, 0, sizeof(imageBuffer_));
@@ -55,7 +55,6 @@ void Camera::init()
   display_ = DisplayBase();
   frameStep_ = 0;
   fieldToggle_ = 1;
-  fieldToggleBuf_ = 0;
   capturedField_ = 0;
   frameReady_ = false;
   memset((void *)imageBuffer_, 0, sizeof(imageBuffer_));
@@ -157,10 +156,14 @@ void Camera::init()
   g_serial.printf("[Camera::init] WaitVsync done.\n");
 
   // WaitVfield(2) 相当: Vfieldが2回発生するまで待つ
-  s_vfieldCount = 2;
-  for (volatile int timeout = 0; s_vfieldCount > 0 && timeout < 10000000;
-       timeout++)
+  // s_vfieldCount は単調増加カウンタなので開始値からの差分で判定する
   {
+    volatile int32_t vfield_start = s_vfieldCount;
+    for (volatile int timeout = 0;
+         (s_vfieldCount - vfield_start) < 2 && timeout < 10000000;
+         timeout++)
+    {
+    }
   }
   g_serial.printf(
       "[Camera::init] All initialization completed successfully.\n");
@@ -209,10 +212,9 @@ void Camera::changeFrameBuffer()
 void Camera::vfieldCallback(DisplayBase::int_type_t int_type)
 {
   (void)int_type;
-  if (s_vfieldCount > 0)
-  {
-    s_vfieldCount--;
-  }
+  // 単調増加カウンタ: update() が消費する (0にリセット)
+  // 何回トグルしても「1回以上来たか」を確実に検出できる
+  s_vfieldCount++;
   // トップ/ボトムフィールドのトグル
   s_vfieldToggle = (s_vfieldToggle == 0) ? 1 : 0;
 }
@@ -243,13 +245,14 @@ void Camera::vsyncCallback(DisplayBase::int_type_t int_type)
 // ====================================================================
 void Camera::update()
 {
-  // フレーム処理完了後: 次のVfieldトグル変化を待って新フレームを開始
+  // フレーム処理完了後: 次の Vfield 発生を待って新フレームを開始
+  // s_vfieldCount > 0 なら 1回以上 Vfield が来ているので即開始
   // 待ち中はすぐにリターンするため、メインループにCPU時間が返る
   if (frameStep_ > 3)
   {
-    if ((int)s_vfieldToggle != fieldToggleBuf_)
+    if (s_vfieldCount > 0)
     {
-      fieldToggleBuf_ = (int)s_vfieldToggle;
+      s_vfieldCount = 0; // 消費
       frameStep_ = 0;
       frameReady_ = false;
     }

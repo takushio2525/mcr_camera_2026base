@@ -4,7 +4,9 @@
 MEMORY {
     BOOT_LOADER : ORIGIN = 0x18000000, LENGTH = 0x00004000
     SFLASH      : ORIGIN = 0x18004000, LENGTH = 0x07FFC000
-    RAM         : ORIGIN = 0x20020000, LENGTH = 0x00500000
+    TTB_MEM     : ORIGIN = 0x20000000, LENGTH = 0x00004000  /* MMU 翻訳テーブル: 16KB, 16KB アライン */
+    NC_RAM      : ORIGIN = 0x60020000, LENGTH = 0x00020000  /* NC SRAM ミラー: 128KB (フレームバッファ用) */
+    RAM         : ORIGIN = 0x20040000, LENGTH = 0x004C0000  /* キャッシュ有効 SRAM */
 }
 
 SECTIONS
@@ -107,8 +109,26 @@ SECTIONS
         _mdata = .;
     } > SFLASH
 
+    /* MMU 翻訳テーブル (16KB, NOLOAD: フラッシュ領域を消費しない) */
+    .mmu_ttb (NOLOAD) : ALIGN(0x4000)
+    {
+        __ttb_base = .;
+        . += 0x4000;
+    } > TTB_MEM
+
+    /* NonCacheable BSS (SRAM の NC ミラー 0x60020000 に配置)
+     * VDC5 DMA フレームバッファ。CPU も NC アドレス経由で読むため
+     * キャッシュの影響なく常に最新データが取れる。 */
+    .nc_bss (NOLOAD) :
+    {
+        __nc_bss_start = .;
+        *(.NC_BSS*)
+        . = ALIGN(32);
+        __nc_bss_end = .;
+    } > NC_RAM
+
     /* 初期化済みデータ (SFLASHからRAMへコピーされる) */
-    .data 0x20020000 : AT (_mdata)
+    .data 0x20040000 : AT (_mdata)
     {
         _data = .;
         *(.data)

@@ -32,6 +32,7 @@ extern void __main()
 #include "drivers/Camera.h"
 #include "drivers/Onboard.h"
 #include "drivers/Serial.h"
+#include "system/system_init.h"
 
 // OSTM0 タイマー割り込み (1ms周期)
 // GR-PEACH (RZ/A1H) の周辺クロック P0Φ は 33.33MHz
@@ -172,6 +173,11 @@ void ostm0_interrupt_callback(void)
 
 int main(void)
 {
+  // MMU + L1 キャッシュ有効化
+  // FPU有効化 → TLB/キャッシュ無効化 → MMU設定 → MMU有効化 → キャッシュ有効化
+  // シリアルは未初期化なのでこの中でシリアル出力は行わない
+  SystemInit();
+
   // オンボードLED/SWの初期化
   g_onboard.init();
 
