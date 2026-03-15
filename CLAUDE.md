@@ -18,6 +18,9 @@ GR-PEACH (RZ/A1H, ARM Cortex-A9) をターゲットとしたベアメタルC/C++
 - **ビルド構成**: HardwareDebug
 - **実行方式**: XIP（SPIフラッシュ直接実行、MMU/L1キャッシュ無効）
 
+e2 studio の GUI からビルド・確認を行う。**Claude はビルドコマンドを実行しない。**
+コードを作成・編集したらユーザーが e2 studio でビルドして確認する。
+
 e2 studio の GUI からビルド。コマンドラインビルドは非対応。
 
 ---
