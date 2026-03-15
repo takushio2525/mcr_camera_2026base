@@ -33,6 +33,7 @@ extern void __main()
 #include "drivers/Onboard.h"
 #include "drivers/Serial.h"
 #include "system/system_init.h"
+#include "drivers/Motor.h"
 
 // OSTM0 タイマー割り込み (1ms周期)
 // GR-PEACH (RZ/A1H) の周辺クロック P0Φ は 33.33MHz
@@ -149,6 +150,7 @@ void ostm0_interrupt_callback(void)
 
   // カメラのフレーム周期処理（参考プロジェクトと同じく割り込み内で実行）
   g_camera.update();
+  g_motor.update();
 
   // 1秒ごとにUSER LEDをトグル
   if (g_timer_1ms % 1000 == 0)
@@ -158,13 +160,15 @@ void ostm0_interrupt_callback(void)
     g_onboard.setUserLed(toggle);
   }
 
-  // スイッチ状態でフルカラーLEDを制御
+  // スイッチ状態でモーター＋フルカラーLEDを制御
   if (g_onboard.sw())
   {
+    g_motor.set(50, 50);
     g_onboard.setColorLed(1, 1, 1);
   }
   else
   {
+    g_motor.stop();
     g_onboard.setColorLed(0, 0, 0);
   }
 
@@ -202,6 +206,10 @@ int main(void)
 
   // OSTM0タイマー割り込みを設定・開始（1ms周期）
   initOSTM0();
+
+  // モーター初期化
+  g_motor.init();
+  g_serial.printf("モーター初期化完了\n");
 
   g_serial.printf("タイマー開始\n");
   g_serial.printf("デバッグ表示: 閾値=%d, 行=%d\n", DEBUG_THRESHOLD,
