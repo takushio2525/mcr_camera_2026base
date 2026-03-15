@@ -212,16 +212,8 @@ int main(void)
   // 参考プロジェクト debug_mode case 3 と完全に同じパターン
   int x, y, c;
 
-  // センサーX座標テーブル: thresholdConvert の8点と同じ位置
-  // この8点で1検出時のみ白背景で表示し、それ以外は '0'/'1' の1文字で出力する
-  // → 1行あたり最大 8×11 + 152×1 + ヘッダ4 + 末尾4 = 約248文字
-  static const int SENSOR_X[8] = {31, 43, 54, 71, 88, 105, 116, 128};
-  static bool s_isSensor[CAM_PIXEL_HW];
-  for (int i = 0; i < (int)CAM_PIXEL_HW; i++) s_isSensor[i] = false;
-  for (int i = 0; i < 8; i++) s_isSensor[SENSOR_X[i]] = true;
-
-  // 行バッファ: センサー位置(8点)×11文字 + 通常ピクセル(152)×1文字 + 余裕
-  static char lineBuf[512];
+  // 行バッファ: 1検出時 11文字 × 160px + ヘッダ4 + 末尾4 = 最大 1768文字
+  static char lineBuf[2048];
 
   while (1)
   {
@@ -271,34 +263,25 @@ int main(void)
         for (x = 0; x < 160; x++)
         {
           c = g_camera.getPixel(x, y) >= DEBUG_THRESHOLD ? 1 : 0;
-          if (s_isSensor[x])
+          if (c == 1)
           {
-            if (c == 1)
-            {
-              // センサー位置で1検出: 白背景
-              // \x1b[47m + '1' + \x1b[49m = 11文字
-              lineBuf[pos++] = '\x1b';
-              lineBuf[pos++] = '[';
-              lineBuf[pos++] = '4';
-              lineBuf[pos++] = '7';
-              lineBuf[pos++] = 'm';
-              lineBuf[pos++] = '1';
-              lineBuf[pos++] = '\x1b';
-              lineBuf[pos++] = '[';
-              lineBuf[pos++] = '4';
-              lineBuf[pos++] = '9';
-              lineBuf[pos++] = 'm';
-            }
-            else
-            {
-              // センサー位置で0検出: 色なし
-              lineBuf[pos++] = '0';
-            }
+            // 1検出: 白背景 \x1b[47m + '1' + \x1b[49m
+            lineBuf[pos++] = '\x1b';
+            lineBuf[pos++] = '[';
+            lineBuf[pos++] = '4';
+            lineBuf[pos++] = '7';
+            lineBuf[pos++] = 'm';
+            lineBuf[pos++] = '1';
+            lineBuf[pos++] = '\x1b';
+            lineBuf[pos++] = '[';
+            lineBuf[pos++] = '4';
+            lineBuf[pos++] = '9';
+            lineBuf[pos++] = 'm';
           }
           else
           {
-            // センサー位置以外: 1文字のみ（データ量を大幅削減）
-            lineBuf[pos++] = '0' + c;
+            // 0検出: 色なし
+            lineBuf[pos++] = '0';
           }
         }
         // 行末
