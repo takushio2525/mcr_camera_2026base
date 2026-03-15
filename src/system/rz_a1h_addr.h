@@ -22,6 +22,15 @@ extern "C" {
 #define __TIM_PRESENT   1U
 #define __L2C_PRESENT   0U        /* L2C は今回有効化しない */
 
+/* ---- GIC アドレス (core_ca.h の GIC 関数が参照) ---- */
+#define GIC_DISTRIBUTOR_BASE   (0xE8201000UL)
+#define GIC_INTERFACE_BASE     (0xE8202000UL)
+
+/* ---- IRQn_Type: core_ca.h の GIC 関数シグネチャで使用 ----
+ * 本プロジェクトでは GIC 制御は initGIC() で直接レジスタ操作するため
+ * GIC_xxx() 関数は呼ばない。コンパイルを通すための最小定義。 */
+typedef int32_t IRQn_Type;
+
 /* ---- RZ/A1H メモリマップ ---- */
 #define RZ_A1_SPI_IO0              (0x18000000UL)  /* SPI Flash I/O 0 (64MB) */
 #define RZ_A1_SPI_IO1              (0x1C000000UL)  /* SPI Flash I/O 1 (64MB) */
