@@ -34,7 +34,9 @@ extern void __main()
 #include "drivers/Serial.h"
 #include "system/system_init.h"
 #include "drivers/Motor.h"
+#include "drivers/Servo.h"
 #include "drivers/LineDetector.h"
+#include "drivers/SDLogger.h"
 
 // OSTM0 タイマー割り込み (1ms周期)
 // GR-PEACH (RZ/A1H) の周辺クロック P0Φ は 33.33MHz
@@ -161,93 +163,34 @@ void ostm0_interrupt_callback(void)
     g_onboard.setUserLed(toggle);
   }
 
-  // モーターランプ制御ステートマシン
-  // ボタン押下中: 正転加速→正転減速→停止→逆転加速→逆転減速→停止 を繰り返す
+  // サーボ角度テスト: ボタンを1回押すたびに角度が切り替わる
+  // 0° → 30° → 0° → -30° → 0° (サイクル)
   {
-    // ステート定義
-    enum MotorPhase {
-      RAMP_UP_FWD,    // 正転加速 (2秒)
-      RAMP_DOWN_FWD,  // 正転減速 (2秒)
-      STOP_PAUSE1,    // 停止 (0.5秒)
-      RAMP_UP_REV,    // 逆転加速 (2秒)
-      RAMP_DOWN_REV,  // 逆転減速 (2秒)
-      STOP_PAUSE2     // 停止 (0.5秒)
-    };
+    static const int ANGLES[] = {0, 30, 0, -30};
+    static const int NUM_ANGLES = 4;
+    static int angleIdx = 0;
+    static int prevSw = 0;
+    static int debounce = 0;
 
-    static const int RAMP_TIME = 2000;   // 加減速時間 [ms]
-    static const int PAUSE_TIME = 500;   // 停止時間 [ms]
-    static const int MAX_SPEED = 100;    // 最大速度 [%]
+    int curSw = g_onboard.sw();
 
-    static MotorPhase phase = RAMP_UP_FWD;
-    static int counter = 0;
+    if (debounce > 0) {
+      debounce--;
+    } else if (curSw && !prevSw) {
+      // 立ち上がりエッジ検出 → 次の角度へ
+      angleIdx = (angleIdx + 1) % NUM_ANGLES;
+      g_servo.setAngle(ANGLES[angleIdx]);
+      debounce = 50; // 50msデバウンス
 
-    if (g_onboard.sw())
-    {
-      int speed = 0;
-
-      switch (phase)
-      {
-      case RAMP_UP_FWD:
-        // 正転: 0→MAX_SPEED (2秒)
-        speed = MAX_SPEED * counter / RAMP_TIME;
-        g_motor.set(speed, speed);
-        g_onboard.setColorLed(0, 1, 0); // 緑: 正転加速
-        counter++;
-        if (counter >= RAMP_TIME) { counter = 0; phase = RAMP_DOWN_FWD; }
-        break;
-
-      case RAMP_DOWN_FWD:
-        // 正転: MAX_SPEED→0 (2秒)
-        speed = MAX_SPEED - MAX_SPEED * counter / RAMP_TIME;
-        g_motor.set(speed, speed);
-        g_onboard.setColorLed(0, 0, 1); // 青: 正転減速
-        counter++;
-        if (counter >= RAMP_TIME) { counter = 0; phase = STOP_PAUSE1; }
-        break;
-
-      case STOP_PAUSE1:
-        // 停止 (0.5秒)
-        g_motor.stop();
-        g_onboard.setColorLed(1, 0, 0); // 赤: 停止中
-        counter++;
-        if (counter >= PAUSE_TIME) { counter = 0; phase = RAMP_UP_REV; }
-        break;
-
-      case RAMP_UP_REV:
-        // 逆転: 0→-MAX_SPEED (2秒)
-        speed = MAX_SPEED * counter / RAMP_TIME;
-        g_motor.set(-speed, -speed);
-        g_onboard.setColorLed(0, 1, 1); // シアン: 逆転加速
-        counter++;
-        if (counter >= RAMP_TIME) { counter = 0; phase = RAMP_DOWN_REV; }
-        break;
-
-      case RAMP_DOWN_REV:
-        // 逆転: -MAX_SPEED→0 (2秒)
-        speed = MAX_SPEED - MAX_SPEED * counter / RAMP_TIME;
-        g_motor.set(-speed, -speed);
-        g_onboard.setColorLed(1, 0, 1); // マゼンタ: 逆転減速
-        counter++;
-        if (counter >= RAMP_TIME) { counter = 0; phase = STOP_PAUSE2; }
-        break;
-
-      case STOP_PAUSE2:
-        // 停止 (0.5秒)
-        g_motor.stop();
-        g_onboard.setColorLed(1, 0, 0); // 赤: 停止中
-        counter++;
-        if (counter >= PAUSE_TIME) { counter = 0; phase = RAMP_UP_FWD; }
-        break;
-      }
+      // LEDで角度を表示
+      if (ANGLES[angleIdx] > 0)
+        g_onboard.setColorLed(0, 1, 0);      // 緑: +30°
+      else if (ANGLES[angleIdx] < 0)
+        g_onboard.setColorLed(0, 0, 1);      // 青: -30°
+      else
+        g_onboard.setColorLed(1, 1, 1);      // 白: 0°
     }
-    else
-    {
-      // ボタン離した: 即停止、ステートリセット
-      g_motor.stop();
-      g_onboard.setColorLed(0, 0, 0);
-      phase = RAMP_UP_FWD;
-      counter = 0;
-    }
+    prevSw = curSw;
   }
 
   g_onboard.update();
@@ -276,6 +219,9 @@ int main(void)
   initGIC();
   g_serial.printf("GIC初期化完了\n");
 
+  // SDLogger初期化（SDカード + FatFs）
+  g_sdlogger.init();
+
   g_serial.printf("カメラ初期化中...\n");
 
   // カメラ初期化（VDC5 + DVDEC）
@@ -288,6 +234,10 @@ int main(void)
   // モーター初期化
   g_motor.init();
   g_serial.printf("モーター初期化完了\n");
+
+  // サーボ初期化
+  g_servo.init();
+  g_serial.printf("サーボ初期化完了\n");
 
   // ライン検出初期化
   g_lineDetector.init();

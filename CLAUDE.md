@@ -6,7 +6,7 @@
 GR-PEACH (RZ/A1H, ARM Cortex-A9) をターゲットとしたベアメタルC/C++プロジェクト。
 
 参考プロジェクト `mcr_shiozawa_cclass_2.38m-s`（Mbed OS、最大速度2.38m/s）をベアメタルに再実装している。
-現在はカメラ入力+デバッグ表示の基盤が完成済み。今後 Motor, Servo, Encoder 等を追加予定。
+カメラ入力+デバッグ表示の基盤に加え、Motor, Servo, Encoder, LineDetector, SDLogger が実装済み。
 
 ---
 
@@ -50,10 +50,11 @@ OSTM0 による **1ms 周期割り込み駆動**。メインループはフレ�
 ### 初期化順序（厳守）
 
 ```
-g_onboard.init()   → g_serial.init()   → initGIC()   → g_camera.init()   → initOSTM0()
+g_onboard.init() → g_serial.init() → initGIC() → g_sdlogger.init() → g_camera.init() → initOSTM0()
 ```
 
 **GIC は必ず Camera より前に初期化すること。** Camera の VDC5 割り込み登録が GIC に依存するため。
+**SDLogger は GIC の後、Camera の前に初期化すること。** SPI通信に割り込みは不要だが、カメラより先に初期化して起動時間を短縮する。
 
 ### 3フェーズ設計（将来の走行制御向け）
 
@@ -73,10 +74,21 @@ src/
 ├── core/
 │   └── IModule.h             # ドライバ基底インターフェース
 └── drivers/
-    ├── Camera.h / Camera.cpp   # NTSC 160x120 キャプチャ（VDC5+DVDEC）
-    ├── Onboard.h / Onboard.cpp # LED(P6_12-15) / SW(P6_0) GPIO制御
-    ├── Serial.h / Serial.cpp   # SCIF2 シリアル通信 (230400bps)
-    └── video/                  # VDC5/DVDEC ドライバ群（DisplayBase API）
+    ├── Camera.h / Camera.cpp       # NTSC 160x120 キャプチャ（VDC5+DVDEC）
+    ├── Encoder.h / Encoder.cpp     # MTU2 位相計数エンコーダ
+    ├── LineDetector.h / .cpp       # ライン検出
+    ├── Motor.h / Motor.cpp         # MTU2 PWM モーター制御
+    ├── Onboard.h / Onboard.cpp     # LED(P6_12-15) / SW(P6_0) GPIO制御
+    ├── SDCard.h / SDCard.cpp       # SDカード SPI ドライバ (RSPI2)
+    ├── SDLogger.h / SDLogger.cpp   # ログバッファ + CSV書き出し
+    ├── Serial.h / Serial.cpp       # SCIF2 シリアル通信 (230400bps)
+    ├── Servo.h / Servo.cpp         # MTU2 PWM サーボ制御
+    ├── fatfs/                      # ChaN's FatFs R0.11a
+    │   ├── ff.c / ff.h             # FatFs コア
+    │   ├── ffconf.h                # FatFs 設定（ベアメタル用カスタム）
+    │   ├── diskio.h / diskio.cpp   # ディスクI/Oブリッジ（→SDCard）
+    │   └── integer.h               # 型定義
+    └── video/                      # VDC5/DVDEC ドライバ群（DisplayBase API）
 
 generate/                       # e2 studio 自動生成（下記「注意事項」参照）
 ├── iodefine.h                  # I/O レジスタ定義
@@ -103,7 +115,7 @@ doc/                            # LaTeX 仕様書
 | クロック | 周波数 | 用途 |
 |---------|--------|------|
 | P0Φ | 33.33 MHz | OSTM0（`CMP = 33333` で 1ms） |
-| P1Φ | 66.67 MHz | SCIF2（`BRR = 35` で 230400bps） |
+| P1Φ | 66.67 MHz | SCIF2（`BRR = 35` で 230400bps）, RSPI2（SDカードSPI） |
 
 ---
 
@@ -130,7 +142,22 @@ e2 studio でコード生成を再実行すると**これらの修正が上書�
 - Step 2-3: `extractBrightness()` — Y（輝度）抽出 → 160x120 グレースケール
 - Vfield トグル待ちでフィールド境界を検出してから次フレーム開始
 
-### 今後追加予定のモジュール
+### SDLogger の使い方
 
-Motor, Servo, Encoder — いずれも `IModule` パターンで `src/drivers/` に追加し、
-`main()` の初期化順序と `ostm0_interrupt_callback()` の `update()` 呼び出しに組み込む。
+走行データの記録・保存フロー:
+1. `g_sdlogger.init()` — SDカード初期化 + FatFs マウント（main起動時）
+2. `g_sdlogger.current().xxx = value` + `g_sdlogger.commit()` — 走行ループ内でデータ記録
+3. `g_sdlogger.saveToSD()` — 走行終了後にCSVバッチ書き出し
+
+ファイル: `/data0000.csv` 〜 `/data9999.csv`（`renban.txt` で連番管理）
+バッファ: `SDLOG_T g_logData[4000]`（約2.7MB）
+
+### SDカード ピン割り当て
+
+| 信号 | ピン | 機能 |
+|------|------|------|
+| MOSI | P8_5 | RSPI2 MOSI (Function 3) |
+| MISO | P8_6 | RSPI2 MISO (Function 3) |
+| CLK  | P8_3 | RSPI2 RSPCK (Function 3) |
+| CS   | P8_4 | GPIO出力 (手動制御) |
+| CD   | P7_8 | GPIO入力 (カード検出, Low=挿入) |
