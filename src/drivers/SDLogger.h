@@ -35,6 +35,19 @@ struct SDLoggerConfig
   int finishPattern;    // 101  (FINISH パターン番号 — 記録対象外)
 };
 
+// ====================================================================
+// SDLoggerData — SDLogger の入出力データ
+// SystemData::sd に集約される。SDLogger クラスが「所有」する自身のデータ。
+// ====================================================================
+struct SDLoggerData
+{
+  bool     ready;          // 初期化成功フラグ
+  uint32_t logCount;       // 現在の記録エントリ数
+  bool     full;           // バッファ満杯フラグ
+  bool     saveRequested;  // メインループから「SD 書き出し」をリクエストするフラグ
+  bool     saveDone;       // SD 書き出し完了フラグ
+};
+
 // ログバッファ最大エントリ数 (SDLoggerConfig.maxEntries の上限。配列サイズ用)
 #define SDLOG_MAX_ENTRIES 4000
 

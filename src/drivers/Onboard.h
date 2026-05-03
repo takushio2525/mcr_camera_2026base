@@ -29,6 +29,21 @@ struct OnboardConfig
   int ledBluePinFmt;   // P6_15
 };
 
+// ====================================================================
+// OnboardData — Onboard の入出力データ
+// SystemData::ob に集約される。Onboard クラスが「所有」する自身のデータ。
+// ====================================================================
+struct OnboardData
+{
+  // Input
+  int sw;              // 1=Pressed, 0=Released
+  // Output
+  int ledRedCmd;       // 0=OFF, 1=ON
+  int ledGreenCmd;
+  int ledBlueCmd;
+  int userLedCmd;
+};
+
 // LED Count
 #define ONBOARD_LED_COUNT 4
 

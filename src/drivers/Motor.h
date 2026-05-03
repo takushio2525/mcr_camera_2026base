@@ -32,6 +32,18 @@ struct MotorConfig
   int rightDirPinFmt;
 };
 
+// ====================================================================
+// MotorData — Motor の入出力データ
+// SystemData::mot に集約される。Motor クラスが「所有」する自身のデータ。
+// ====================================================================
+struct MotorData
+{
+  int leftCmd;       // Logic → Motor 指示値 [-100..+100]
+  int rightCmd;
+  int leftActual;    // Motor::updateOutput が反映後に書き戻し（debug 用）
+  int rightActual;
+};
+
 class Motor : public IModule
 {
 public:

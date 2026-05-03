@@ -76,6 +76,24 @@ struct LineDetectorConfig
     int   sensorBinDiff;           // 8
 };
 
+// ====================================================================
+// LineDetectorData — LineDetector の出力データ
+// SystemData::line に集約される。LineDetector クラスが「所有」する自身のデータ。
+//
+// 注: deviation[] のサイズは LineDetector::HEIGHT と一致させること（120 固定）。
+//     クラス定義より前に struct を置く都合で直接ハードコードしている。
+// ====================================================================
+struct LineDetectorData
+{
+    int           deviation[120];   // 各行の偏差（正=ライン左寄り、負=ライン右寄り）
+    bool          crossLine;        // クロスライン検出フラグ
+    bool          leftLine;         // 左ハーフライン検出フラグ
+    bool          rightLine;        // 右ハーフライン検出フラグ
+    bool          centerLine;       // センターライン検出フラグ
+    unsigned char sensorBin;        // 8点センサ値
+    int           detectRow;        // 直近で使用された検出行（debug 表示用）
+};
+
 // マスク値定義（8点センサ用）
 #define MASK2_2 0x66
 #define MASK2_0 0x60

@@ -36,6 +36,19 @@ struct EncoderConfig
   int   bPinFmt;     // P1_10 TCLKB
 };
 
+// ====================================================================
+// EncoderData — Encoder の出力データ
+// SystemData::enc に集約される。Encoder クラスが「所有」する自身のデータ。
+// ====================================================================
+struct EncoderData
+{
+  int   totalCount;     // 走行距離換算用累積カウント
+  int   magaCount;      // クランク検出用累積カウント
+  int   cnt;            // 直近 1ms 当たりカウント
+  int   avgCnt;         // 移動平均カウント
+  float filteredCnt;    // RC フィルタ後のカウント
+};
+
 class Encoder : public IModule
 {
 public:

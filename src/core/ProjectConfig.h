@@ -4,34 +4,30 @@
  *  プロジェクト全体の Config インスタンス一括定義ハブ。
  *  Embedded-Module-Architecture (EMA) の ProjectConfig.h に相当する。
  *
- *  各 Config 構造体宣言は対応するモジュールヘッダ (drivers/Camera.h 等) に
- *  あり、本ファイルではそれらを include して **値の実体を 1 箇所で管理する**。
+ *  EMA の核心ルール:
+ *    各モジュールの {Module}Config 構造体宣言は対応するモジュールヘッダ側で
+ *    行い、本ファイルでは SystemData.h を include することで全モジュール
+ *    ヘッダ（と全 Config 型）を取得し、*_CONFIG インスタンスのみを定義する。
  *
  *  値を変更したい場合は基本的にこのファイルだけを編集すればよい。
  *  特に頻繁に調整するもの:
  *    - RUN_CONFIG.handleGain* / handleStraightAbsThreshold / handleGentleAbsThreshold
  *    - RUN_CONFIG.crankHandle / crankMotor* / laneHandle / laneMotor*
  *    - LINE_DETECTOR_CONFIG.devBrightnessRatio / 各 patternXxx
+ *
+ *  注意: SDCard には Data がないため SystemData.h は SDCard.h を include
+ *        しない。SDCardConfig は本ファイルで直接 include して取得する。
  */
 
 #ifndef CORE_PROJECT_CONFIG_H_
 #define CORE_PROJECT_CONFIG_H_
 
-#include <stdint.h>
+// SystemData.h 経由で全モジュールヘッダを取得
+// (各モジュールヘッダで {Module}Config と {Module}Data の両方が宣言されている)
+#include "SystemData.h"
 
-// 各モジュールの Config 構造体宣言を取得
-#include "../drivers/Camera.h"
-#include "../drivers/LineDetector.h"
-#include "../drivers/Motor.h"
-#include "../drivers/Servo.h"
-#include "../drivers/Onboard.h"
-#include "../drivers/Encoder.h"
-#include "../drivers/Serial.h"
-#include "../drivers/SDCard.h"
-#include "../drivers/SDLogger.h"
-#include "../logic/RunLogic.h"
-
-// (RunLogicConfig 構造体宣言は src/logic/RunLogic.h に移動済み)
+// SystemData.h が include しないモジュールは個別に
+#include "../drivers/SDCard.h"          // SDCardConfig
 
 // ====================================================================
 // インスタンス定義（実値はここで一括管理）

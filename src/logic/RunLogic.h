@@ -18,6 +18,8 @@
 #ifndef LOGIC_RUN_LOGIC_H_
 #define LOGIC_RUN_LOGIC_H_
 
+#include "../core/ModuleTimer.h"   // RunData が ModuleTimer を保持するため
+
 struct SystemData;
 
 // ====================================================================
@@ -71,6 +73,30 @@ struct RunLogicConfig
     float handleGainGentle;            // 0.37  緩カーブのゲイン
     float handleGainSharp;             // 0.5   急カーブのゲイン
     float handleGainNonNormal;         // 0.5   pattern!=TRACE_NORMAL のゲイン
+};
+
+// ====================================================================
+// RunData — 走行ロジック (Logic レイヤー) が「所有」する状態データ
+// SystemData::run に集約される。
+// 旧 RunController クラスのインスタンス変数群をすべてここに集約。
+// applyDrivingPattern() は SystemData::run を読み書きする純関数となる。
+// ====================================================================
+struct RunData
+{
+    int           pattern;          // 現在の走行パターン番号 (RunPattern を int 化)
+    int           prevPattern;      // 直前のパターン（遷移検知用）
+    int           handleVal;        // 直近のハンドル指示値（debug 表示用）
+    int           traceOffset;      // ハンドル計算オフセット
+    int           leftMotor;        // calcMotorVal() の結果
+    int           rightMotor;
+    int           leftBrake;        // calcBrakeMotorVal() の結果
+    int           rightBrake;
+    int           lastHandle101;    // FINISH 時のハンドル維持値
+    bool          finished;         // 走行終了フラグ
+
+    ModuleTimer   stateTimer;       // 旧 stateMs_ : 現パターンに入ってからの経過時間
+    ModuleTimer   totalTimer;       // 旧 totalMs_ : 走行スタートからの経過時間
+    ModuleTimer   auxTimer;         // 旧 cnt1Ms_  : 補助タイマー（バー検知等）
 };
 
 // ====================================================================

@@ -32,6 +32,16 @@ struct ServoConfig
   int pwmPinFmt;
 };
 
+// ====================================================================
+// ServoData — Servo の入出力データ
+// SystemData::srv に集約される。Servo クラスが「所有」する自身のデータ。
+// ====================================================================
+struct ServoData
+{
+  int angleCmd;      // Logic → Servo 指示角 [-MAX..+MAX] [度]
+  int angleActual;   // Servo::updateOutput が反映後に書き戻し
+};
+
 class Servo : public IModule
 {
 public:

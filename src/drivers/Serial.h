@@ -24,6 +24,15 @@ struct SerialConfig
   int      bufferSize;  // 512 (現状はクラス内固定配列で 512 バイト)
 };
 
+// ====================================================================
+// SerialData — Serial の出力データ（debug 用）
+// SystemData::ser に集約される。Serial クラスが「所有」する自身のデータ。
+// ====================================================================
+struct SerialData
+{
+  uint32_t txCount;     // 送信文字累計（任意・debug 用）
+};
+
 class Serial : public IModule
 {
 public:

@@ -37,6 +37,20 @@ struct CameraConfig
   int thresholdDiff;     // 8点センサ閾値の差分 (8)  — LineDetector 側でも持つ
 };
 
+// ====================================================================
+// CameraData — Camera の出力データ
+// SystemData::cam に集約される。Camera クラスが「所有」する自身のデータ。
+// ====================================================================
+struct CameraData
+{
+  bool     frameReady;     // 新フレーム完了フラグ（メインループで消費後に false へ）
+  uint32_t frameCount;     // 累積フレーム数（debug 表示用）
+  int      field;          // 0=top / 1=bottom (debug 用)
+  // 画素バッファ実体は Camera::imageBuffer_ にあり、ここはそれを指すポインタ。
+  // 19KB のバッファを SystemData に持たせるとメモリ効率が悪いため。
+  const volatile unsigned char* imageBufferPtr;
+};
+
 // 画像サイズ定義 (CameraConfig との整合のためマクロも残す)
 #define CAM_PIXEL_HW 160u // 水平ピクセル数 (QVGA)
 #define CAM_PIXEL_VW 120u // 垂直ピクセル数 (QVGA)
