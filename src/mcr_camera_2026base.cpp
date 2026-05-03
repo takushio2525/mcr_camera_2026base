@@ -153,6 +153,12 @@ void ostm0_interrupt_callback(void)
   {
     g_runController.update();
   }
+  else
+  {
+    // デバッグモードでも USER_LED は中央2点センサ反応で点灯させる
+    // （参考プロジェクトの debug_mode 中の USER_LED 動作に合わせる）
+    g_onboard.setUserLed(g_lineDetector.sensorInput(0x18) != 0 ? 1 : 0);
+  }
 
   // GPIO ラッチ反映
   g_onboard.update();

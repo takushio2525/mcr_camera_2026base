@@ -81,6 +81,15 @@ void RunController::update()
         totalMs_++;
     }
 
+    // ライン検出側に現在のパターンを通知（参考プロジェクトの
+    // createLineFlag() は pattern によりパラメータを切り替えるため必須）
+    g_lineDetector.setPattern((int)pattern_);
+
+    // USER_LED (P6_12) は中央2点センサ反応で点灯（参考プロジェクトの
+    // USER_LED = sensor_inp(0x18) != 0 ? 1 : 0 と同等）。
+    // 中心線検出をリアルタイムで目視確認するために毎周期反映する。
+    g_onboard.setUserLed(g_lineDetector.sensorInput(0x18) != 0 ? 1 : 0);
+
     // 通常時のハンドル/モーター値を毎周期計算しておく
     // （各 case 内では手動で上書きすることもある）
     calcHandle();
@@ -232,14 +241,24 @@ void RunController::calcBrakeMotorVal(int targetPower)
 
 // pattern 0: スイッチ入力待ち
 //
-// 暫定動作: スタートバー検知関連の処理は無効化し、
+// 暫定動作: スタートバー検知後の停止/前進シーケンスはスキップし、
 //          ボタン押下で即 TRACE_NORMAL（通常トレース）へ遷移する。
-//          バー処理を有効化したい場合は下のブロックを復活させる。
+//          ただし LED 色はクロスライン検出状態に応じて切り替えるため、
+//          バーを正しく置けたかをLEDで確認できる（参考プロジェクト準拠）。
 void RunController::runWaitSw()
 {
     motor(0, 0);
     handle(0);
-    setColorLed(1, 0, 0); // 待機: 赤色LED
+
+    // クロスライン検出時は緑（バーセットOK）、非検出時は赤（未セット）
+    if (g_lineDetector.isCrossLine())
+    {
+        setColorLed(0, 1, 0);
+    }
+    else
+    {
+        setColorLed(1, 0, 0);
+    }
 
     // ボタン押下で即スタート
     if (g_onboard.sw())
