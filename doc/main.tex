@@ -50,7 +50,7 @@
 \pagestyle{fancy}
 \fancyhf{}
 \fancyhead[L]{\small\color{headerblue}\textbf{mcr\_camera\_2026base} プログラム設計仕様書}
-\fancyhead[R]{\small\color{headerblue}Rev.\,1.0}
+\fancyhead[R]{\small\color{headerblue}Rev.\,1.1}
 \fancyfoot[C]{\small\thepage\,/\,\pageref{LastPage}}
 \fancyfoot[R]{\small\color{gray}2026-02-19}
 \renewcommand{\headrulewidth}{0.8pt}
@@ -172,8 +172,8 @@
 \newcommand{\doctitle}{mcr\_camera\_2026base\\プログラム設計仕様書}
 \newcommand{\docsubtitle}{GR-PEACH (RZ/A1H) マイコンカーラリー カメラクラス開発}
 \newcommand{\docauthor}{Shiozawa}
-\newcommand{\docversion}{1.0}
-\newcommand{\docdate}{2026年2月19日}
+\newcommand{\docversion}{1.1}
+\newcommand{\docdate}{2026年5月3日}
 
 %% ============================================================
 \begin{document}
@@ -234,6 +234,7 @@
 \textbf{版} & \textbf{日付} & \textbf{著者} & \textbf{変更内容} \\
 \midrule
 1.0 & 2026-02-19 & Shiozawa & 初版作成 \\
+1.1 & 2026-05-03 & Shiozawa & RunController クラス（メイン走行制御）追加。エンコーダ距離制御をタイマー（ms単位）に置換。 \\
 \bottomrule
 \end{tabularx}
 
@@ -1430,6 +1431,214 @@ SDカードのビジー状態が解除されるまで待機する。タイムア
 \vspace{1.5mm}
 \textbf{戻り値:} \texttt{bool} --- ビジー解除成功/タイムアウト
 \end{funcblock}
+
+\end{apibox}
+
+
+%% ── 7.10 RunController ──
+\subsection{RunController クラス}\label{sec:api-runcontroller}
+
+\begin{apibox}{RunController --- メイン走行制御モジュール（初心者向けベース）}
+
+\textbf{ファイル:} \texttt{src/drivers/RunController.h}, \texttt{RunController.cpp} \hfill
+\textbf{継承:} \texttt{IModule} \hfill
+\phasebadge{Logic Phase}
+
+\vspace{2mm}\hrule\vspace{2mm}
+
+\apisection{概要}
+
+参考プロジェクト \texttt{mcr\_shiozawa\_cclass\_2.38m-s/main.cpp} の \texttt{intTimer()} 内
+\texttt{switch(pattern)} 状態遷移を移植したもの。
+オリジナルでは「エンコーダ累積パルス」で距離管理していたが、
+本実装では初心者が読みやすいようにすべて「経過時間 (ms)」で管理する。
+各状態に入るたびに \texttt{stateMs\_} が 0 クリアされ、1ms 割り込みごとに 1 ずつ加算される。
+
+\apisection{機能一覧}
+
+\begin{itemize}[nosep]
+  \item \texttt{Pattern} 番号による状態遷移（参考プロジェクトと同じ番号体系）
+  \item スタートバー検出 → 通過 → 通常トレース → クランク/レーンチェンジ
+  \item 各状態の遷移条件は経過時間（ms）で判定（距離不要）
+  \item LineDetector の検出フラグを参照してクランク/ハーフラインを判別
+  \item Motor / Servo / Onboard を直接制御
+  \item 走行終了時に \texttt{isFinished()} で外部に通知（main 側でログ保存をトリガ）
+\end{itemize}
+
+\apisection{状態遷移（Pattern）}
+
+\begin{longtable}{l l l}
+\toprule
+\textbf{番号} & \textbf{Pattern 名} & \textbf{役割} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{番号} & \textbf{Pattern 名} & \textbf{役割} \\
+\midrule
+\endhead
+0   & WAIT\_SW             & スイッチ入力待ち \\
+1   & APPROACH\_BAR        & スタートバーへ前進 \\
+2   & WAIT\_AT\_BAR        & バー手前で停止 \\
+3   & ACCEL\_AFTER\_BAR    & バー上昇後の加速 \\
+4   & CHECK\_BAR\_OPEN     & バー開放確認 \\
+10  & WAIT\_BAR\_OPEN      & バー開放待ち \\
+11  & TRACE\_NORMAL        & 通常トレース \\
+21--23 & CROSSLINE\_*      & クロスライン検出→読み飛ばし→クランク選択 \\
+30--31 & LEFT\_CRANK\_*    & 左クランク \\
+40--41 & RIGHT\_CRANK\_*   & 右クランク \\
+51--57 & RIGHT\_HALF\_* / RIGHT\_LANE\_* & 右ハーフライン→レーンチェンジ \\
+61--67 & LEFT\_HALF\_* / LEFT\_LANE\_*   & 左ハーフライン→レーンチェンジ \\
+101 & FINISH               & 走行終了（ログ保存待ち） \\
+\bottomrule
+\end{longtable}
+
+\apisection{タイマー定数}
+
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{定数名} & \textbf{値 [ms]} & \textbf{説明} \\
+\midrule
+\texttt{T\_LINE\_SKIP\_MS}      & 100   & クロス/ハーフ通過時間 \\
+\texttt{T\_CRANK\_MS}           & 440   & クランク旋回時間 \\
+\texttt{T\_LANE\_TURN\_MS}      & 340   & レーンチェンジ寄せ時間 \\
+\texttt{T\_LANE\_STRAIGHT\_MS}  & 0     & レーンチェンジ直進時間 \\
+\texttt{T\_LANE\_COUNTER\_MS}   & 250   & レーンチェンジ戻し時間 \\
+\texttt{T\_COURSE\_TIMEOUT\_MS} & 60000 & コース1周想定タイムアウト \\
+\texttt{T\_BAR\_WAIT\_PRE\_MS}  & 500   & バー前進開始までの待機 \\
+\texttt{T\_BAR\_WAIT\_POST\_MS} & 1000  & バー手前停止後の待機 \\
+\texttt{T\_AFTER\_BAR\_GO\_MS}  & 100   & バー後加速の継続時間 \\
+\bottomrule
+\end{tabularx}
+
+\apisection{走行パラメータ定数}
+
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{定数名} & \textbf{値} & \textbf{説明} \\
+\midrule
+\texttt{CRANK\_HANDLE}            & 42  & クランク旋回角度 [度] \\
+\texttt{CRANK\_MOTOR\_OUT/IN}     & 100 & クランク内外輪モーター [\%] \\
+\texttt{LANE\_HANDLE}             & 23  & レーンチェンジ寄せ角度 [度] \\
+\texttt{LANE\_COUNTER\_HANDLE}    & 38  & レーンチェンジ戻し角度 [度] \\
+\texttt{LANE\_MOTOR\_IN/OUT}      & 37/55 & レーン寄せ時の内/外輪 [\%] \\
+\texttt{LANE\_STRAIGHT\_MOTOR}    & 100 & レーン直進時のモーター [\%] \\
+\texttt{LANE\_COUNTER\_MOTOR\_IN/OUT} & 20 & レーン戻し時の内/外輪 [\%] \\
+\texttt{BRAKE\_TARGET\_MOTOR}     & 43  & ブレーキ走行時の目標出力 [\%] \\
+\texttt{TRACE\_ROW}               & 45  & 通常トレース時の偏差取得行 \\
+\texttt{APPROACH\_ROW}            & 95  & スタート時の偏差取得行 \\
+\bottomrule
+\end{tabularx}
+
+\apisection{内部変数}
+
+\begin{tabularx}{\textwidth}{l l l X}
+\toprule
+\textbf{変数名} & \textbf{型} & \textbf{初期値} & \textbf{説明} \\
+\midrule
+\texttt{pattern\_}     & \texttt{Pattern}       & \texttt{WAIT\_SW} & 現在の走行パターン \\
+\texttt{stateMs\_}     & \texttt{unsigned long} & 0 & 現パターンに入ってからの経過時間 [ms] \\
+\texttt{totalMs\_}     & \texttt{unsigned long} & 0 & スタート（pattern==11）からの累積時間 [ms] \\
+\texttt{cnt1Ms\_}      & \texttt{unsigned long} & 0 & スタートバー処理用の補助タイマー [ms] \\
+\texttt{finished\_}    & \texttt{bool}          & \texttt{false} & 走行終了フラグ \\
+\texttt{handleVal\_}   & \texttt{int}           & 0 & 現在のハンドル指示値 [度] \\
+\texttt{traceOffset\_} & \texttt{int}           & 0 & ハンドル計算オフセット \\
+\texttt{leftMotor\_, rightMotor\_} & \texttt{int} & 0 & 通常時の左右モーター指示値 \\
+\texttt{leftBrake\_, rightBrake\_} & \texttt{int} & 0 & ブレーキ時の左右モーター指示値 \\
+\bottomrule
+\end{tabularx}
+
+\apisection{関数ドキュメント}
+
+\begin{funcblock}{init()}
+\texttt{void init(void) override}
+
+\vspace{1.5mm}
+内部状態を全て初期化し、\texttt{WAIT\_SW} 状態へ遷移する。モーター停止・ハンドル中央・LED消灯を実行。
+\end{funcblock}
+
+\begin{funcblock}{update()}
+\texttt{void update(void) override}
+
+\vspace{1.5mm}
+1ms 割り込み（OSTM0）から呼び出される周期処理。
+\texttt{stateMs\_} と \texttt{cnt1Ms\_} をインクリメントし、現在の \texttt{pattern\_} に応じて
+内部の \texttt{run*()} メソッドを呼び出す。状態遷移時には \texttt{stateMs\_} が 0 クリアされる。
+\end{funcblock}
+
+\begin{funcblock}{isFinished()}
+\texttt{bool isFinished(void) const}
+
+\vspace{1.5mm}
+走行終了状態（\texttt{FINISH}）に到達したかを返す。main 側がこの戻り値で
+\texttt{g\_sdlogger.saveToSD()} のトリガとして使用する。
+
+\vspace{1.5mm}
+\textbf{戻り値:} \texttt{bool} --- \texttt{true}=終了済み、\texttt{false}=走行中
+\end{funcblock}
+
+\begin{funcblock}{getPattern()}
+\texttt{int getPattern(void) const}
+
+\vspace{1.5mm}
+現在の走行パターン番号を整数で返す（デバッグ表示・ログ用）。
+\end{funcblock}
+
+\begin{funcblock}{getHandleVal()}
+\texttt{int getHandleVal(void) const}
+
+\vspace{1.5mm}
+直近に \texttt{calcHandle()} で計算されたハンドル指示値を返す（ログ用）。
+\end{funcblock}
+
+\begin{funcblock}{forceStop()}
+\texttt{void forceStop(void)}
+
+\vspace{1.5mm}
+緊急停止用：モーター停止・ハンドル中央・赤LED点灯を行い、\texttt{FINISH} 状態へ遷移する。
+\end{funcblock}
+
+\apisection{距離 → タイマー置換の対応表}
+
+参考プロジェクト（エンコーダ距離）→ 本実装（経過時間 ms）の対応：
+
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{参考プロジェクト} & \textbf{本実装} & \textbf{備考} \\
+\midrule
+\texttt{encoder.clear()}                        & \texttt{stateMs\_ = 0} & 状態遷移時に自動クリア \\
+\texttt{encoder.getTotalCount() >= N}            & \texttt{stateMs\_ >= N} & 1pulse $\approx$ 1ms 換算 \\
+\texttt{encoder.getCourseCount() >= ONEM*58}     & \texttt{totalMs\_ >= 60000} & 60秒で終了 \\
+\texttt{encoder.getCnt() <= lowSpeedLimit}       & （削除）              & 速度判定はカット \\
+\bottomrule
+\end{tabularx}
+
+\apisection{使用例}
+
+\begin{lstlisting}[caption={RunController の組み込み例},label=lst:runcontroller]
+// main 起動時
+g_runController.init();
+
+// OSTM0 1ms 割り込みコールバック内
+extern "C" void ostm0_interrupt_callback(void) {
+    g_camera.update();
+    g_motor.update();
+    g_servo.update();
+    g_runController.update();   // 状態遷移を1ms毎に進める
+    g_onboard.update();         // GPIO ラッチ反映
+}
+
+// メインループ
+while (1) {
+    if (g_camera.isFrameReady()) {
+        g_camera.clearFrameReady();
+        g_lineDetector.update(); // ライン検出はフレーム完了時のみ実行
+    }
+    if (g_runController.isFinished()) {
+        g_sdlogger.saveToSD();   // 走行終了時にログ書き出し
+        break;
+    }
+}
+\end{lstlisting}
 
 \end{apibox}
 
