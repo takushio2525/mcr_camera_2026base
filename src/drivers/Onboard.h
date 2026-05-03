@@ -41,4 +41,6 @@ private:
   int ledState_[ONBOARD_LED_COUNT];
 };
 
+extern Onboard g_onboard;
+
 #endif /* DRIVERS_ONBOARD_H_ */
