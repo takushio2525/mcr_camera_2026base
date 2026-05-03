@@ -21,6 +21,9 @@
 *.synctex.gz
 *.dvi
 
+# ビルド成果物
+HardwareDebug/
+
 # VS Code の設定
 .vscode/*
 !.vscode/settings.json
