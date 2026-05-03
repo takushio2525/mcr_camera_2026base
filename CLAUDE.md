@@ -50,11 +50,14 @@ OSTM0 による **1ms 周期割り込み駆動**。メインループはフレ�
 ### 初期化順序（厳守）
 
 ```
-g_onboard.init() → g_serial.init() → initGIC() → g_sdlogger.init() → g_camera.init() → initOSTM0()
+g_onboard.init() → g_serial.init() → initGIC() → g_sdlogger.init() →
+g_camera.init() → g_motor.init() → g_servo.init() → g_lineDetector.init() →
+runLogicInit(g_sys) → initOSTM0()
 ```
 
 **GIC は必ず Camera より前に初期化すること。** Camera の VDC5 割り込み登録が GIC に依存するため。
 **SDLogger は GIC の後、Camera の前に初期化すること。** SPI通信に割り込みは不要だが、カメラより先に初期化して起動時間を短縮する。
+**`initOSTM0()` は必ず最後に呼ぶこと。** EMA 化により ISR の Output フェーズが Motor/Servo を毎ms 叩く。OSTM0 を Motor/Servo init より前に起動すると、MTU2 がスタンバイ状態のまま PWM レジスタへ書き込みが入り、サーボ挙動異常やバス例外でハングする。
 
 ### 3フェーズ設計（将来の走行制御向け）
 

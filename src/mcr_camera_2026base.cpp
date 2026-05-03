@@ -412,9 +412,6 @@ int main(void)
   g_camera.init();
   g_serial.printf("カメラ初期化完了\n");
 
-  // OSTM0タイマー割り込みを設定・開始（1ms周期）
-  initOSTM0();
-
   // モーター初期化
   g_motor.init();
   g_serial.printf("モーター初期化完了\n");
@@ -430,6 +427,12 @@ int main(void)
   // 走行制御初期化 (Logic レイヤー)
   runLogicInit(g_sys);
   g_serial.printf("走行制御初期化完了\n");
+
+  // ★ OSTM0 (1ms 割り込み) は全ドライバ init 完了後に最後に開始する。
+  //   ISR の Output フェーズが Motor/Servo を毎ms 叩くため、ここより前で
+  //   起動すると MTU2 がスタンバイ状態のまま PWM レジスタに書き込みが入り、
+  //   バス例外/ハングの原因になる（EMA 化で 3 フェーズ全実行になったため）。
+  initOSTM0();
 
   g_serial.printf("タイマー開始\n");
 
