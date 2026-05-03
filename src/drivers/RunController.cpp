@@ -17,6 +17,7 @@
 #include "Servo.h"
 #include "LineDetector.h"
 #include "Onboard.h"
+#include "../core/SystemData.h"
 
 #include <stdlib.h>
 
@@ -91,7 +92,7 @@ void RunController::updateOutput(SystemData& sys)
     // USER_LED (P6_12) は中央2点センサ反応で点灯（参考プロジェクトの
     // USER_LED = sensor_inp(0x18) != 0 ? 1 : 0 と同等）。
     // 中心線検出をリアルタイムで目視確認するために毎周期反映する。
-    g_onboard.setUserLed(g_lineDetector.sensorInput(0x18) != 0 ? 1 : 0);
+    g_sys.ob.userLedCmd = (g_lineDetector.sensorInput(0x18) != 0) ? 1 : 0;
 
     // 通常時のハンドル/モーター値を毎周期計算しておく
     // （各 case 内では手動で上書きすることもある）
@@ -169,7 +170,10 @@ void RunController::motor(int left, int right)
 
 void RunController::setColorLed(int r, int g, int b)
 {
-    g_onboard.setColorLed(r, g, b);
+    // 旧 g_onboard.setColorLed(r, g, b) — SystemData 経由に変更
+    g_sys.ob.ledRedCmd   = r ? 1 : 0;
+    g_sys.ob.ledGreenCmd = g ? 1 : 0;
+    g_sys.ob.ledBlueCmd  = b ? 1 : 0;
 }
 
 // ====================================================================
@@ -264,7 +268,7 @@ void RunController::runWaitSw()
     }
 
     // ボタン押下で即スタート
-    if (g_onboard.sw())
+    if (g_sys.ob.sw)
     {
         totalMs_ = 0;
         changePattern(TRACE_NORMAL);
@@ -724,7 +728,7 @@ void RunController::runFinish()
     handle(s_lastHandle101);
 
     // ボタン押下で再加速、それ以外は弱いブレーキ
-    if (g_onboard.sw())
+    if (g_sys.ob.sw)
     {
         motor(Motor::MAX_POWER, Motor::MAX_POWER);
     }

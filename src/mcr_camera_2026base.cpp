@@ -41,6 +41,7 @@ extern void __main()
 #include "drivers/SDLogger.h"
 #include "drivers/RunController.h"
 #include "core/SystemData.h"
+#include "core/ProjectConfig.h"
 
 // OSTM0 タイマー割り込み (1ms周期)
 // GR-PEACH (RZ/A1H) の周辺クロック P0Φ は 33.33MHz
@@ -69,8 +70,8 @@ static unsigned long s_frameCount = 0;
 //   false = 走行モード（RunController が状態遷移を進める）
 static bool s_debugMode = false;
 
-// Onboardインスタンス（グローバル）
-Onboard g_onboard;
+// Onboardインスタンス（グローバル, Config 注入）
+Onboard g_onboard(ONBOARD_CONFIG);
 
 // ====================================================================
 // IModule* 配列 — EMA 準拠の 3 フェーズ呼出
@@ -196,7 +197,7 @@ void ostm0_interrupt_callback(void)
   else
   {
     // デバッグモードでも USER_LED は中央2点センサ反応で点灯させる
-    g_onboard.setUserLed(g_lineDetector.sensorInput(0x18) != 0 ? 1 : 0);
+    g_sys.ob.userLedCmd = (g_lineDetector.sensorInput(0x18) != 0) ? 1 : 0;
   }
 
   // ============ Output フェーズ ============

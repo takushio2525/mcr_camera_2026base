@@ -2,13 +2,14 @@
  * Onboard.cpp
  *
  *  Onboard LED/SW Driver (Latch System)
+ *  EMA 準拠版: SystemData / Config ベース
  *  For GR-PEACH (RZ/A1H)
- *  Object-Oriented Version
  *
  *  LED is Low Active (GPIO Output 0=ON, 1=OFF)
  */
 
 #include "Onboard.h"
+#include "../core/SystemData.h"
 #include "iodefine.h"
 
 #define PIN_SW (0)
@@ -17,11 +18,12 @@
 #define PIN_LED_GRN (14)
 #define PIN_LED_BLU (15)
 
-// LED Pin number table
+// LED Pin number table (LED_PINS[i] と ledState_[i] の対応:
+//   0=RED, 1=GREEN, 2=BLUE, 3=USER)
 static const int LED_PINS[ONBOARD_LED_COUNT] = {PIN_LED_RED, PIN_LED_GRN,
                                                 PIN_LED_BLU, PIN_LED_USER};
 
-Onboard::Onboard() {
+Onboard::Onboard(const OnboardConfig& cfg) : _config(cfg) {
   // Initialize latch buffer (All OFF)
   for (int i = 0; i < ONBOARD_LED_COUNT; i++) {
     ledState_[i] = 1;
@@ -62,6 +64,11 @@ bool Onboard::init() {
   return true;
 }
 
+void Onboard::updateInput(SystemData& sys) {
+  // SW 状態を sys.ob.sw に反映
+  sys.ob.sw = sw();
+}
+
 void Onboard::setUserLed(int val) { ledState_[3] = val ? 1 : 0; }
 
 void Onboard::setColorLed(int r, int g, int b) {
@@ -71,7 +78,11 @@ void Onboard::setColorLed(int r, int g, int b) {
 }
 
 void Onboard::updateOutput(SystemData& sys) {
-  (void)sys;
+  // SystemData → 内部ラッチに転記
+  setColorLed(sys.ob.ledRedCmd, sys.ob.ledGreenCmd, sys.ob.ledBlueCmd);
+  setUserLed(sys.ob.userLedCmd);
+
+  // ラッチ → GPIO 反映
   for (int i = 0; i < ONBOARD_LED_COUNT; i++) {
     int pin = LED_PINS[i];
     if (ledState_[i]) {
