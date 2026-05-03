@@ -231,31 +231,44 @@ void RunController::calcBrakeMotorVal(int targetPower)
 // ====================================================================
 
 // pattern 0: スイッチ入力待ち
+//
+// 暫定動作: スタートバー検知関連の処理は無効化し、
+//          ボタン押下で即 TRACE_NORMAL（通常トレース）へ遷移する。
+//          バー処理を有効化したい場合は下のブロックを復活させる。
 void RunController::runWaitSw()
 {
     motor(0, 0);
     handle(0);
+    setColorLed(1, 0, 0); // 待機: 赤色LED
 
-    if (!g_lineDetector.isCrossLine())
+    // ボタン押下で即スタート
+    if (g_onboard.sw())
     {
-        // スタートバー反応なし → 赤色LED、ボタン押下で前進開始
-        setColorLed(1, 0, 0);
-        if (g_onboard.sw())
-        {
-            changePattern(APPROACH_BAR);
-            cnt1Ms_ = 0;
-        }
+        totalMs_ = 0;
+        changePattern(TRACE_NORMAL);
     }
-    else
-    {
-        // スタートバー反応あり → 緑色LED、ボタン押下で CHECK_BAR_OPEN へ
-        setColorLed(0, 1, 0);
-        if (g_onboard.sw())
-        {
-            changePattern(CHECK_BAR_OPEN);
-            cnt1Ms_ = 0;
-        }
-    }
+
+    // // === 元のバー検知あり版（参考プロジェクト準拠） ===
+    // if (!g_lineDetector.isCrossLine())
+    // {
+    //     // スタートバー反応なし → 赤色LED、ボタン押下で前進開始
+    //     setColorLed(1, 0, 0);
+    //     if (g_onboard.sw())
+    //     {
+    //         changePattern(APPROACH_BAR);
+    //         cnt1Ms_ = 0;
+    //     }
+    // }
+    // else
+    // {
+    //     // スタートバー反応あり → 緑色LED、ボタン押下で CHECK_BAR_OPEN へ
+    //     setColorLed(0, 1, 0);
+    //     if (g_onboard.sw())
+    //     {
+    //         changePattern(CHECK_BAR_OPEN);
+    //         cnt1Ms_ = 0;
+    //     }
+    // }
 }
 
 // pattern 1: スタートバーに向かって進む
