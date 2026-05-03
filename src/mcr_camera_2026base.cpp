@@ -12,24 +12,31 @@
 #include "iodefine.h"
 #include <typedefine.h>
 
-#ifdef CPPAPP
-// グローバルコンストラクタの初期化
-extern void __main()
-{
-  static int initialized;
-  if (!initialized)
-  {
-    typedef void (*pfunc)();
-    extern pfunc __ctors[];
-    extern pfunc __ctors_end[];
-    pfunc *p;
+// =====================================================================
+// グローバル C++ コンストラクタ手動実行
+//
+// 本プロジェクトの start.S は HardwareSetup() の後に main() を直接呼び、
+// __libc_init_array() を呼ばない。GCC 13 はグローバル ctor を
+// .init_array セクションに出力するため、main() 冒頭で手動で反復実行する
+// 必要がある（さもなければ Servo/Motor/LineDetector 等の _config メンバが
+// BSS ゼロのままになり、サーボ PWM 出力が 0 になる等の致命的不具合になる）。
+//
+// linker_script.ld 側で .init_array を .tors セクションに収集し、
+// __init_array_start / __init_array_end ラベルを定義している。
+// =====================================================================
+extern "C" {
+  typedef void (*ctor_fn)(void);
+  extern ctor_fn __init_array_start[];
+  extern ctor_fn __init_array_end[];
+}
 
-    initialized = 1;
-    for (p = __ctors_end; p > __ctors;)
-      (*--p)();
+static void runGlobalConstructors(void)
+{
+  for (ctor_fn *p = __init_array_start; p < __init_array_end; ++p)
+  {
+    (*p)();
   }
 }
-#endif
 
 #include "drivers/Camera.h"
 #include "drivers/Onboard.h"
@@ -385,6 +392,12 @@ static void runDebugLoop(void)
 
 int main(void)
 {
+  // ★ 最初に C++ グローバルコンストラクタを実行する。
+  //   start.S が __libc_init_array を呼ばないため、
+  //   ここで実行しないと g_servo / g_motor 等の _config メンバが
+  //   未初期化のまま (BSS ゼロ) となり、PWM 出力が壊れる。
+  runGlobalConstructors();
+
   // MMU + L1 キャッシュ有効化
   SystemInit();
 

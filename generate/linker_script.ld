@@ -91,7 +91,16 @@ SECTIONS
         *(.jcr)
     } > SFLASH
 
-    /* コンストラクタ/デストラクタ */
+    /* コンストラクタ/デストラクタ
+     *
+     * 注意: GCC 13 系（本プロジェクトで使用中の arm-none-eabi-gcc 13.3.1）は
+     * グローバル C++ コンストラクタを **.ctors ではなく .init_array に出力する**。
+     * 元のスクリプトは .ctors のみを収集していたため、g_servo / g_motor /
+     * g_lineDetector 等の _config メンバが初期化されないまま (BSS ゼロのまま)
+     * 動作し、サーボ PWM が 0 になる等の致命的不具合を引き起こしていた。
+     * EMA 化以前は _config メンバが無く、ctor が走らなくても問題が顕在化
+     * しなかった。EMA 移行に伴い .init_array の収集が必須となったため追加。
+     */
     .tors :
     {
         __CTOR_LIST__ = .;
@@ -100,6 +109,21 @@ SECTIONS
         *(.ctors)
         __ctors_end = .;
         __CTOR_END__ = .;
+
+        /* GCC 13 用 .init_array 収集 (グローバル C++ ctor の実体) */
+        . = ALIGN(4);
+        PROVIDE(__init_array_start = .);
+        KEEP(*(SORT_BY_INIT_PRIORITY(.init_array.*)))
+        KEEP(*(.init_array))
+        PROVIDE(__init_array_end = .);
+
+        /* 対称性のため .fini_array も収集 (現状未使用だが定義しておく) */
+        . = ALIGN(4);
+        PROVIDE(__fini_array_start = .);
+        KEEP(*(SORT_BY_INIT_PRIORITY(.fini_array.*)))
+        KEEP(*(.fini_array))
+        PROVIDE(__fini_array_end = .);
+
         __DTOR_LIST__ = .;
         ___dtors = .;
         *(.dtors)

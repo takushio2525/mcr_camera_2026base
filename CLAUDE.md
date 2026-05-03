@@ -136,7 +136,27 @@ Camera の `update()` はステップ分割（4ステップ × 1ms割り込み�
 - **`INT_Excep_IRQ()`**: ICCIAR 読み取り → ハンドラ呼び出し → ICCEOIR 書き込み
 - **`INT_Excep_OSTMI0()`**: `ostm0_interrupt_callback()` の呼び出し
 
+`generate/linker_script.ld` も以下を手動で追加している:
+- **`.init_array` 収集** と `__init_array_start` / `__init_array_end` ラベル定義
+  （GCC 13 はグローバル C++ ctor を `.init_array` に出力する）
+
 e2 studio でコード生成を再実行すると**これらの修正が上書きされる**ため注意。
+
+### グローバル C++ コンストラクタ手動実行（重要）
+
+`generate/start.S` は `__libc_init_array()` を呼ばず、`HardwareSetup()` の後
+直接 `bl main` する。GCC 13 が `.init_array` に出力するグローバル ctor は
+そのままだと**一切実行されない**。`main()` 冒頭の `runGlobalConstructors()`
+で `__init_array_start..end` を手動反復している。
+
+**EMA 化前は症状が顕在化しなかった**: 各ドライバが `static const` のみ
+使用しており ctor 内の処理が無くても問題無かったため。EMA 化で `_config`
+メンバが追加されたことで「ctor が走らないと `_config` が BSS ゼロのまま」
+になり、`Servo` PWM 出力 0 (ペリフェラルロック)、`LineDetector` 全閾値 0
+（検出全崩壊）等の致命的不具合になる。
+
+新しい `g_xxx` グローバルインスタンスを追加する場合、内部状態を ctor 初期化
+リストに置いた時点でこの仕組みに依存することを忘れない。
 
 ### Camera フレーム処理
 
