@@ -8,6 +8,7 @@
 
 #include "Camera.h"
 #include "Serial.h"
+#include "../core/SystemData.h"
 #include "iodefine.h"
 #include <stdlib.h>
 #include <string.h>
@@ -30,15 +31,15 @@ static volatile int32_t s_vsyncCount = 0;
 static volatile int32_t s_vfieldCount = 0;
 static volatile int32_t s_vfieldToggle = 1;
 
-// グローバルインスタンス
-Camera g_camera;
+// グローバルインスタンスの実体定義は main 側に集約済み（EMA 準拠）。
 
 // ====================================================================
-// コンストラクタ
+// コンストラクタ (Config 注入)
 // ====================================================================
-Camera::Camera()
-    : frameStep_(0), fieldToggle_(1), capturedField_(0),
-      frameReady_(false)
+Camera::Camera(const CameraConfig& cfg)
+    : _config(cfg),
+      frameStep_(0), fieldToggle_(1), capturedField_(0),
+      frameReady_(false), frameCount_(0)
 {
   memset((void *)imageBuffer_, 0, sizeof(imageBuffer_));
   memset(ycbcrBuffer_, 0, sizeof(ycbcrBuffer_));
@@ -244,9 +245,15 @@ void Camera::vsyncCallback(DisplayBase::int_type_t int_type)
 // - フレーム開始時にs_vfieldToggleをcapturedField_にキャプチャし、
 //   4ステップ全体で同じフィールド値を使用する
 // ====================================================================
-void Camera::updateOutput(SystemData& sys)
+void Camera::updateInput(SystemData& sys)
 {
-  (void)sys;
+  // メインループが sys.cam.frameReady を false に戻したら、
+  // 内部状態もリセットして次フレームの段階処理を開始可能にする。
+  if (!sys.cam.frameReady && frameReady_)
+  {
+    frameReady_ = false;
+  }
+
   // フレーム処理完了後: 次の Vfield 発生を待って新フレームを開始
   // s_vfieldCount > 0 なら 1回以上 Vfield が来ているので即開始
   // 待ち中はすぐにリターンするため、メインループにCPU時間が返る
@@ -286,11 +293,18 @@ void Camera::updateOutput(SystemData& sys)
     // ステップ3: 輝度抽出（後半60-119行）→ フレームデータ確定
     extractBrightness(1);
     frameReady_ = true;
+    frameCount_++;
     break;
 
   default:
     break;
   }
+
+  // SystemData へ最新状態を反映（毎周期）
+  sys.cam.frameReady     = frameReady_;
+  sys.cam.frameCount     = frameCount_;
+  sys.cam.field          = capturedField_;
+  sys.cam.imageBufferPtr = imageBuffer_;
 }
 
 // ====================================================================
@@ -453,15 +467,8 @@ const volatile unsigned char *Camera::getImageBuffer() const
 }
 
 // ====================================================================
-// isFrameReady: 新しいフレームが準備できたかチェック
+// isFrameReady / clearFrameReady は廃止 (sys.cam.frameReady を直接読み書き)。
 // ====================================================================
-bool Camera::isFrameReady() const { return frameReady_; }
-
-// ====================================================================
-// clearFrameReady: フレーム準備完了フラグをクリア
-// メインループでフレーム読み出し後に呼んでフラグをリセットする
-// ====================================================================
-void Camera::clearFrameReady() { frameReady_ = false; }
 
 // ====================================================================
 // thresholdConvert: 閾値変換

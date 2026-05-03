@@ -2,18 +2,27 @@
  * LineDetector.h
  *
  *  ライン検出モジュール
- *  カメラ画像からコースの白線を検出し、偏差（コース中心からのズレ）を計算する
+ *  EMA 準拠版: SystemData / Config ベース
  *
- *  処理の流れ:
- *    1. calcDeviation(): 全画素の差分からエッジを検出し、各行の偏差を計算
- *    2. calcLineFlags(): 特定行の画素から クロスライン/左右ハーフラインを検出
- *    3. updateSensorBin(): 8点センサ値を更新
+ *  カメラ画像からコースの白線を検出し、偏差・各種ラインフラグ・
+ *  8点センサ値を sys.line.* に格納する。
+ *
+ *  Input  : updateInput(sys) で
+ *           1. sys.run.pattern を読んで pattern_ にセット
+ *           2. calcDeviation()    → sys.line.deviation[]
+ *           3. calcLineFlags()    → sys.line.{cross,left,right,center}Line
+ *           4. updateSensorBin()  → sys.line.sensorBin
+ *           5. sys.line.detectRow に直近検出行を反映
+ *
+ *  処理が重い (HEIGHT × WIDTH ループ) ため 1ms ISR 内では呼ばず、
+ *  メインループで sys.cam.frameReady = true のときのみ実行する。
  */
 
 #ifndef DRIVERS_LINEDETECTOR_H_
 #define DRIVERS_LINEDETECTOR_H_
 
 #include "../core/IModule.h"
+#include "../core/ProjectConfig.h"
 
 // マスク値定義（8点センサ用）
 #define MASK2_2 0x66
@@ -34,40 +43,24 @@ public:
     static const int HEIGHT  = 120;
     static const int CENTER  = 80;
 
-    LineDetector();
+    // Config を注入してインスタンス生成
+    explicit LineDetector(const LineDetectorConfig& cfg);
 
     // IModule
-    // ※Step 4 段階では機械置換のみ。Step 9 で updateInput に正しく振り分ける。
     bool init() override;
-    void updateOutput(SystemData& sys) override;  // calcDeviation + calcLineFlags + updateSensorBin を実行
+    void updateInput(SystemData& sys) override;
 
-    // === 偏差取得 ===
-    // row: 行番号 (0-119)、その行での画像中心からのズレを返す
-    // 正=ラインが左寄り、負=ラインが右寄り
+    // === 後方互換 getter (RunController 用、Step 10 で削除予定) ===
     int getDeviation(int row) const;
-
-    // === ライン検出結果 ===
     bool isCrossLine() const  { return crossLine_; }
     bool isLeftLine() const   { return leftLine_; }
     bool isRightLine() const  { return rightLine_; }
     bool isCenterLine() const { return centerLine_; }
-
-    // === 8点センサ ===
     unsigned char getSensorBin() const { return sensorBin_; }
     unsigned char sensorInput(unsigned char mask) const { return sensorBin_ & mask; }
 
-    // === 検出パラメータ設定（Controller から呼ばれる） ===
-    void setDetectRow(int row)       { detectRow_ = row; }
-    void setDetectHeight(int height) { detectHeight_ = height; }
-    int getDetectRow() const         { return detectRow_; }
-    int getDetectHeight() const      { return detectHeight_; }
-
-    // 走行パターン番号を毎周期通知する（calcLineFlags 内部で使用）
-    // 参考プロジェクトの createLineFlag() は pattern によって
-    // crosslineWidth / brightnessThreshold / centerWidth を切り替えるため、
-    // RunController 側から現在の pattern を渡す必要がある。
-    void setPattern(int p)           { pattern_ = p; }
-    int  getPattern() const          { return pattern_; }
+    // === 検出行 (debug 用) ===
+    int getDetectRow() const { return detectRow_; }
 
 private:
     // --- 偏差計算 (参考プロジェクトの createDeviation 相当) ---
@@ -79,18 +72,23 @@ private:
     // --- 8点センサ更新 ---
     void updateSensorBin();
 
-    // === 検出結果 ===
-    signed int allDeviation_[HEIGHT]; // 各行の偏差
-    bool crossLine_;    // クロスライン検出フラグ
-    bool leftLine_;     // 左ハーフライン検出フラグ
-    bool rightLine_;    // 右ハーフライン検出フラグ
-    bool centerLine_;   // センターライン検出フラグ
-    unsigned char sensorBin_; // 8点センサ値
+    // 現 pattern に応じたパターン別パラメータを返す
+    const LineDetectorPatternParams& selectPatternParams() const;
 
-    // === 検出パラメータ ===
-    int detectRow_;     // ライン検出行（デフォルト: 57）
-    int detectHeight_;  // 検出高さ（デフォルト: 3）
-    int pattern_;       // 現在の走行パターン（RunController から通知）
+    LineDetectorConfig _config;
+
+    // === 検出結果 ===
+    signed int allDeviation_[HEIGHT];
+    bool crossLine_;
+    bool leftLine_;
+    bool rightLine_;
+    bool centerLine_;
+    unsigned char sensorBin_;
+
+    // === 検出パラメータ（updateInput 開始時に Config から復元）===
+    int detectRow_;
+    int detectHeight_;
+    int pattern_;       // sys.run.pattern を毎周期コピー
 };
 
 extern LineDetector g_lineDetector;

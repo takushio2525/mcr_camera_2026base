@@ -77,6 +77,11 @@ struct LineDetectorConfig
     int   centerRowNum;            // 47
     int   centerCountThreshold;    // 10
     int   centerBrightnessAbs;     // 170
+
+    // --- 8点センサ生成パラメータ (Camera::thresholdConvert に渡す) ---
+    int   sensorBinRow;            // 60   8点センサ取得行
+    int   sensorBinThreshold;      // 180  輝度閾値
+    int   sensorBinDiff;           // 8    隣接差分閾値
 };
 
 // ====================================================================
@@ -253,7 +258,11 @@ inline const LineDetectorConfig LINE_DETECTOR_CONFIG = {
 
     /*centerRowNum*/         47,
     /*centerCountThreshold*/ 10,
-    /*centerBrightnessAbs*/  170
+    /*centerBrightnessAbs*/  170,
+
+    /*sensorBinRow*/         60,
+    /*sensorBinThreshold*/   180,
+    /*sensorBinDiff*/        8
 };
 
 inline const MotorConfig MOTOR_CONFIG = {

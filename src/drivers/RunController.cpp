@@ -85,9 +85,11 @@ void RunController::updateOutput(SystemData& sys)
         totalMs_++;
     }
 
-    // ライン検出側に現在のパターンを通知（参考プロジェクトの
-    // createLineFlag() は pattern によりパラメータを切り替えるため必須）
-    g_lineDetector.setPattern((int)pattern_);
+    // ライン検出側へのパターン通知は不要（LineDetector::updateInput が
+    // sys.run.pattern を直読する仕様に変更済み）。ただし RunController から
+    // sys.run.pattern を更新するのは下の changePattern() 経由のため、ここで
+    // 明示的に転記しておく（LineDetector が次フレーム計算時に最新値を読める）。
+    g_sys.run.pattern = (int)pattern_;
 
     // USER_LED (P6_12) は中央2点センサ反応で点灯（参考プロジェクトの
     // USER_LED = sensor_inp(0x18) != 0 ? 1 : 0 と同等）。

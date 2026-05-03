@@ -2,29 +2,34 @@
  * LineDetector.cpp
  *
  *  ライン検出モジュール実装
+ *  EMA 準拠版: SystemData / Config ベース
  *  参考: mcr_shiozawa_cclass_2.38m-s/main.cpp
  *        createDeviation() / createLineFlag() / sensor_inp() / shikiichi_henkan()
+ *
+ *  各種閾値・パラメータは ProjectConfig.h の LINE_DETECTOR_CONFIG で
+ *  一括管理されている。
  */
 
 #include "LineDetector.h"
 #include "Camera.h"
+#include "../core/SystemData.h"
 #include <string.h>
 #include <stdlib.h>
 
-// グローバルインスタンス
-LineDetector g_lineDetector;
+// グローバルインスタンスの実体定義は main 側に集約済み（EMA 準拠）。
 
 // ====================================================================
-// コンストラクタ
+// コンストラクタ (Config 注入)
 // ====================================================================
-LineDetector::LineDetector()
-    : crossLine_(false),
+LineDetector::LineDetector(const LineDetectorConfig& cfg)
+    : _config(cfg),
+      crossLine_(false),
       leftLine_(false),
       rightLine_(false),
       centerLine_(false),
       sensorBin_(0),
-      detectRow_(57),
-      detectHeight_(3),
+      detectRow_(cfg.detectRowDefault),
+      detectHeight_(cfg.detectHeightDefault),
       pattern_(0)
 {
     memset(allDeviation_, 0, sizeof(allDeviation_));
@@ -43,27 +48,45 @@ bool LineDetector::init()
     rightLine_    = false;
     centerLine_   = false;
     sensorBin_    = 0;
-    detectRow_    = 57;
-    detectHeight_ = 3;
+    detectRow_    = _config.detectRowDefault;
+    detectHeight_ = _config.detectHeightDefault;
     pattern_      = 0;
     return true;
 }
 
 // ====================================================================
-// update()
-// 毎フレーム呼ばれる周期処理: 偏差計算 → ライン検出 → センサ更新
+// updateInput()
+// メインループから sys.cam.frameReady=true のときに呼ばれる。
+// 内部で偏差・ラインフラグ・8点センサを計算し、結果を sys.line.* へ格納。
 // ====================================================================
-void LineDetector::updateOutput(SystemData& sys)
+void LineDetector::updateInput(SystemData& sys)
 {
-    (void)sys;
+    // 走行ロジック (sys.run.pattern) をライン検出パラメータ切替に反映
+    pattern_ = sys.run.pattern;
+
+    // 検出行・高さは現状 Config 既定値で固定。動的変更が必要なら sys.line.detectRow を入力にする手もある。
+    detectRow_    = _config.detectRowDefault;
+    detectHeight_ = _config.detectHeightDefault;
+
     calcDeviation();
     calcLineFlags();
     updateSensorBin();
+
+    // SystemData へ反映
+    for (int y = 0; y < HEIGHT; y++)
+    {
+        sys.line.deviation[y] = allDeviation_[y];
+    }
+    sys.line.crossLine  = crossLine_;
+    sys.line.leftLine   = leftLine_;
+    sys.line.rightLine  = rightLine_;
+    sys.line.centerLine = centerLine_;
+    sys.line.sensorBin  = sensorBin_;
+    sys.line.detectRow  = detectRow_;
 }
 
 // ====================================================================
-// getDeviation()
-// 指定行の偏差を返す
+// getDeviation() — 後方互換 getter
 // ====================================================================
 int LineDetector::getDeviation(int row) const
 {
@@ -75,27 +98,30 @@ int LineDetector::getDeviation(int row) const
 }
 
 // ====================================================================
+// selectPatternParams() — 現 pattern_ から使うパラメータセットを選択
+// ====================================================================
+const LineDetectorPatternParams& LineDetector::selectPatternParams() const
+{
+    if (pattern_ == 11) return _config.patternNormal;
+    if (pattern_ == 1 || pattern_ == 2) return _config.patternStart;
+    return _config.patternOther;
+}
+
+// ====================================================================
 // calcDeviation()
-// 参考プロジェクトの createDeviation() (pattern==11, debug_mode==3 のパス)を移植
-//
-// 処理の流れ:
-//   1. 全画素を取得し最大輝度を記録
-//   2. 最大輝度 * 0.87 以上の画素を 255 に置き換える（準二値化）
-//   3. 隣接ピクセル差分を計算
-//   4. 差分 < -8 → 左エッジ（白→黒）、差分 > 8 → 右エッジ（黒→白）を記録
-//   5. 検出なし行はデフォルト値（左=70, 右=90）を設定
-//   6. 最下行は CENTER±10 に固定
-//   7. 下から上へ走査し、一行下の中心に最も近いエッジ点を選択
-//   8. 一行下との差が 5 超え → 外れ値として一行下の値を使用
-//   9. allDeviation_[y] = CENTER - (左エッジ + 右エッジ) / 2
+// 参考プロジェクトの createDeviation() (pattern==11, debug_mode==3 のパス)を
+// LINE_DETECTOR_CONFIG.dev* で駆動するよう移植したもの。
 // ====================================================================
 void LineDetector::calcDeviation()
 {
-    // 閾値パラメータ（pattern==11, debug_mode==3 の値）
-    const float brightnessThreshold      = 0.87f; // 準二値化の輝度倍率
-    const int   minasDifferenceThreshold = -8;    // 左エッジ（白→黒）検出閾値
-    const int   plusDifferenceThreshold  = 8;     // 右エッジ（黒→白）検出閾値
-    const int   differenceThresholdY     = 5;     // 一行下との外れ値検出閾値
+    // 閾値パラメータ（Config から取得）
+    const float brightnessThreshold      = _config.devBrightnessRatio;
+    const int   minasDifferenceThreshold = _config.devMinasDiffTh;
+    const int   plusDifferenceThreshold  = _config.devPlusDiffTh;
+    const int   differenceThresholdY     = _config.devOutlierThY;
+    const int   leftDefaultX             = _config.devLeftDefaultX;
+    const int   rightDefaultX            = _config.devRightDefaultX;
+    const int   bottomCenterOffset       = _config.devBottomCenterOffset;
 
     // スタックオーバーフロー防止のため大きな配列は static ローカルで確保
     static signed int allImageData[HEIGHT][WIDTH];             // 取得した画素データ
@@ -174,13 +200,13 @@ void LineDetector::calcDeviation()
     {
         for (int x = 0; x < WIDTH; x++)
         {
-            // 差分 < -8 → 左エッジ（白→黒）
+            // 差分 < 閾値 → 左エッジ（白→黒）
             if (difference[y][x] < minasDifferenceThreshold)
             {
                 leftExceedingXPositions[y][leftExceedingXPositionsCount[y]] = x;
                 leftExceedingXPositionsCount[y]++;
             }
-            // 差分 > 8 → 右エッジ（黒→白）
+            // 差分 > 閾値 → 右エッジ（黒→白）
             if (difference[y][x] > plusDifferenceThreshold)
             {
                 rightExceedingXPositions[y][rightExceedingXPositionsCount[y]] = x;
@@ -191,26 +217,26 @@ void LineDetector::calcDeviation()
         // ---- ステップ5: 検出なし行はデフォルト値を設定 ----
         if (leftExceedingXPositionsCount[y] == 0)
         {
-            leftExceedingXPositions[y][0] = 70; // 中心付近のデフォルト値（左）
+            leftExceedingXPositions[y][0] = leftDefaultX;
             leftExceedingXPositionsCount[y]++;
         }
         if (rightExceedingXPositionsCount[y] == 0)
         {
-            rightExceedingXPositions[y][0] = 90; // 中心付近のデフォルト値（右）
+            rightExceedingXPositions[y][0] = rightDefaultX;
             rightExceedingXPositionsCount[y]++;
         }
     }
 
-    // ---- ステップ6: 最下行（HEIGHT-1）は CENTER±10 に固定 ----
+    // ---- ステップ6: 最下行は CENTER ± offset に固定 ----
     leftCenterCount[HEIGHT - 1]  = 0;
     rightCenterCount[HEIGHT - 1] = 0;
-    leftExceedingXPositions[HEIGHT - 1][0]  = CENTER - 10;
-    rightExceedingXPositions[HEIGHT - 1][0] = CENTER + 10;
+    leftExceedingXPositions[HEIGHT - 1][0]  = CENTER - bottomCenterOffset;
+    rightExceedingXPositions[HEIGHT - 1][0] = CENTER + bottomCenterOffset;
 
     // ---- ステップ7 & 8: 下から上へ走査し、一行下の中心に最も近いエッジ点を選択 ----
     for (int y = HEIGHT - 2; y >= 0; y--)
     {
-        // 左エッジ: 一行下の中心位置に最も近い点を選択
+        // 左エッジ
         for (int count = 0; count < leftExceedingXPositionsCount[y]; count++)
         {
             leftYDifference[y][count] = abs(
@@ -223,7 +249,7 @@ void LineDetector::calcDeviation()
             }
         }
 
-        // 左エッジ外れ値チェック: 一行下との差が閾値超えなら一行下の値を使用
+        // 左エッジ外れ値チェック
         if (abs(leftExceedingXPositions[y][leftCenterCount[y]]
                 - leftExceedingXPositions[y + 1][leftCenterCount[y + 1]])
             > differenceThresholdY
@@ -234,7 +260,7 @@ void LineDetector::calcDeviation()
                 leftExceedingXPositions[y + 1][leftCenterCount[y + 1]];
         }
 
-        // 右エッジ: 一行下の中心位置に最も近い点を選択
+        // 右エッジ
         for (int count = 0; count < rightExceedingXPositionsCount[y]; count++)
         {
             rightYDifference[y][count] = abs(
@@ -247,7 +273,7 @@ void LineDetector::calcDeviation()
             }
         }
 
-        // 右エッジ外れ値チェック: 一行下との差が閾値超えなら一行下の値を使用
+        // 右エッジ外れ値チェック
         if (abs(rightExceedingXPositions[y][rightCenterCount[y]]
                 - rightExceedingXPositions[y + 1][rightCenterCount[y + 1]])
             > differenceThresholdY
@@ -259,12 +285,10 @@ void LineDetector::calcDeviation()
         }
     }
 
-    // ---- ステップ9: 偏差を計算してグローバル変数に格納 ----
-    // allDeviation_[HEIGHT-1] は最下行なので 0 固定
+    // ---- ステップ9: 偏差を計算 ----
     allDeviation_[HEIGHT - 1] = 0;
     for (int y = HEIGHT - 2; y > 1; y--)
     {
-        // 偏差 = 画像中心 - (左エッジ + 右エッジ) / 2
         allDeviation_[y] = CENTER
             - (leftExceedingXPositions[y][leftCenterCount[y]]
                + rightExceedingXPositions[y][rightCenterCount[y]])
@@ -274,21 +298,19 @@ void LineDetector::calcDeviation()
 
 // ====================================================================
 // calcLineFlags()
-// 参考プロジェクトの createLineFlag() を pattern 分岐込みで移植
+// LINE_DETECTOR_CONFIG.patternNormal/Start/Other を pattern_ に応じて選択し、
+// パターン別パラメータ駆動でクロス/ハーフ/センターラインを判定する。
 //
-// pattern による分岐（参考プロジェクトと同じ振る舞い）:
-//   - pattern==11 (通常トレース)   : crosslineWidth=70 固定、threshold=max*0.69、crossCountThreshold=crosslineWidth-1
-//   - pattern==1, 2 (スタート前)   : crosslineWidth=60、height=10、threshold=90、centerWidth=100、crossCountThreshold=59
-//   - その他                       : crosslineWidth=detectRow_+20、threshold=max*0.68、crossCountThreshold=crosslineWidth-10
-//
-// 処理の流れ:
-//   1. pattern に応じてパラメータを決定
-//   2. detectRow_ から height 行ぶん画像を取得し、各列最大値を imageData に蓄積
-//   3. 中心から左右それぞれ crosslineWidth/2 の範囲で閾値超えをカウント
-//   4. カウントが crossCountThreshold/2 を超えたら左右フラグON
-//   5. 左右両方ON → crossLine_
-//   6. centerRowNum=47 行で輝度170超えのピクセルが centerWidth/2 範囲に
-//      centerCountThreshold(=10) 以上あれば centerLine_
+// パターン別パラメータ仕様 (LineDetectorPatternParams):
+//   crosslineWidth      : <0 → detectRow_ + 20 (元コードの patternOther 既定式)
+//                        ≥0 → 直接値
+//   detectHeight        : 検出領域の高さ
+//   crossCountThreshold : <0 → crosslineWidth + 値 (例 -1 で width-1, -10 で width-10)
+//                        ≥0 → 直接値
+//   brightnessAbs       : >0 → 絶対閾値として使用 (brightnessRatio は無視)
+//                        =0 → maxBrightness * brightnessRatio を使用
+//   brightnessRatio     : maxBrightness に乗じる倍率
+//   centerWidth         : センターライン検出幅
 // ====================================================================
 void LineDetector::calcLineFlags()
 {
@@ -296,30 +318,20 @@ void LineDetector::calcLineFlags()
     static int imageData[WIDTH];  // 検出領域内の各列の輝度最大値
     static int centerData[WIDTH]; // centerRowNum 行の画素データ
 
-    // ---- パターン依存のパラメータ初期値 ----
-    int rowNum         = detectRow_;
-    int height         = detectHeight_;
-    int crosslineWidth = rowNum + 20;
+    const LineDetectorPatternParams& params = selectPatternParams();
 
-    // 通常トレース時はコース幅基準で 70 列固定（参考プロジェクト準拠）
-    if (pattern_ == 11)
-    {
-        crosslineWidth = 70;
-    }
+    // crosslineWidth 解釈: <0 → detectRow_ + 20 (固定オフセット)
+    int crosslineWidth = (params.crosslineWidth < 0) ? (detectRow_ + 20)
+                                                     : params.crosslineWidth;
 
-    // スタートバー検知パターンは検出領域を厚くし、幅も狭く
-    if (pattern_ == 1 || pattern_ == 2)
-    {
-        crosslineWidth = 60;
-        height         = 10;
-    }
+    int height = params.detectHeight;
+    int rowNum = detectRow_;
 
-    const int centerRowNum         = 47;            // センターライン検出行
-    int       centerWidth          = centerRowNum - 2; // 既定 45
-    const int centerCountThreshold = 10;            // センターライン判定カウント閾値
+    int centerWidth          = params.centerWidth;
+    const int centerRowNum         = _config.centerRowNum;
+    const int centerCountThreshold = _config.centerCountThreshold;
 
-    int crossCountThreshold = crosslineWidth - 1; // 既定（pattern==11 はこの式）
-    int maxBrightness       = 0;
+    int maxBrightness = 0;
 
     // ---- imageData を 0 クリア ----
     for (int x = 0; x < WIDTH; x++)
@@ -345,23 +357,15 @@ void LineDetector::calcLineFlags()
         }
     }
 
-    // ---- 明るさ閾値の決定（pattern により計算式が変わる） ----
-    int brightnessThreshold = (int)(maxBrightness * 0.69f);
+    // ---- 明るさ閾値の決定: brightnessAbs > 0 ならそれ、それ以外は max * ratio ----
+    int brightnessThreshold = (params.brightnessAbs > 0)
+        ? params.brightnessAbs
+        : (int)(maxBrightness * params.brightnessRatio);
 
-    if (pattern_ == 1 || pattern_ == 2)
-    {
-        // スタート前は固定閾値、センター検出も広く取り、クロス閾値は緩める
-        brightnessThreshold = 90;
-        centerWidth         = 100;
-        crossCountThreshold = 59;
-    }
-    else if (pattern_ != 11)
-    {
-        // pattern==11 以外（クロス/ハーフ通過中・クランク中など）は
-        // クロスライン誤検出を減らすため判定を厳しく
-        crossCountThreshold = crosslineWidth - 10;
-        brightnessThreshold = (int)(maxBrightness * 0.68f);
-    }
+    // ---- crossCountThreshold 解釈: <0 → crosslineWidth + 値 ----
+    int crossCountThreshold = (params.crossCountThreshold < 0)
+        ? (crosslineWidth + params.crossCountThreshold)
+        : params.crossCountThreshold;
 
     // ---- センターライン用データを取得 ----
     for (int x = 0; x < WIDTH; x++)
@@ -369,7 +373,7 @@ void LineDetector::calcLineFlags()
         centerData[x] = g_camera.getPixel(x, centerRowNum);
     }
 
-    // ---- 左ライン検出: 中心 - crosslineWidth/2 〜 中心まで走査 ----
+    // ---- 左ライン検出 ----
     int leftCount = 0;
     for (int x = CENTER - crosslineWidth / 2; x < CENTER; x++)
     {
@@ -380,7 +384,7 @@ void LineDetector::calcLineFlags()
     }
     leftLine_ = (leftCount > crossCountThreshold / 2);
 
-    // ---- 右ライン検出: 中心 〜 中心 + crosslineWidth/2 まで走査 ----
+    // ---- 右ライン検出 ----
     int rightCount = 0;
     for (int x = CENTER; x < CENTER + crosslineWidth / 2; x++)
     {
@@ -391,14 +395,14 @@ void LineDetector::calcLineFlags()
     }
     rightLine_ = (rightCount > crossCountThreshold / 2);
 
-    // ---- クロスライン判定: 左右両方ON ----
+    // ---- クロスライン判定 ----
     crossLine_ = (leftLine_ && rightLine_);
 
     // ---- センターライン検出 ----
     int centerCount = 0;
     for (int x = WIDTH / 2 - centerWidth / 2; x < WIDTH / 2 + centerWidth / 2; x++)
     {
-        if (x >= 0 && x < WIDTH && centerData[x] > 170)
+        if (x >= 0 && x < WIDTH && centerData[x] > _config.centerBrightnessAbs)
         {
             centerCount++;
         }
@@ -408,10 +412,12 @@ void LineDetector::calcLineFlags()
 
 // ====================================================================
 // updateSensorBin()
-// Camera の thresholdConvert() を使って 8点センサ値を更新する
-// 参考プロジェクトの sensor_bin = shikiichi_henkan(60, 180, 8) 相当
+// Camera::thresholdConvert() を _config.sensorBin* で駆動して 8点センサ更新。
+// 参考プロジェクトの sensor_bin = shikiichi_henkan(60, 180, 8) 相当。
 // ====================================================================
 void LineDetector::updateSensorBin()
 {
-    sensorBin_ = g_camera.thresholdConvert(60, 180, 8);
+    sensorBin_ = g_camera.thresholdConvert(_config.sensorBinRow,
+                                           _config.sensorBinThreshold,
+                                           _config.sensorBinDiff);
 }

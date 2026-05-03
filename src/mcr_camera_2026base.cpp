@@ -72,38 +72,31 @@ static unsigned long s_frameCount = 0;
 static bool s_debugMode = false;
 
 // 各モジュールインスタンス（グローバル, Config 注入）
-// EMA 準拠: 全モジュールのインスタンス定義を main 側に集約していく方針
-Onboard g_onboard(ONBOARD_CONFIG);
-Motor   g_motor  (MOTOR_CONFIG);
-Servo   g_servo  (SERVO_CONFIG);
-Encoder g_encoder(ENCODER_CONFIG);  // Step 8 段階では init/呼出は未接続
+// EMA 準拠: 全モジュールのインスタンス定義を main 側に集約
+Onboard      g_onboard     (ONBOARD_CONFIG);
+Motor        g_motor       (MOTOR_CONFIG);
+Servo        g_servo       (SERVO_CONFIG);
+Encoder      g_encoder     (ENCODER_CONFIG);  // 現状 init/呼出は未接続
+Camera       g_camera      (CAMERA_CONFIG);
+LineDetector g_lineDetector(LINE_DETECTOR_CONFIG);
 
 // ====================================================================
 // IModule* 配列 — EMA 準拠の 3 フェーズ呼出
 //
 // LineDetector / SDLogger は処理時間 / バス制約のため ISR から外し、
-// メインループで呼ぶ。
-//
-// Step 5 段階の振り分け（暫定）:
-//   - 機械置換直後のため、各ドライバの updateInput はデフォルト空実装。
-//     旧 update() は updateOutput に置換済みのため Output 配列に集約。
-//   - Step 6 以降で各ドライバを正しい Input / Output に振り分けていく。
+// メインループで sys.cam.frameReady 駆動で呼ぶ。
+// Encoder も現状は ISR 配列に未登録（Step 12 SDLogger 連携時に有効化）。
 // ====================================================================
 static IModule* s_inputModules[] = {
-    &g_onboard,    // Step 6 で SW 取得を updateInput に実装予定
-    // Step 8 で &g_encoder 追加予定
-    // Step 9 で &g_camera, &g_lineDetector の振り分けを更新予定
+    &g_onboard,    // Input  : SW 状態を sys.ob.sw に
+    &g_camera,     // Input  : 1ms ごとのフレーム段階処理 + sys.cam.* 更新
 };
 static const int N_IN = sizeof(s_inputModules) / sizeof(IModule*);
 
-// 出力配列。Step 5 段階では旧 update() 由来の updateOutput をそのまま
-// 集約する。Step 9 で Camera を Input 側へ移動し、Step 6/7 で Onboard /
-// Motor / Servo を SystemData ベース化していく。
 static IModule* s_outputModules[] = {
-    &g_camera,     // フレーム段階処理（Step 9 で Input に移動予定）
-    &g_motor,
-    &g_servo,
-    &g_onboard,    // LED ラッチ反映
+    &g_motor,      // Output : sys.mot.*Cmd → PWM
+    &g_servo,      // Output : sys.srv.angleCmd → PWM
+    &g_onboard,    // Output : sys.ob.*LedCmd → GPIO
 };
 static const int N_OUT = sizeof(s_outputModules) / sizeof(IModule*);
 
@@ -229,13 +222,13 @@ static void runMainLoop(void)
   while (1)
   {
     // フレーム完了時の処理
-    if (g_camera.isFrameReady())
+    if (g_sys.cam.frameReady)
     {
       s_frameCount++;
-      g_camera.clearFrameReady();
+      g_sys.cam.frameReady = false;
 
       // ライン検出を実行（RunController はこの結果を 1ms 割り込み内で参照する）
-      g_lineDetector.updateOutput(g_sys);
+      g_lineDetector.updateInput(g_sys);
 
       // 走行中はログ記録
       // pattern==11 以降の走行ロジック中のみ（FINISH 状態は除く）
@@ -313,12 +306,12 @@ static void runDebugLoop(void)
   while (1)
   {
     // フレーム更新完了をカウント
-    if (g_camera.isFrameReady())
+    if (g_sys.cam.frameReady)
     {
       s_frameCount++;
-      g_camera.clearFrameReady();
+      g_sys.cam.frameReady = false;
       // フレーム完了時にライン検出を実行
-      g_lineDetector.updateOutput(g_sys);
+      g_lineDetector.updateInput(g_sys);
     }
 
     // 一定間隔でシリアル出力
