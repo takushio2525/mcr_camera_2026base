@@ -61,6 +61,13 @@ public:
     int getDetectRow() const         { return detectRow_; }
     int getDetectHeight() const      { return detectHeight_; }
 
+    // 走行パターン番号を毎周期通知する（calcLineFlags 内部で使用）
+    // 参考プロジェクトの createLineFlag() は pattern によって
+    // crosslineWidth / brightnessThreshold / centerWidth を切り替えるため、
+    // RunController 側から現在の pattern を渡す必要がある。
+    void setPattern(int p)           { pattern_ = p; }
+    int  getPattern() const          { return pattern_; }
+
 private:
     // --- 偏差計算 (参考プロジェクトの createDeviation 相当) ---
     void calcDeviation();
@@ -82,6 +89,7 @@ private:
     // === 検出パラメータ ===
     int detectRow_;     // ライン検出行（デフォルト: 57）
     int detectHeight_;  // 検出高さ（デフォルト: 3）
+    int pattern_;       // 現在の走行パターン（RunController から通知）
 };
 
 extern LineDetector g_lineDetector;

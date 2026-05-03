@@ -24,7 +24,8 @@ LineDetector::LineDetector()
       centerLine_(false),
       sensorBin_(0),
       detectRow_(57),
-      detectHeight_(3)
+      detectHeight_(3),
+      pattern_(0)
 {
     memset(allDeviation_, 0, sizeof(allDeviation_));
 }
@@ -44,6 +45,7 @@ void LineDetector::init()
     sensorBin_    = 0;
     detectRow_    = 57;
     detectHeight_ = 3;
+    pattern_      = 0;
 }
 
 // ====================================================================
@@ -270,46 +272,63 @@ void LineDetector::calcDeviation()
 
 // ====================================================================
 // calcLineFlags()
-// 参考プロジェクトの createLineFlag() (pattern==11 のパス)を移植
+// 参考プロジェクトの createLineFlag() を pattern 分岐込みで移植
+//
+// pattern による分岐（参考プロジェクトと同じ振る舞い）:
+//   - pattern==11 (通常トレース)   : crosslineWidth=70 固定、threshold=max*0.69、crossCountThreshold=crosslineWidth-1
+//   - pattern==1, 2 (スタート前)   : crosslineWidth=60、height=10、threshold=90、centerWidth=100、crossCountThreshold=59
+//   - その他                       : crosslineWidth=detectRow_+20、threshold=max*0.68、crossCountThreshold=crosslineWidth-10
 //
 // 処理の流れ:
-//   1. detectRow_ と detectHeight_ の範囲の画像を蓄積（各列の最大値）
-//   2. クロスライン幅 = detectRow_ + 20
-//   3. 最大輝度 * 0.69 を明るさ閾値とする
-//   4. 中心から左右それぞれクロスライン幅の半分ずつ走査してカウント
-//   5. 左右カウントが crossCountThreshold / 2 より多ければ左右フラグON
-//   6. 左右両方ON → crossLine_ = true
-//   7. centerRowNum=47 行、centerWidth=45 の幅で 170 超えが 10 以上ならセンターラインON
-//
-// 注意: 参考プロジェクトでは bigImageData[IMAGE_WIDTH][IMAGE_HEIGHT] をスタックに確保していたが、
-//       ここでは各列の最大値を蓄積する方式に変更してスタック使用量を削減する
+//   1. pattern に応じてパラメータを決定
+//   2. detectRow_ から height 行ぶん画像を取得し、各列最大値を imageData に蓄積
+//   3. 中心から左右それぞれ crosslineWidth/2 の範囲で閾値超えをカウント
+//   4. カウントが crossCountThreshold/2 を超えたら左右フラグON
+//   5. 左右両方ON → crossLine_
+//   6. centerRowNum=47 行で輝度170超えのピクセルが centerWidth/2 範囲に
+//      centerCountThreshold(=10) 以上あれば centerLine_
 // ====================================================================
 void LineDetector::calcLineFlags()
 {
     // スタックオーバーフロー防止のため static ローカルで確保
-    static int imageData[WIDTH];  // detectRow_ 〜 detectHeight_ 行の列最大値
+    static int imageData[WIDTH];  // 検出領域内の各列の輝度最大値
     static int centerData[WIDTH]; // centerRowNum 行の画素データ
 
-    // クロスライン検出パラメータ
-    const int crosslineWidth       = detectRow_ + 20; // クロスライン検出幅
-    const int crossCountThreshold  = crosslineWidth - 1; // クロスライン判定カウント閾値
+    // ---- パターン依存のパラメータ初期値 ----
+    int rowNum         = detectRow_;
+    int height         = detectHeight_;
+    int crosslineWidth = rowNum + 20;
 
-    // センターライン検出パラメータ
-    const int centerRowNum         = 47;  // センターライン検出行
-    const int centerWidth          = 45;  // センターライン検出幅（元コードは centerRowNum-2=45）
-    const int centerCountThreshold = 10;  // センターライン判定カウント閾値
+    // 通常トレース時はコース幅基準で 70 列固定（参考プロジェクト準拠）
+    if (pattern_ == 11)
+    {
+        crosslineWidth = 70;
+    }
 
-    int maxBrightness = 0; // 検出領域の最大輝度
+    // スタートバー検知パターンは検出領域を厚くし、幅も狭く
+    if (pattern_ == 1 || pattern_ == 2)
+    {
+        crosslineWidth = 60;
+        height         = 10;
+    }
 
-    // ---- imageData を初期化（各列の最大値を蓄積するため 0 クリア）----
+    const int centerRowNum         = 47;            // センターライン検出行
+    int       centerWidth          = centerRowNum - 2; // 既定 45
+    const int centerCountThreshold = 10;            // センターライン判定カウント閾値
+
+    int crossCountThreshold = crosslineWidth - 1; // 既定（pattern==11 はこの式）
+    int maxBrightness       = 0;
+
+    // ---- imageData を 0 クリア ----
     for (int x = 0; x < WIDTH; x++)
     {
         imageData[x] = 0;
     }
 
     // ---- 検出領域の画像を取得し、各列の最大値を imageData に蓄積 ----
-    for (int y = detectRow_; y < detectRow_ + detectHeight_; y++)
+    for (int y = rowNum; y < rowNum + height; y++)
     {
+        if (y < 0 || y >= HEIGHT) continue;
         for (int x = 0; x < WIDTH; x++)
         {
             int val = g_camera.getPixel(x, y);
@@ -324,8 +343,23 @@ void LineDetector::calcLineFlags()
         }
     }
 
-    // ---- 明るさ閾値を計算 ----
-    const int brightnessThreshold = (int)(maxBrightness * 0.69f);
+    // ---- 明るさ閾値の決定（pattern により計算式が変わる） ----
+    int brightnessThreshold = (int)(maxBrightness * 0.69f);
+
+    if (pattern_ == 1 || pattern_ == 2)
+    {
+        // スタート前は固定閾値、センター検出も広く取り、クロス閾値は緩める
+        brightnessThreshold = 90;
+        centerWidth         = 100;
+        crossCountThreshold = 59;
+    }
+    else if (pattern_ != 11)
+    {
+        // pattern==11 以外（クロス/ハーフ通過中・クランク中など）は
+        // クロスライン誤検出を減らすため判定を厳しく
+        crossCountThreshold = crosslineWidth - 10;
+        brightnessThreshold = (int)(maxBrightness * 0.68f);
+    }
 
     // ---- センターライン用データを取得 ----
     for (int x = 0; x < WIDTH; x++)
@@ -342,8 +376,6 @@ void LineDetector::calcLineFlags()
             leftCount++;
         }
     }
-
-    // 左カウントが閾値の半分より多ければ左ラインフラグON
     leftLine_ = (leftCount > crossCountThreshold / 2);
 
     // ---- 右ライン検出: 中心 〜 中心 + crosslineWidth/2 まで走査 ----
@@ -355,8 +387,6 @@ void LineDetector::calcLineFlags()
             rightCount++;
         }
     }
-
-    // 右カウントが閾値の半分より多ければ右ラインフラグON
     rightLine_ = (rightCount > crossCountThreshold / 2);
 
     // ---- クロスライン判定: 左右両方ON ----
@@ -371,7 +401,6 @@ void LineDetector::calcLineFlags()
             centerCount++;
         }
     }
-
     centerLine_ = (centerCount > centerCountThreshold);
 }
 
