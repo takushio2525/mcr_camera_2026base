@@ -2,18 +2,20 @@
  * Motor.cpp
  *
  *  モータードライバ実装
+ *  EMA 準拠版: SystemData / Config ベース
  *  参考: mcr_shiozawa_cclass_2.38m-s/main.cpp
  *        init_MTU2_PWM_Motor() / motor()
  */
 
 #include "Motor.h"
+#include "../core/SystemData.h"
 #include "iodefine.h"
 #include <typedefine.h>
 
-// グローバルインスタンス
-Motor g_motor;
+// グローバルインスタンスの実体定義は main 側に移動済み（EMA 準拠）。
+// 後方互換用に extern 宣言は Motor.h に残してある。
 
-Motor::Motor() : left_(0), right_(0) {}
+Motor::Motor(const MotorConfig& cfg) : _config(cfg), left_(0), right_(0) {}
 
 // ---------------------------------------------------------------------
 // init() — MTU2 チャンネル3/4 (PWM) + P4_6/P4_7 (方向ピン) 初期化
@@ -46,22 +48,28 @@ bool Motor::init()
   MTU2TOER   = 0xc6;            // TIOC3B, TIOC4A, TIOC4B 出力有効
   MTU2TCNT_3 = 0;
   MTU2TCNT_4 = 0;
-  MTU2TGRA_3 = MTU2TGRC_3 = PWM_CYCLE; // PWM周期 (1ms)
-  MTU2TGRA_4 = MTU2TGRC_4 = 0;         // 左モーター初期デューティ=0
-  MTU2TGRB_4 = MTU2TGRD_4 = 0;         // 右モーター初期デューティ=0
-  MTU2TSTR   |= 0x40;                   // TCNT_4 スタート
+  MTU2TGRA_3 = MTU2TGRC_3 = _config.pwmCycle; // PWM周期 (Config から)
+  MTU2TGRA_4 = MTU2TGRC_4 = 0;                // 左モーター初期デューティ=0
+  MTU2TGRB_4 = MTU2TGRD_4 = 0;                // 右モーター初期デューティ=0
+  MTU2TSTR   |= 0x40;                          // TCNT_4 スタート
   return true;
 }
 
+// ---------------------------------------------------------------------
+// updateOutput() — SystemData → ハードウェア反映
+// sys.mot.leftCmd / rightCmd を読んで PWM に反映し、
+// 反映後の値を sys.mot.leftActual / rightActual に書き戻す。
+// ---------------------------------------------------------------------
 void Motor::updateOutput(SystemData& sys)
 {
-  (void)sys;
-  // set() で即時反映するため、ここでは何もしない
+  set(sys.mot.leftCmd, sys.mot.rightCmd);
+  sys.mot.leftActual  = left_;
+  sys.mot.rightActual = right_;
 }
 
 // ---------------------------------------------------------------------
-// set() — 左右モーター速度設定
-// val: -100(後退)〜0(停止)〜+100(前進)
+// private: set — 左右モーター速度設定
+// val: -maxPower(後退)〜0(停止)〜+maxPower(前進)
 // ---------------------------------------------------------------------
 void Motor::set(int left, int right)
 {
@@ -79,10 +87,10 @@ void Motor::stop()
 // ---------------------------------------------------------------------
 // private: clamp
 // ---------------------------------------------------------------------
-int Motor::clamp(int val)
+int Motor::clamp(int val) const
 {
-  if (val >  MAX_POWER) return  MAX_POWER;
-  if (val < -MAX_POWER) return -MAX_POWER;
+  if (val >  _config.maxPower) return  _config.maxPower;
+  if (val < -_config.maxPower) return -_config.maxPower;
   return val;
 }
 
@@ -99,13 +107,13 @@ void Motor::applyLeft(int val)
   {
     // 前進: P4_6 = 1（極性反転）
     GPIOP4    |= 0x0040u;
-    MTU2TGRC_4 = (long)(PWM_CYCLE - 1) * val / 100;
+    MTU2TGRC_4 = (long)(_config.pwmCycle - 1) * val / 100;
   }
   else
   {
     // 後退: P4_6 = 0（極性反転）
     GPIOP4    &= ~0x0040u;
-    MTU2TGRC_4 = (long)(PWM_CYCLE - 1) * (-val) / 100;
+    MTU2TGRC_4 = (long)(_config.pwmCycle - 1) * (-val) / 100;
   }
 }
 
@@ -118,12 +126,12 @@ void Motor::applyRight(int val)
   {
     // 前進: P4_7 = 0
     GPIOP4    &= ~0x0080u;
-    MTU2TGRD_4 = (long)(PWM_CYCLE - 1) * val / 100;
+    MTU2TGRD_4 = (long)(_config.pwmCycle - 1) * val / 100;
   }
   else
   {
     // 後退: P4_7 = 1
     GPIOP4    |= 0x0080u;
-    MTU2TGRD_4 = (long)(PWM_CYCLE - 1) * (-val) / 100;
+    MTU2TGRD_4 = (long)(_config.pwmCycle - 1) * (-val) / 100;
   }
 }

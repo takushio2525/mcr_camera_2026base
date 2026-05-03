@@ -2,35 +2,47 @@
  * Motor.h
  *
  *  モータードライバ (MTU2 チャンネル3/4 リセット同期PWMモード)
+ *  EMA 準拠版: SystemData / Config ベース
  *  For GR-PEACH (RZ/A1H)
  *
  *  左モーター: TIOC4A (P4_4), 方向: P4_6
  *  右モーター: TIOC4B (P4_5), 方向: P4_7
- *  PWM周期: 1ms (P0φ/1 = 33.33MHz, MOTOR_PWM_CYCLE = 33332)
+ *  PWM周期: 1ms (P0φ/1 = 33.33MHz, MotorConfig.pwmCycle = 33332)
+ *
+ *  Output : updateOutput(sys) → sys.mot.leftCmd/rightCmd を PWM/方向に反映
+ *           反映後の値を sys.mot.leftActual/rightActual に書き戻す
  */
 
 #ifndef DRIVERS_MOTOR_H_
 #define DRIVERS_MOTOR_H_
 
 #include "../core/IModule.h"
+#include "../core/ProjectConfig.h"
 
 class Motor : public IModule
 {
 public:
-  // モーターPWM周期 (1ms / P0φ/1)
+  // モーターPWM周期 (1ms / P0φ/1) — 後方互換のため static const も保持
   static const int PWM_CYCLE = 33332;
-  // 最大出力 (%)
+  // 最大出力 (%) — 後方互換のため static const も保持
   static const int MAX_POWER = 100;
 
-  Motor();
+  // Config を注入してインスタンス生成
+  explicit Motor(const MotorConfig& cfg);
 
   // MTU2チャンネル3/4 + 方向ピン (P4_4〜P4_7) の初期化
   bool init() override;
 
-  // 周期処理 (現状は空: set()で即時反映)
+  // Output : sys.mot.leftCmd/rightCmd を内部に転記して PWM 反映、
+  //          反映後の値を sys.mot.leftActual/rightActual に書き戻し
   void updateOutput(SystemData& sys) override;
 
-  // 左右モーターの速度を設定
+  // 現在の設定値を取得 (debug / 旧 SDLogger 用、Step 12 で SystemData 経由に移行予定)
+  int getLeft() const { return left_; }
+  int getRight() const { return right_; }
+
+private:
+  // 左右モーターの速度を内部で設定
   // left, right: -100(後退)〜0(停止)〜+100(前進)
   // 範囲外の値は自動クランプする
   void set(int left, int right);
@@ -38,20 +50,16 @@ public:
   // 両モーターを停止 (set(0, 0) と同等)
   void stop();
 
-  // 現在の設定値を取得
-  int getLeft() const { return left_; }
-  int getRight() const { return right_; }
-
-private:
-  int left_;
-  int right_;
-
-  // [-MAX_POWER, +MAX_POWER] にクランプ
-  static int clamp(int val);
+  // [-maxPower, +maxPower] にクランプ
+  int clamp(int val) const;
 
   // 左右モーターへの低レベル書き込み
   void applyLeft(int val);
   void applyRight(int val);
+
+  MotorConfig _config;
+  int left_;
+  int right_;
 };
 
 extern Motor g_motor;

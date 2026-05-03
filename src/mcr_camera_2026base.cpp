@@ -70,8 +70,11 @@ static unsigned long s_frameCount = 0;
 //   false = 走行モード（RunController が状態遷移を進める）
 static bool s_debugMode = false;
 
-// Onboardインスタンス（グローバル, Config 注入）
+// 各モジュールインスタンス（グローバル, Config 注入）
+// EMA 準拠: 全モジュールのインスタンス定義を main 側に集約していく方針
 Onboard g_onboard(ONBOARD_CONFIG);
+Motor   g_motor  (MOTOR_CONFIG);
+Servo   g_servo  (SERVO_CONFIG);
 
 // ====================================================================
 // IModule* 配列 — EMA 準拠の 3 フェーズ呼出
@@ -266,8 +269,9 @@ static void runMainLoop(void)
     {
       savedToSD = true;
       g_serial.printf("\n*** 走行終了 → ログ保存中 ***\n");
-      g_motor.set(0, 0);
-      g_servo.setAngle(0);
+      g_sys.mot.leftCmd  = 0;
+      g_sys.mot.rightCmd = 0;
+      g_sys.srv.angleCmd = 0;
       g_sdlogger.saveToSD();
       g_serial.printf("*** ログ保存完了 ***\n");
     }

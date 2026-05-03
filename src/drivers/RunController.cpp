@@ -160,12 +160,15 @@ void RunController::changePattern(Pattern p)
 // ====================================================================
 void RunController::handle(int angle)
 {
-    g_servo.setAngle(angle);
+    // 旧 g_servo.setAngle(angle) — SystemData 経由に変更
+    g_sys.srv.angleCmd = angle;
 }
 
 void RunController::motor(int left, int right)
 {
-    g_motor.set(left, right);
+    // 旧 g_motor.set(left, right) — SystemData 経由に変更
+    g_sys.mot.leftCmd  = left;
+    g_sys.mot.rightCmd = right;
 }
 
 void RunController::setColorLed(int r, int g, int b)

@@ -2,52 +2,55 @@
  * Servo.h
  *
  *  サーボドライバ (MTU2 チャンネル0 PWMモード1)
+ *  EMA 準拠版: SystemData / Config ベース
  *  For GR-PEACH (RZ/A1H)
  *
  *  サーボ出力: TIOC0A (P4_0)
- *  PWM周期: 16ms (P0φ/16 = 2.08MHz, SERVO_PWM_CYCLE = 33332)
- *  中心位置: SERVO_CENTER = 3090 カウント (約1.5ms)
- *  ステップ: HANDLE_STEP = 23 カウント/度
+ *  PWM周期: 16ms (P0φ/16)
+ *  中心位置: ServoConfig.center カウント (約1.5ms)
+ *  ステップ: ServoConfig.handleStep カウント/度
+ *
+ *  Output : updateOutput(sys) → sys.srv.angleCmd を PWM デューティに反映
+ *           反映後の値を sys.srv.angleActual に書き戻す
  */
 
 #ifndef DRIVERS_SERVO_H_
 #define DRIVERS_SERVO_H_
 
 #include "../core/IModule.h"
+#include "../core/ProjectConfig.h"
 
 class Servo : public IModule
 {
 public:
-  // サーボPWM周期 (16ms / P0φ/16)
+  // サーボPWM周期 — 後方互換のため static const も保持
   static const int PWM_CYCLE    = 33332;
-  // サーボ中心位置 (1.5ms相当のカウント値)
   static const int CENTER       = 3090;
-  // 1度あたりのカウント変化量
   static const int HANDLE_STEP  = 23;
-  // 最大操舵角 (度)
   static const int MAX_ANGLE    = 40;
 
-  Servo();
+  // Config を注入してインスタンス生成
+  explicit Servo(const ServoConfig& cfg);
 
   // MTU2チャンネル0 + P4_0 の初期化
   bool init() override;
 
-  // 周期処理 (現状は空: setAngle()で即時反映)
+  // Output : sys.srv.angleCmd を反映、sys.srv.angleActual に書き戻し
   void updateOutput(SystemData& sys) override;
 
-  // ステアリング角度を設定
-  // angle: -MAX_ANGLE(右)〜0(中央)〜+MAX_ANGLE(左) [度]
-  // 注: 符号は参考プロジェクトの handle() 準拠 (正=左、負=右)
-  void setAngle(int angle);
-
-  // 現在の設定角度を取得
+  // 現在の設定角度を取得 (debug 用、Step 12 で SystemData 経由に移行予定)
   int getAngle() const { return angle_; }
 
 private:
-  int angle_;
+  // ステアリング角度を内部で設定
+  // angle: -maxAngle(右)〜0(中央)〜+maxAngle(左) [度]
+  void setAngle(int angle);
 
-  // [-MAX_ANGLE, +MAX_ANGLE] にクランプ
-  static int clamp(int val);
+  // [-maxAngle, +maxAngle] にクランプ
+  int clamp(int val) const;
+
+  ServoConfig _config;
+  int angle_;
 };
 
 extern Servo g_servo;
