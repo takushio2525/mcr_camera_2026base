@@ -72,6 +72,35 @@ static bool s_debugMode = false;
 // Onboardインスタンス（グローバル）
 Onboard g_onboard;
 
+// ====================================================================
+// IModule* 配列 — EMA 準拠の 3 フェーズ呼出
+//
+// LineDetector / SDLogger は処理時間 / バス制約のため ISR から外し、
+// メインループで呼ぶ。
+//
+// Step 5 段階の振り分け（暫定）:
+//   - 機械置換直後のため、各ドライバの updateInput はデフォルト空実装。
+//     旧 update() は updateOutput に置換済みのため Output 配列に集約。
+//   - Step 6 以降で各ドライバを正しい Input / Output に振り分けていく。
+// ====================================================================
+static IModule* s_inputModules[] = {
+    &g_onboard,    // Step 6 で SW 取得を updateInput に実装予定
+    // Step 8 で &g_encoder 追加予定
+    // Step 9 で &g_camera, &g_lineDetector の振り分けを更新予定
+};
+static const int N_IN = sizeof(s_inputModules) / sizeof(IModule*);
+
+// 出力配列。Step 5 段階では旧 update() 由来の updateOutput をそのまま
+// 集約する。Step 9 で Camera を Input 側へ移動し、Step 6/7 で Onboard /
+// Motor / Servo を SystemData ベース化していく。
+static IModule* s_outputModules[] = {
+    &g_camera,     // フレーム段階処理（Step 9 で Input に移動予定）
+    &g_motor,
+    &g_servo,
+    &g_onboard,    // LED ラッチ反映
+};
+static const int N_OUT = sizeof(s_outputModules) / sizeof(IModule*);
+
 extern "C" void ostm0_interrupt_callback(void);
 
 // GIC (Generic Interrupt Controller) のグローバル有効化
@@ -146,14 +175,20 @@ void ostm0_interrupt_callback(void)
   g_timer_1ms++;
   g_cnt_printf++;
 
-  // カメラのフレーム周期処理（必須）
-  g_camera.updateOutput(g_sys);
+  // ============ Input フェーズ ============
+  // ハードウェア → SystemData
+  for (int i = 0; i < N_IN; ++i)
+  {
+    if (s_inputModules[i]->enabled)
+    {
+      s_inputModules[i]->updateInput(g_sys);
+    }
+  }
 
-  // モーター/サーボの周期処理（現状は空だが、将来の拡張用に呼ぶ）
-  g_motor.updateOutput(g_sys);
-  g_servo.updateOutput(g_sys);
-
-  // 走行モードのときのみ RunController を進める
+  // ============ Logic フェーズ ============
+  // SystemData → SystemData
+  // Step 5 暫定: RunController を直呼びしている。
+  // Step 10 で logic/RunLogic.cpp の applyDrivingPattern(g_sys) に置換予定。
   if (!s_debugMode)
   {
     g_runController.updateOutput(g_sys);
@@ -161,12 +196,18 @@ void ostm0_interrupt_callback(void)
   else
   {
     // デバッグモードでも USER_LED は中央2点センサ反応で点灯させる
-    // （参考プロジェクトの debug_mode 中の USER_LED 動作に合わせる）
     g_onboard.setUserLed(g_lineDetector.sensorInput(0x18) != 0 ? 1 : 0);
   }
 
-  // GPIO ラッチ反映
-  g_onboard.updateOutput(g_sys);
+  // ============ Output フェーズ ============
+  // SystemData → ハードウェア
+  for (int i = 0; i < N_OUT; ++i)
+  {
+    if (s_outputModules[i]->enabled)
+    {
+      s_outputModules[i]->updateOutput(g_sys);
+    }
+  }
 }
 
 // ====================================================================
