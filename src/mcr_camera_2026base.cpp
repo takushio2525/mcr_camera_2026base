@@ -38,6 +38,27 @@ static void runGlobalConstructors(void)
   }
 }
 
+// =====================================================================
+// ベアメタル向けダミーシンボル
+//
+// グローバル ctor を有効化すると、GCC が以下を参照するようになるが、
+// 本プロジェクトはベアメタル (newlib stubs 不使用 / dynamic loader 無し)
+// のため、それぞれ意味を持たない。リンクを通すためダミーで定義する。
+//
+//   __dso_handle : __cxa_atexit() 用の DSO ハンドル。dynamic shared
+//                  object 識別子だが、ベアメタル環境では単一実行像
+//                  のため任意の固定値で良い。
+//   _fini        : libc の __libc_fini_array() が呼ぶ「全 fini 実行」
+//                  関数。本プロジェクトでは exit に到達しないため空。
+//   __cxa_atexit : 静的 dtor 登録 (本プロジェクトは exit しないので
+//                  常に成功扱いで何もしない)。
+// =====================================================================
+extern "C" {
+  void *__dso_handle = (void *)&__dso_handle;
+  void _fini(void) {}
+  int  __cxa_atexit(void (*)(void *), void *, void *) { return 0; }
+}
+
 #include "drivers/Camera.h"
 #include "drivers/Onboard.h"
 #include "drivers/Serial.h"
