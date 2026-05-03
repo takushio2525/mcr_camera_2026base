@@ -24,6 +24,19 @@
 #include "../core/IModule.h"
 #include <stdint.h>
 
+// ====================================================================
+// SDCardConfig — SDカード SPI のピン設定
+// (実体は ProjectConfig.h の SDCARD_CONFIG で定義)
+// ====================================================================
+struct SDCardConfig
+{
+  int csPinFmt;       // P8_4 (CS, GPIO 手動制御)
+  int cdPinFmt;       // P7_8 (CD, カード検出)
+  int mosiPinFmt;     // P8_5
+  int misoPinFmt;     // P8_6
+  int sckPinFmt;      // P8_3
+};
+
 class SDCard : public IModule
 {
 public:
@@ -35,7 +48,8 @@ public:
     CARD_V2_HC   // SDHC/SDXC (高容量)
   };
 
-  SDCard();
+  // Config を注入してインスタンス生成
+  explicit SDCard(const SDCardConfig& cfg);
 
   // RSPI2 初期化 + SDカード初期化
   bool init() override;
@@ -61,6 +75,7 @@ public:
   uint32_t getSectorCount() const { return sectorCount_; }
 
 private:
+  SDCardConfig _config;
   bool initialized_;
   CardType cardType_;
   uint32_t sectorCount_;

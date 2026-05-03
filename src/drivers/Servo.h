@@ -18,7 +18,19 @@
 #define DRIVERS_SERVO_H_
 
 #include "../core/IModule.h"
-#include "../core/ProjectConfig.h"
+
+// ====================================================================
+// ServoConfig — Servo のハードウェア / 動作設定
+// (実体は ProjectConfig.h の SERVO_CONFIG で定義)
+// ====================================================================
+struct ServoConfig
+{
+  int pwmCycle;       // 33332
+  int center;         // 3090 (1.5ms 相当)
+  int handleStep;     // 23   (カウント / 度)
+  int maxAngle;       // 40   (度)
+  int pwmPinFmt;
+};
 
 class Servo : public IModule
 {

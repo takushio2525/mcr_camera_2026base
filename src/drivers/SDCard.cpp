@@ -31,11 +31,11 @@
 #define DATA_TOKEN_CMD17    0xFE
 #define DATA_TOKEN_CMD24    0xFE
 
-// グローバルインスタンス
-SDCard g_sdcard;
+// グローバルインスタンスの実体定義は main 側に集約済み（EMA 準拠）。
 
-SDCard::SDCard()
-  : initialized_(false)
+SDCard::SDCard(const SDCardConfig& cfg)
+  : _config(cfg)
+  , initialized_(false)
   , cardType_(CARD_NONE)
   , sectorCount_(0)
 {

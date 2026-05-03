@@ -10,12 +10,25 @@
 #define DRIVERS_SERIAL_H_
 
 #include "../core/IModule.h"
+#include <stdint.h>
+
+// ====================================================================
+// SerialConfig — SCIF2 のボーレート / ピン / バッファ設定
+// (実体は ProjectConfig.h の SERIAL_CONFIG で定義)
+// ====================================================================
+struct SerialConfig
+{
+  uint32_t baud;        // 230400
+  int      txPinFmt;    // P6_3 TxD2
+  int      rxPinFmt;    // P6_2 RxD2
+  int      bufferSize;  // 512 (現状はクラス内固定配列で 512 バイト)
+};
 
 class Serial : public IModule
 {
 public:
-  // Constructor
-  Serial();
+  // Config を注入してインスタンス生成
+  explicit Serial(const SerialConfig& cfg);
 
   // Initialize SCIF2 and configure pins
   bool init() override;
@@ -32,6 +45,8 @@ public:
 private:
   // Output a single character (waits for FIFO/Tx shift register)
   void putChar(char c);
+
+  SerialConfig _config;
 
   // Internal buffer for vsnprintf
   // ANSI色付き160文字行 + ヘッダ等を考慮して512バイトに拡大

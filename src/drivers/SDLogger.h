@@ -2,17 +2,18 @@
  * SDLogger.h
  *
  *  SDカード ログ統一モジュール
- *  走行中のデータをバッファに記録し、走行終了後にCSVでSDカードに書き出す。
+ *  EMA 準拠版: SystemData / Config ベース
  *
- *  使い方:
- *    1. g_sdlogger.init()     → SDカード初期化 + FatFs マウント
- *    2. g_sdlogger.record()   → 走行中に毎ループ呼んでデータを記録
- *    3. g_sdlogger.saveToSD() → 走行終了後にCSVバッチ書き出し
+ *  Output : updateOutput(sys) で
+ *           - 走行中 (sys.run.pattern >= cfg.patternMinForLog かつ FINISH 以外)
+ *             ならログエントリを自動追加
+ *           - sys.sd.saveRequested == true なら saveToSD() を実行
+ *           - sys.sd.ready/logCount/full/saveDone を毎周期更新
  *
- *  ファイル形式:
- *    /data0000.csv, /data0001.csv, ... (renban.txt で連番管理)
+ *  本モジュールは ISR ではなく **メインループから** 呼び出すこと
+ *  (SD バス処理 + FatFs はタイミング制約があるため)。
  *
- *  参考: mcr_shiozawa_cclass_2.38m-s の SDLOG_T + CSV出力
+ *  ファイル形式: /data0000.csv, /data0001.csv, ... (renban.txt で連番管理)
  */
 
 #ifndef DRIVERS_SDLOGGER_H_
@@ -21,10 +22,23 @@
 #include "../core/IModule.h"
 #include <stdint.h>
 
-// ログバッファ最大エントリ数
+// ====================================================================
+// SDLoggerConfig — SDLogger の動作設定
+// (実体は ProjectConfig.h の SDLOGGER_CONFIG で定義)
+// ====================================================================
+struct SDLoggerConfig
+{
+  int maxEntries;       // 4000 (バッファサイズ)
+  int imageWidth;       // 160  (画像 1 行記録時の幅)
+  int recordImageRow;   // 45   (画像 1 行記録時の行番号 = TRACE_ROW)
+  int patternMinForLog; // 11   (TRACE_NORMAL 以上で記録開始)
+  int finishPattern;    // 101  (FINISH パターン番号 — 記録対象外)
+};
+
+// ログバッファ最大エントリ数 (SDLoggerConfig.maxEntries の上限。配列サイズ用)
 #define SDLOG_MAX_ENTRIES 4000
 
-// 画像データ幅（参考プロジェクト準拠）
+// 画像データ幅（参考プロジェクト準拠 / SDLoggerConfig.imageWidth の上限）
 #define SDLOG_IMAGE_WIDTH 160
 
 // ログ1エントリの構造体（参考プロジェクトの SDLOG_T 準拠）
@@ -48,23 +62,21 @@ typedef struct {
 class SDLogger : public IModule
 {
 public:
-  SDLogger();
+  // Config を注入してインスタンス生成
+  explicit SDLogger(const SDLoggerConfig& cfg);
 
   // SDカード初期化 + FatFs マウント
   bool init() override;
 
-  // 周期処理（未使用）
+  // Output : 走行中ログ自動記録 + sys.sd.saveRequested で保存
   void updateOutput(SystemData& sys) override;
 
   // 初期化成功したか
   bool isReady() const { return mounted_; }
 
-  // ---- ログ記録 ----
+  // ---- ログ記録 (内部 / 後方互換用) ----
 
-  // 現在のログエントリへの参照を取得して直接書き込む
-  // 使用例: g_sdlogger.current().pattern = 11;
-  //         g_sdlogger.current().hennsa = deviation;
-  //         g_sdlogger.commit(); // エントリを確定して次へ進む
+  // 現在のログエントリへの参照を取得（updateOutput 内部で使用）
   SDLOG_T& current();
 
   // 現在のエントリを確定して記録番地を進める
@@ -77,7 +89,7 @@ public:
   void resetLog();
 
   // ログバッファが満杯か
-  bool isFull() const { return logCount_ >= SDLOG_MAX_ENTRIES; }
+  bool isFull() const { return logCount_ >= (unsigned int)_config.maxEntries; }
 
   // ---- CSV書き出し ----
 
@@ -86,6 +98,7 @@ public:
   int saveToSD();
 
 private:
+  SDLoggerConfig _config;
   bool mounted_;              // FatFs マウント済みフラグ
   unsigned int logCount_;     // 記録済みエントリ数
 

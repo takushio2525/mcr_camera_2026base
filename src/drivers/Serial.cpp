@@ -17,9 +17,9 @@
 // GR-PEACH Clock Mode 0: P1φ = 66,666,666 Hz
 // mbed serial_api.c の serial_baud() と同一設定で 230400bps を実現
 
-Serial g_serial;
+// グローバルインスタンスの実体定義は main 側に集約済み（EMA 準拠）。
 
-Serial::Serial() {}
+Serial::Serial(const SerialConfig& cfg) : _config(cfg) {}
 
 bool Serial::init()
 {

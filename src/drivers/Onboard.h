@@ -15,7 +15,19 @@
 #define DRIVERS_ONBOARD_H_
 
 #include "../core/IModule.h"
-#include "../core/ProjectConfig.h"
+
+// ====================================================================
+// OnboardConfig — オンボード LED / SW のピン設定
+// (実体は ProjectConfig.h の ONBOARD_CONFIG で定義)
+// ====================================================================
+struct OnboardConfig
+{
+  int swPinFmt;        // P6_0
+  int ledUserPinFmt;   // P6_12
+  int ledRedPinFmt;    // P6_13
+  int ledGreenPinFmt;  // P6_14
+  int ledBluePinFmt;   // P6_15
+};
 
 // LED Count
 #define ONBOARD_LED_COUNT 4

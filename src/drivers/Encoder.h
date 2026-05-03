@@ -23,7 +23,18 @@
 #define DRIVERS_ENCODER_H_
 
 #include "../core/IModule.h"
-#include "../core/ProjectConfig.h"
+
+// ====================================================================
+// EncoderConfig — エンコーダのフィルタ / ピン設定
+// (実体は ProjectConfig.h の ENCODER_CONFIG で定義)
+// ====================================================================
+struct EncoderConfig
+{
+  int   filterN;     // 4   (移動平均段数)
+  float rcAlpha;     // 0.5 (RC フィルタ係数)
+  int   aPinFmt;     // P1_0  TCLKA
+  int   bPinFmt;     // P1_10 TCLKB
+};
 
 class Encoder : public IModule
 {

@@ -17,7 +17,20 @@
 #define DRIVERS_MOTOR_H_
 
 #include "../core/IModule.h"
-#include "../core/ProjectConfig.h"
+
+// ====================================================================
+// MotorConfig — Motor のハードウェア / 動作設定
+// (実体は ProjectConfig.h の MOTOR_CONFIG で定義)
+// ====================================================================
+struct MotorConfig
+{
+  int pwmCycle;       // 33332 (1ms / P0φ/1)
+  int maxPower;       // 100   (出力 % 上限)
+  int leftPwmPinFmt;  // ピン番号は形式的（実際の MTU2 + ピン設定はドライバ内）
+  int rightPwmPinFmt;
+  int leftDirPinFmt;
+  int rightDirPinFmt;
+};
 
 class Motor : public IModule
 {

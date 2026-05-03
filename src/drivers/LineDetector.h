@@ -22,7 +22,59 @@
 #define DRIVERS_LINEDETECTOR_H_
 
 #include "../core/IModule.h"
-#include "../core/ProjectConfig.h"
+
+// ====================================================================
+// LineDetectorPatternParams — pattern 別の検出パラメータ
+// crosslineWidth      : <0 → detectRow_ + 20 を実行時に算出
+//                      ≥0 → 直接値
+// crossCountThreshold : <0 → crosslineWidth + 値 (例 -1 で width-1)
+//                      ≥0 → 直接値
+// brightnessAbs       : >0 → 絶対閾値として使用
+//                      =0 → maxBrightness * brightnessRatio を使用
+// ====================================================================
+struct LineDetectorPatternParams
+{
+    int   crosslineWidth;
+    int   detectHeight;
+    int   crossCountThreshold;
+    float brightnessRatio;
+    int   brightnessAbs;
+    int   centerWidth;
+};
+
+// ====================================================================
+// LineDetectorConfig — ライン検出全体の設定
+// (実体は ProjectConfig.h の LINE_DETECTOR_CONFIG で定義)
+// ====================================================================
+struct LineDetectorConfig
+{
+    int   detectRowDefault;       // 57
+    int   detectHeightDefault;    // 3
+
+    // 偏差計算パラメータ
+    float devBrightnessRatio;     // 0.87
+    int   devMinasDiffTh;         // -8
+    int   devPlusDiffTh;          // 8
+    int   devOutlierThY;          // 5
+    int   devLeftDefaultX;        // 70
+    int   devRightDefaultX;       // 90
+    int   devBottomCenterOffset;  // 10
+
+    // パターン別パラメータ
+    LineDetectorPatternParams patternNormal;
+    LineDetectorPatternParams patternStart;
+    LineDetectorPatternParams patternOther;
+
+    // センターライン検出パラメータ
+    int   centerRowNum;            // 47
+    int   centerCountThreshold;    // 10
+    int   centerBrightnessAbs;     // 170
+
+    // 8点センサ生成パラメータ
+    int   sensorBinRow;            // 60
+    int   sensorBinThreshold;      // 180
+    int   sensorBinDiff;           // 8
+};
 
 // マスク値定義（8点センサ用）
 #define MASK2_2 0x66

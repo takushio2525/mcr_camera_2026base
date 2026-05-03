@@ -10,15 +10,15 @@
 #include "SDLogger.h"
 #include "SDCard.h"
 #include "Serial.h"
+#include "../core/SystemData.h"
+#include "../core/ModuleTimer.h"   // g_timer_1ms 参照用
 #include "fatfs/ff.h"
 #include <stdio.h>
 #include <string.h>
 
-// グローバルインスタンス
-SDLogger g_sdlogger;
+// グローバルインスタンスの実体定義は main 側に集約済み（EMA 準拠）。
 
 // ログバッファ（約 2.7MB: 680bytes × 4000エントリ）
-// SDLOG_T の imageData0[160] = 640bytes + その他フィールド = 約680bytes
 SDLOG_T g_logData[SDLOG_MAX_ENTRIES];
 
 // FatFs ワークエリア
@@ -27,8 +27,9 @@ static FATFS fatfs;
 // CSV書き出し用バッファ
 static char csvBuf[512];
 
-SDLogger::SDLogger()
-  : mounted_(false)
+SDLogger::SDLogger(const SDLoggerConfig& cfg)
+  : _config(cfg)
+  , mounted_(false)
   , logCount_(0)
 {
 }
@@ -60,24 +61,85 @@ bool SDLogger::init()
   return true;
 }
 
+// ====================================================================
+// updateOutput() — メインループから毎周期呼ばれる Output 処理
+// 1. sys.sd.* に現在の状態を反映
+// 2. 走行中ならログエントリを自動追加
+// 3. sys.sd.saveRequested == true なら saveToSD() 実行
+// ====================================================================
 void SDLogger::updateOutput(SystemData& sys)
 {
-  (void)sys;
-  // 未使用
+  // 状態反映
+  sys.sd.ready    = mounted_;
+  sys.sd.logCount = logCount_;
+  sys.sd.full     = isFull();
+
+  // ---- 走行中ログ自動記録 ----
+  // pattern が patternMinForLog 以上 (TRACE_NORMAL 以降) かつ FINISH 以外
+  int pat = sys.run.pattern;
+  if (mounted_
+      && !isFull()
+      && pat >= _config.patternMinForLog
+      && pat != _config.finishPattern)
+  {
+    SDLOG_T& e = current();
+    e.cnt_msdwritetime = (unsigned int)g_timer_1ms;
+    e.pattern          = (unsigned int)pat;
+    e.convertBCD       = (unsigned int)sys.line.sensorBin;
+    e.handle           = sys.run.handleVal;
+    e.hennsa           = sys.line.deviation[_config.recordImageRow];
+    e.encoder          = (unsigned int)sys.enc.totalCount;
+    e.motorL           = sys.mot.leftActual;
+    e.motorR           = sys.mot.rightActual;
+    e.flagL            = sys.line.leftLine   ? 1 : 0;
+    e.flagK            = sys.line.crossLine  ? 1 : 0;
+    e.flagR            = sys.line.rightLine  ? 1 : 0;
+    e.flagS            = sys.line.centerLine ? 1 : 0;
+    e.total            = (signed int)g_timer_1ms;
+
+    // 画像データ (1行分) を sys.cam.imageBufferPtr 経由で取得
+    int width = (_config.imageWidth <= SDLOG_IMAGE_WIDTH)
+                ? _config.imageWidth : SDLOG_IMAGE_WIDTH;
+    if (sys.cam.imageBufferPtr)
+    {
+      const volatile unsigned char* img = sys.cam.imageBufferPtr;
+      int row = _config.recordImageRow;
+      for (int i = 0; i < width; i++)
+      {
+        e.imageData0[i] = img[row * SDLOG_IMAGE_WIDTH + i];
+      }
+    }
+    commit();
+  }
+
+  // ---- 保存リクエスト処理 ----
+  if (sys.sd.saveRequested && !sys.sd.saveDone)
+  {
+    sys.sd.saveRequested = false;
+    int rc = saveToSD();
+    if (rc == 0)
+    {
+      sys.sd.saveDone = true;
+    }
+  }
 }
 
 SDLOG_T& SDLogger::current()
 {
   // バッファが満杯の場合は最後のエントリを返す（上書き防止）
-  if (logCount_ >= SDLOG_MAX_ENTRIES) {
-    return g_logData[SDLOG_MAX_ENTRIES - 1];
+  unsigned int cap = (unsigned int)_config.maxEntries;
+  if (cap > SDLOG_MAX_ENTRIES) cap = SDLOG_MAX_ENTRIES;
+  if (logCount_ >= cap) {
+    return g_logData[cap - 1];
   }
   return g_logData[logCount_];
 }
 
 void SDLogger::commit()
 {
-  if (logCount_ < SDLOG_MAX_ENTRIES) {
+  unsigned int cap = (unsigned int)_config.maxEntries;
+  if (cap > SDLOG_MAX_ENTRIES) cap = SDLOG_MAX_ENTRIES;
+  if (logCount_ < cap) {
     logCount_++;
   }
 }

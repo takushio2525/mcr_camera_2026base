@@ -73,12 +73,15 @@ static bool s_debugMode = false;
 
 // 各モジュールインスタンス（グローバル, Config 注入）
 // EMA 準拠: 全モジュールのインスタンス定義を main 側に集約
+Serial       g_serial      (SERIAL_CONFIG);
 Onboard      g_onboard     (ONBOARD_CONFIG);
 Motor        g_motor       (MOTOR_CONFIG);
 Servo        g_servo       (SERVO_CONFIG);
 Encoder      g_encoder     (ENCODER_CONFIG);  // 現状 init/呼出は未接続
 Camera       g_camera      (CAMERA_CONFIG);
 LineDetector g_lineDetector(LINE_DETECTOR_CONFIG);
+SDCard       g_sdcard      (SDCARD_CONFIG);
+SDLogger     g_sdlogger    (SDLOGGER_CONFIG);
 
 // ====================================================================
 // IModule* 配列 — EMA 準拠の 3 フェーズ呼出
@@ -220,45 +223,18 @@ static void runMainLoop(void)
 
   while (1)
   {
-    // フレーム完了時の処理
+    // フレーム完了時の処理: ライン検出を main loop で実行
     if (g_sys.cam.frameReady)
     {
       s_frameCount++;
       g_sys.cam.frameReady = false;
-
-      // ライン検出を実行（RunController はこの結果を 1ms 割り込み内で参照する）
       g_lineDetector.updateInput(g_sys);
-
-      // 走行中はログ記録
-      // pattern==11 以降の走行ロジック中のみ（FINISH 状態は除く）
-      int pat = g_sys.run.pattern;
-      if (pat >= RP_TRACE_NORMAL
-          && pat != RP_FINISH
-          && !g_sdlogger.isFull())
-      {
-        SDLOG_T &e = g_sdlogger.current();
-        e.cnt_msdwritetime = g_timer_1ms;
-        e.pattern          = (unsigned int)pat;
-        e.convertBCD       = (unsigned int)g_sys.line.sensorBin;
-        e.handle           = g_sys.run.handleVal;
-        e.hennsa           = g_sys.line.deviation[RUN_CONFIG.traceRow];
-        e.encoder          = (unsigned int)g_sys.enc.totalCount;
-        e.motorL           = g_sys.mot.leftActual;
-        e.motorR           = g_sys.mot.rightActual;
-        e.flagL            = g_sys.line.leftLine   ? 1 : 0;
-        e.flagK            = g_sys.line.crossLine  ? 1 : 0;
-        e.flagR            = g_sys.line.rightLine  ? 1 : 0;
-        e.flagS            = g_sys.line.centerLine ? 1 : 0;
-        e.total            = (signed int)g_timer_1ms;
-        for (int i = 0; i < 160; i++)
-        {
-          e.imageData0[i] = g_camera.getPixel(i, RUN_CONFIG.traceRow);
-        }
-        g_sdlogger.commit();
-      }
     }
 
-    // 走行終了時に1回だけSD保存
+    // SDLogger を毎周期呼ぶ (内部で走行中ログ自動記録 + saveRequested 処理)
+    g_sdlogger.updateOutput(g_sys);
+
+    // 走行終了時に1回だけSD保存リクエスト
     if (g_sys.run.finished && !savedToSD)
     {
       savedToSD = true;
@@ -266,7 +242,8 @@ static void runMainLoop(void)
       g_sys.mot.leftCmd  = 0;
       g_sys.mot.rightCmd = 0;
       g_sys.srv.angleCmd = 0;
-      g_sdlogger.saveToSD();
+      g_sys.sd.saveRequested = true;
+      g_sdlogger.updateOutput(g_sys);  // 即座に保存実行
       g_serial.printf("*** ログ保存完了 ***\n");
     }
 

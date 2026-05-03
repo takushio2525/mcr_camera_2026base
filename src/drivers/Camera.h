@@ -21,9 +21,21 @@
 #define DRIVERS_CAMERA_H_
 
 #include "../core/IModule.h"
-#include "../core/ProjectConfig.h"
 #include "video/DisplayBace.h"
 #include <stdint.h>
+
+// ====================================================================
+// CameraConfig — Camera のハードウェア / 動作設定
+// (実体は ProjectConfig.h の CAMERA_CONFIG で定義)
+// ====================================================================
+struct CameraConfig
+{
+  int pixelWidth;        // 160
+  int pixelHeight;       // 120
+  int thresholdDefault;  // 8点センサ取得時のデフォルト閾値 (170)
+  int thresholdRow;      // 8点センサ取得行 (60) — LineDetector 側でも持つ
+  int thresholdDiff;     // 8点センサ閾値の差分 (8)  — LineDetector 側でも持つ
+};
 
 // 画像サイズ定義 (CameraConfig との整合のためマクロも残す)
 #define CAM_PIXEL_HW 160u // 水平ピクセル数 (QVGA)
