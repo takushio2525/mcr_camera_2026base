@@ -25,7 +25,7 @@ Encoder::Encoder()
 // ---------------------------------------------------------------------
 // init() — MTU2 チャンネル1 位相計数モード2 + P1_0, P1_10 初期化
 // ---------------------------------------------------------------------
-void Encoder::init()
+bool Encoder::init()
 {
   // ---- MTU2 スタンバイ解除 (STBCR3 bit3 = MTU2) ----
   CPGSTBCR3  &= ~0x08;
@@ -51,14 +51,16 @@ void Encoder::init()
   MTU2TIOR_1 |= 0x0A;     // 両エッジ設定
   MTU2TCNT_1  = 0x00;     // カウンタリセット
   MTU2TSTR   |= 0x02;     // カウンタスタート
+  return true;
 }
 
 // ---------------------------------------------------------------------
-// update() — 1ms 割り込みから呼ぶ
+// updateOutput() — 1ms 割り込みから呼ぶ（Step 8 で updateInput に振り分け予定）
 // MTU2TCNT_1 を読み取ってリセットし、各カウンタ・フィルタを更新する
 // ---------------------------------------------------------------------
-void Encoder::update()
+void Encoder::updateOutput(SystemData& sys)
 {
+  (void)sys;
   // カウンタ値を取得してリセット
   cnt_         = (int)(short)MTU2TCNT_1; // 符号付きで解釈
   MTU2TCNT_1  = 0x0000;

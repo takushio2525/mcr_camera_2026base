@@ -30,10 +30,10 @@ public:
   Servo();
 
   // MTU2チャンネル0 + P4_0 の初期化
-  void init() override;
+  bool init() override;
 
   // 周期処理 (現状は空: setAngle()で即時反映)
-  void update() override;
+  void updateOutput(SystemData& sys) override;
 
   // ステアリング角度を設定
   // angle: -MAX_ANGLE(右)〜0(中央)〜+MAX_ANGLE(左) [度]

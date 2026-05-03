@@ -37,8 +37,9 @@ public:
     LineDetector();
 
     // IModule
-    void init() override;
-    void update() override;  // calcDeviation + calcLineFlags + updateSensorBin を実行
+    // ※Step 4 段階では機械置換のみ。Step 9 で updateInput に正しく振り分ける。
+    bool init() override;
+    void updateOutput(SystemData& sys) override;  // calcDeviation + calcLineFlags + updateSensorBin を実行
 
     // === 偏差取得 ===
     // row: 行番号 (0-119)、その行での画像中心からのズレを返す

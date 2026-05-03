@@ -41,7 +41,7 @@ SDCard::SDCard()
 {
 }
 
-void SDCard::init()
+bool SDCard::init()
 {
   g_serial.printf("SDCard: 初期化開始...\n");
 
@@ -51,7 +51,7 @@ void SDCard::init()
   // カード検出確認
   if (!isCardInserted()) {
     g_serial.printf("SDCard: カード未挿入\n");
-    return;
+    return false;
   }
   g_serial.printf("SDCard: カード検出OK\n");
 
@@ -59,7 +59,7 @@ void SDCard::init()
   int ret = initCard();
   if (ret != 0) {
     g_serial.printf("SDCard: 初期化失敗 (err=%d)\n", ret);
-    return;
+    return false;
   }
 
   // セクタ数を取得
@@ -69,10 +69,12 @@ void SDCard::init()
 
   initialized_ = true;
   g_serial.printf("SDCard: 初期化完了 (タイプ=%d)\n", (int)cardType_);
+  return true;
 }
 
-void SDCard::update()
+void SDCard::updateOutput(SystemData& sys)
 {
+  (void)sys;
   // 未使用
 }
 

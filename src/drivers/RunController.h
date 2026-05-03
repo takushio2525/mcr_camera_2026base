@@ -94,11 +94,12 @@ public:
     RunController();
 
     // 初期化（IModule）
-    void init() override;
+    bool init() override;
 
     // 1ms 周期処理（IModule）—— OSTM0 割り込みから呼ぶ
     // 内部で stateMs_ / totalMs_ をインクリメントし、現在の pattern に応じた処理を実行する
-    void update() override;
+    // ※Step 4 段階では機械置換のみ。Step 10 で RunLogic.cpp の関数群へ分解予定。
+    void updateOutput(SystemData& sys) override;
 
     // 走行終了フラグ（main から参照してログ保存トリガに使う）
     bool isFinished() const { return finished_; }

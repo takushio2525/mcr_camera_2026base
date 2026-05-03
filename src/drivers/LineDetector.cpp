@@ -35,7 +35,7 @@ LineDetector::LineDetector()
 // ベアメタル環境ではグローバルコンストラクタが呼ばれない可能性への対策として
 // メンバ変数を明示的に初期化する
 // ====================================================================
-void LineDetector::init()
+bool LineDetector::init()
 {
     memset(allDeviation_, 0, sizeof(allDeviation_));
     crossLine_    = false;
@@ -46,14 +46,16 @@ void LineDetector::init()
     detectRow_    = 57;
     detectHeight_ = 3;
     pattern_      = 0;
+    return true;
 }
 
 // ====================================================================
 // update()
 // 毎フレーム呼ばれる周期処理: 偏差計算 → ライン検出 → センサ更新
 // ====================================================================
-void LineDetector::update()
+void LineDetector::updateOutput(SystemData& sys)
 {
+    (void)sys;
     calcDeviation();
     calcLineFlags();
     updateSensorBin();

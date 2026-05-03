@@ -18,10 +18,10 @@ public:
   Serial();
 
   // Initialize SCIF2 and configure pins
-  void init() override;
+  bool init() override;
 
   // IModule dummy update
-  void update() override;
+  void updateOutput(SystemData& sys) override;
 
   // Formatted print (instant output via polling)
   void printf(const char *fmt, ...);

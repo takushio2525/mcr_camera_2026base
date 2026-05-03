@@ -18,7 +18,7 @@ Servo::Servo() : angle_(0) {}
 // ---------------------------------------------------------------------
 // init() — MTU2 チャンネル0 (PWMモード1) + P4_0 初期化
 // ---------------------------------------------------------------------
-void Servo::init()
+bool Servo::init()
 {
   // ---- P4_0: MTU2 代替機能 (PWM出力) ----
   GPIOPBDC4  = 0x0000;   // 双方向モード無効
@@ -41,10 +41,12 @@ void Servo::init()
   MTU2TGRA_0 = MTU2TGRC_0 = 2; // パルス立ち上がり位置
   MTU2TGRB_0 = MTU2TGRD_0 = CENTER; // 中心位置 (1.5ms)
   MTU2TSTR   |= 0x01;           // TCNT_0 スタート
+  return true;
 }
 
-void Servo::update()
+void Servo::updateOutput(SystemData& sys)
 {
+  (void)sys;
   // setAngle() で即時反映するため、ここでは何もしない
 }
 

@@ -30,11 +30,12 @@ public:
   Encoder();
 
   // MTU2チャンネル1 (位相計数モード) + P1_0, P1_10 の初期化
-  void init() override;
+  bool init() override;
 
   // 1ms 割り込みから呼ぶカウント更新処理
   // MTU2TCNT_1 を読み取ってリセットし、各カウンタを更新する
-  void update() override;
+  // ※Step 4 段階では機械置換のみ。Step 8 で updateInput に正しく振り分ける。
+  void updateOutput(SystemData& sys) override;
 
   // 累積カウントをリセット
   void clearTotal();

@@ -31,11 +31,12 @@ public:
   Camera();
 
   // VDC5/DVDEC初期化、NTSCビデオキャプチャ開始
-  void init() override;
+  bool init() override;
 
   // フレーム周期ステップ処理（1ms割り込みから呼ばれる）
   // ImageCopy → 輝度抽出 を段階的に処理
-  void update() override;
+  // ※Step 4 段階では機械置換のみ。Step 9 で updateInput に正しく振り分ける。
+  void updateOutput(SystemData& sys) override;
 
   // 指定座標(x, y)のピクセル輝度値を取得 (0-255)
   // x: 0-159, y: 0-119

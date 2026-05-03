@@ -19,7 +19,7 @@ public:
   Onboard();
 
   // Initialize GPIOs
-  void init() override;
+  bool init() override;
 
   // Set USER LED state (Latched: not reflected to GPIO yet)
   // val: 0=OFF, 1=ON
@@ -30,7 +30,7 @@ public:
   void setColorLed(int r, int g, int b);
 
   // Reflect latched LED states to GPIO registers in one go
-  void update() override;
+  void updateOutput(SystemData& sys) override;
 
   // Read USER SW
   // Return: 1=Pressed, 0=Released

@@ -21,7 +21,7 @@ Serial g_serial;
 
 Serial::Serial() {}
 
-void Serial::init()
+bool Serial::init()
 {
   // 1. SCIF2 のモジュールストップ解除 (STBCR4 bit5)
   CPG.STBCR4 &= ~(1 << 5);
@@ -83,10 +83,12 @@ void Serial::init()
 
   // Re-enable Tx/Rx
   SCIF2.SCSCR = 0x0030; // TE=1, RE=1
+  return true;
 }
 
-void Serial::update()
+void Serial::updateOutput(SystemData& sys)
 {
+  (void)sys;
   // Dummy (do nothing, polling instant transmit is used instead)
 }
 

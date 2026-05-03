@@ -28,7 +28,7 @@ Onboard::Onboard() {
   }
 }
 
-void Onboard::init() {
+bool Onboard::init() {
   // Port 6 Setting
 
   // LED -> Output
@@ -59,6 +59,7 @@ void Onboard::init() {
 
   // PIBC6 (ポート入力バッファ制御) -> 有効 (1)
   GPIO.PIBC6 |= (1 << PIN_SW);
+  return true;
 }
 
 void Onboard::setUserLed(int val) { ledState_[3] = val ? 1 : 0; }
@@ -69,7 +70,8 @@ void Onboard::setColorLed(int r, int g, int b) {
   ledState_[2] = b ? 1 : 0;
 }
 
-void Onboard::update() {
+void Onboard::updateOutput(SystemData& sys) {
+  (void)sys;
   for (int i = 0; i < ONBOARD_LED_COUNT; i++) {
     int pin = LED_PINS[i];
     if (ledState_[i]) {

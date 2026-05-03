@@ -33,7 +33,7 @@ SDLogger::SDLogger()
 {
 }
 
-void SDLogger::init()
+bool SDLogger::init()
 {
   g_serial.printf("SDLogger: 初期化開始...\n");
 
@@ -42,14 +42,14 @@ void SDLogger::init()
 
   if (!g_sdcard.isReady()) {
     g_serial.printf("SDLogger: SDカード初期化失敗\n");
-    return;
+    return false;
   }
 
   // FatFs マウント
   FRESULT res = f_mount(&fatfs, "", 1);  // 即時マウント
   if (res != FR_OK) {
     g_serial.printf("SDLogger: マウント失敗 (err=%d)\n", (int)res);
-    return;
+    return false;
   }
 
   mounted_ = true;
@@ -57,10 +57,12 @@ void SDLogger::init()
 
   // ログバッファをクリア
   resetLog();
+  return true;
 }
 
-void SDLogger::update()
+void SDLogger::updateOutput(SystemData& sys)
 {
+  (void)sys;
   // 未使用
 }
 

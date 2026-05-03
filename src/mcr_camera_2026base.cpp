@@ -40,6 +40,7 @@ extern void __main()
 #include "drivers/LineDetector.h"
 #include "drivers/SDLogger.h"
 #include "drivers/RunController.h"
+#include "core/SystemData.h"
 
 // OSTM0 タイマー割り込み (1ms周期)
 // GR-PEACH (RZ/A1H) の周辺クロック P0Φ は 33.33MHz
@@ -55,6 +56,10 @@ volatile unsigned long g_timer_1ms = 0;
 
 // シリアル出力用カウンタ
 volatile unsigned long g_cnt_printf = 0;
+
+// SystemData グローバルインスタンス（EMA 準拠の共有データハブ）
+// 全ての updateInput / updateOutput 呼び出しで参照される。
+SystemData g_sys;
 
 // フレーム更新カウンタ
 static unsigned long s_frameCount = 0;
@@ -142,16 +147,16 @@ void ostm0_interrupt_callback(void)
   g_cnt_printf++;
 
   // カメラのフレーム周期処理（必須）
-  g_camera.update();
+  g_camera.updateOutput(g_sys);
 
   // モーター/サーボの周期処理（現状は空だが、将来の拡張用に呼ぶ）
-  g_motor.update();
-  g_servo.update();
+  g_motor.updateOutput(g_sys);
+  g_servo.updateOutput(g_sys);
 
   // 走行モードのときのみ RunController を進める
   if (!s_debugMode)
   {
-    g_runController.update();
+    g_runController.updateOutput(g_sys);
   }
   else
   {
@@ -161,7 +166,7 @@ void ostm0_interrupt_callback(void)
   }
 
   // GPIO ラッチ反映
-  g_onboard.update();
+  g_onboard.updateOutput(g_sys);
 }
 
 // ====================================================================
@@ -183,7 +188,7 @@ static void runMainLoop(void)
       g_camera.clearFrameReady();
 
       // ライン検出を実行（RunController はこの結果を 1ms 割り込み内で参照する）
-      g_lineDetector.update();
+      g_lineDetector.updateOutput(g_sys);
 
       // 走行中はログ記録
       // pattern==11 以降の走行ロジック中のみ（FINISH 状態は除く）
@@ -265,7 +270,7 @@ static void runDebugLoop(void)
       s_frameCount++;
       g_camera.clearFrameReady();
       // フレーム完了時にライン検出を実行
-      g_lineDetector.update();
+      g_lineDetector.updateOutput(g_sys);
     }
 
     // 一定間隔でシリアル出力

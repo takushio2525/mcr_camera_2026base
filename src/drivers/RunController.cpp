@@ -47,7 +47,7 @@ RunController::RunController()
 // ====================================================================
 // init()
 // ====================================================================
-void RunController::init()
+bool RunController::init()
 {
     pattern_      = WAIT_SW;
     stateMs_      = 0;
@@ -64,13 +64,16 @@ void RunController::init()
     motor(0, 0);
     handle(0);
     setColorLed(0, 0, 0);
+    return true;
 }
 
 // ====================================================================
-// update() —— 1ms 割り込みから呼ばれる
+// updateOutput() —— 1ms 割り込みから呼ばれる
+// （Step 4 段階では機械置換のみ。Step 10 で RunLogic.cpp の関数群へ分解予定）
 // ====================================================================
-void RunController::update()
+void RunController::updateOutput(SystemData& sys)
 {
+    (void)sys;
     // タイマー進行
     stateMs_++;
     cnt1Ms_++;

@@ -38,10 +38,10 @@ public:
   SDCard();
 
   // RSPI2 初期化 + SDカード初期化
-  void init() override;
+  bool init() override;
 
   // 周期処理（未使用）
-  void update() override;
+  void updateOutput(SystemData& sys) override;
 
   // 初期化成功したか
   bool isReady() const { return initialized_; }

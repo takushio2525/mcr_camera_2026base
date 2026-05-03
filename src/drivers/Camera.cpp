@@ -47,7 +47,7 @@ Camera::Camera()
 // ====================================================================
 // VDC5 + DVDEC 初期化
 // ====================================================================
-void Camera::init()
+bool Camera::init()
 {
   DisplayBase::graphics_error_t error;
 
@@ -167,6 +167,7 @@ void Camera::init()
   }
   g_serial.printf(
       "[Camera::init] All initialization completed successfully.\n");
+  return true;
 }
 
 // ====================================================================
@@ -243,8 +244,9 @@ void Camera::vsyncCallback(DisplayBase::int_type_t int_type)
 // - フレーム開始時にs_vfieldToggleをcapturedField_にキャプチャし、
 //   4ステップ全体で同じフィールド値を使用する
 // ====================================================================
-void Camera::update()
+void Camera::updateOutput(SystemData& sys)
 {
+  (void)sys;
   // フレーム処理完了後: 次の Vfield 発生を待って新フレームを開始
   // s_vfieldCount > 0 なら 1回以上 Vfield が来ているので即開始
   // 待ち中はすぐにリターンするため、メインループにCPU時間が返る

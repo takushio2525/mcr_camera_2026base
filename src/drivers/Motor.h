@@ -25,10 +25,10 @@ public:
   Motor();
 
   // MTU2チャンネル3/4 + 方向ピン (P4_4〜P4_7) の初期化
-  void init() override;
+  bool init() override;
 
   // 周期処理 (現状は空: set()で即時反映)
-  void update() override;
+  void updateOutput(SystemData& sys) override;
 
   // 左右モーターの速度を設定
   // left, right: -100(後退)〜0(停止)〜+100(前進)

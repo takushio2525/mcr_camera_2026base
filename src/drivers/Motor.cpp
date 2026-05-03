@@ -18,7 +18,7 @@ Motor::Motor() : left_(0), right_(0) {}
 // ---------------------------------------------------------------------
 // init() — MTU2 チャンネル3/4 (PWM) + P4_6/P4_7 (方向ピン) 初期化
 // ---------------------------------------------------------------------
-void Motor::init()
+bool Motor::init()
 {
   // ---- P4_4, P4_5: MTU2 代替機能 (PWM出力) ----
   GPIOPBDC4  = 0x0000;   // 双方向モード無効
@@ -50,10 +50,12 @@ void Motor::init()
   MTU2TGRA_4 = MTU2TGRC_4 = 0;         // 左モーター初期デューティ=0
   MTU2TGRB_4 = MTU2TGRD_4 = 0;         // 右モーター初期デューティ=0
   MTU2TSTR   |= 0x40;                   // TCNT_4 スタート
+  return true;
 }
 
-void Motor::update()
+void Motor::updateOutput(SystemData& sys)
 {
+  (void)sys;
   // set() で即時反映するため、ここでは何もしない
 }
 
