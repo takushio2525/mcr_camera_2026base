@@ -39,10 +39,10 @@ extern void __main()
 #include "drivers/Servo.h"
 #include "drivers/LineDetector.h"
 #include "drivers/SDLogger.h"
-#include "drivers/RunController.h"
 #include "drivers/Encoder.h"
 #include "core/SystemData.h"
 #include "core/ProjectConfig.h"
+#include "logic/RunLogic.h"
 
 // OSTM0 タイマー割り込み (1ms周期)
 // GR-PEACH (RZ/A1H) の周辺クロック P0Φ は 33.33MHz
@@ -186,16 +186,15 @@ void ostm0_interrupt_callback(void)
 
   // ============ Logic フェーズ ============
   // SystemData → SystemData
-  // Step 5 暫定: RunController を直呼びしている。
-  // Step 10 で logic/RunLogic.cpp の applyDrivingPattern(g_sys) に置換予定。
+  // EMA 準拠: 走行ロジックは src/logic/RunLogic.cpp の純関数群が担当。
   if (!s_debugMode)
   {
-    g_runController.updateOutput(g_sys);
+    applyDrivingPattern(g_sys);
   }
   else
   {
     // デバッグモードでも USER_LED は中央2点センサ反応で点灯させる
-    g_sys.ob.userLedCmd = (g_lineDetector.sensorInput(0x18) != 0) ? 1 : 0;
+    g_sys.ob.userLedCmd = (g_sys.line.sensorBin & 0x18) ? 1 : 0;
   }
 
   // ============ Output フェーズ ============
@@ -232,35 +231,35 @@ static void runMainLoop(void)
 
       // 走行中はログ記録
       // pattern==11 以降の走行ロジック中のみ（FINISH 状態は除く）
-      int pat = g_runController.getPattern();
-      if (pat >= RunController::TRACE_NORMAL
-          && pat != RunController::FINISH
+      int pat = g_sys.run.pattern;
+      if (pat >= RP_TRACE_NORMAL
+          && pat != RP_FINISH
           && !g_sdlogger.isFull())
       {
         SDLOG_T &e = g_sdlogger.current();
         e.cnt_msdwritetime = g_timer_1ms;
         e.pattern          = (unsigned int)pat;
-        e.convertBCD       = (unsigned int)g_lineDetector.getSensorBin();
-        e.handle           = g_runController.getHandleVal();
-        e.hennsa           = g_lineDetector.getDeviation(RunController::TRACE_ROW);
-        e.encoder          = 0;
-        e.motorL           = g_motor.getLeft();
-        e.motorR           = g_motor.getRight();
-        e.flagL            = g_lineDetector.isLeftLine()   ? 1 : 0;
-        e.flagK            = g_lineDetector.isCrossLine()  ? 1 : 0;
-        e.flagR            = g_lineDetector.isRightLine()  ? 1 : 0;
-        e.flagS            = g_lineDetector.isCenterLine() ? 1 : 0;
+        e.convertBCD       = (unsigned int)g_sys.line.sensorBin;
+        e.handle           = g_sys.run.handleVal;
+        e.hennsa           = g_sys.line.deviation[RUN_CONFIG.traceRow];
+        e.encoder          = (unsigned int)g_sys.enc.totalCount;
+        e.motorL           = g_sys.mot.leftActual;
+        e.motorR           = g_sys.mot.rightActual;
+        e.flagL            = g_sys.line.leftLine   ? 1 : 0;
+        e.flagK            = g_sys.line.crossLine  ? 1 : 0;
+        e.flagR            = g_sys.line.rightLine  ? 1 : 0;
+        e.flagS            = g_sys.line.centerLine ? 1 : 0;
         e.total            = (signed int)g_timer_1ms;
         for (int i = 0; i < 160; i++)
         {
-          e.imageData0[i] = g_camera.getPixel(i, RunController::TRACE_ROW);
+          e.imageData0[i] = g_camera.getPixel(i, RUN_CONFIG.traceRow);
         }
         g_sdlogger.commit();
       }
     }
 
     // 走行終了時に1回だけSD保存
-    if (g_runController.isFinished() && !savedToSD)
+    if (g_sys.run.finished && !savedToSD)
     {
       savedToSD = true;
       g_serial.printf("\n*** 走行終了 → ログ保存中 ***\n");
@@ -279,13 +278,13 @@ static void runMainLoop(void)
           "\033[H"
           "T=%lu Frame=%lu Pat=%d Handle=%d Cross=%d Lf=%d Rt=%d Ce=%d Dev=%d  Log=%u   \r\n",
           g_timer_1ms, s_frameCount,
-          g_runController.getPattern(),
-          g_runController.getHandleVal(),
-          g_lineDetector.isCrossLine() ? 1 : 0,
-          g_lineDetector.isLeftLine() ? 1 : 0,
-          g_lineDetector.isRightLine() ? 1 : 0,
-          g_lineDetector.isCenterLine() ? 1 : 0,
-          g_lineDetector.getDeviation(RunController::TRACE_ROW),
+          g_sys.run.pattern,
+          g_sys.run.handleVal,
+          g_sys.line.crossLine ? 1 : 0,
+          g_sys.line.leftLine  ? 1 : 0,
+          g_sys.line.rightLine ? 1 : 0,
+          g_sys.line.centerLine? 1 : 0,
+          g_sys.line.deviation[RUN_CONFIG.traceRow],
           g_sdlogger.getLogCount());
     }
   }
@@ -451,8 +450,8 @@ int main(void)
   g_lineDetector.init();
   g_serial.printf("ライン検出初期化完了\n");
 
-  // 走行制御初期化
-  g_runController.init();
+  // 走行制御初期化 (Logic レイヤー)
+  runLogicInit(g_sys);
   g_serial.printf("走行制御初期化完了\n");
 
   g_serial.printf("タイマー開始\n");
