@@ -79,7 +79,7 @@ inline const LineDetectorConfig LINE_DETECTOR_CONFIG = {
 
 inline const MotorConfig MOTOR_CONFIG = {
     /*pwmCycle*/        33332,
-    /*maxPower*/        100,
+    /*maxPower*/        70,
     /*leftPwmPinFmt*/   4,    // P4_4 (TIOC4A)
     /*rightPwmPinFmt*/  5,    // P4_5 (TIOC4B)
     /*leftDirPinFmt*/   6,    // P4_6
@@ -135,42 +135,42 @@ inline const SDLoggerConfig SDLOGGER_CONFIG = {
 inline const RunLogicConfig RUN_CONFIG = {
     // --- 状態タイマー定数 [ms] ---
     /*tLineSkipMs*/         100,
-    /*tCrankMs*/            440,
-    /*tLaneTurnMs*/         340,
+    /*tCrankMs*/            250,
+    /*tLaneTurnMs*/         250,
     /*tLaneStraightMs*/     0,
     /*tLaneCounterMs*/      250,
-    /*tCourseTimeoutMs*/    60000,
-    /*tBarWaitPreMs*/       500,
-    /*tBarWaitPostMs*/      1000,
+    /*tCourseTimeoutMs*/    120000,
+    /*tBarWaitPreMs*/       100,
+    /*tBarWaitPostMs*/      100,
     /*tAfterBarGoMs*/       100,
-    /*tHalfAfterTimeoutMs*/ 1000,
-    /*tTraceLineEnableMs*/  700,
+    /*tHalfAfterTimeoutMs*/ 100,
+    /*tTraceLineEnableMs*/  100,
     /*tBarApproachWaitMs*/  100,
 
     // --- 走行パラメータ ---
-    /*crankHandle*/         42,
-    /*crankMotorOut*/       100,
-    /*crankMotorIn*/        100,
-    /*laneHandle*/          23,
-    /*laneCounterHandle*/   38,
-    /*laneMotorIn*/         37,
-    /*laneMotorOut*/        55,
-    /*laneStraightMotor*/   100,
-    /*laneCounterMotorIn*/  20,
-    /*laneCounterMotorOut*/ 20,
-    /*brakeTargetMotor*/    43,
-    /*approachMotorPower*/  18,
+    /*crankHandle*/         30,
+    /*crankMotorOut*/       70,
+    /*crankMotorIn*/        70,
+    /*laneHandle*/          25,
+    /*laneCounterHandle*/   25,
+    /*laneMotorIn*/         60,
+    /*laneMotorOut*/        60,
+    /*laneStraightMotor*/   60,
+    /*laneCounterMotorIn*/  60,
+    /*laneCounterMotorOut*/ 60,
+    /*brakeTargetMotor*/    60,
+    /*approachMotorPower*/  60,
 
     // --- 検出行 ---
-    /*traceRow*/            45,
+    /*traceRow*/            48,
     /*approachRow*/         95,
 
     // --- ハンドル計算ゲイン ---
     /*handleStraightAbsThreshold*/ 0,
     /*handleGentleAbsThreshold*/   7,
-    /*handleGainGentle*/           0.37f,
-    /*handleGainSharp*/            0.5f,
-    /*handleGainNonNormal*/        0.5f
+    /*handleGainGentle*/           0.24f,
+    /*handleGainSharp*/            0.24f,
+    /*handleGainNonNormal*/        0.24f
 };
 
 #endif /* CORE_PROJECT_CONFIG_H_ */
