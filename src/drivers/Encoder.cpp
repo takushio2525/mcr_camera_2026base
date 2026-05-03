@@ -2,18 +2,20 @@
  * Encoder.cpp
  *
  *  エンコーダドライバ実装
+ *  EMA 準拠版: SystemData / Config ベース
  *  参考: mcr_shiozawa_cclass_2.38m-s/Encoder.cpp (Mishima, 2022)
  */
 
 #include "Encoder.h"
+#include "../core/SystemData.h"
 #include "iodefine.h"
 #include <typedefine.h>
 
-// グローバルインスタンス
-Encoder g_encoder;
+// グローバルインスタンスの実体定義は main 側に集約済み（EMA 準拠）。
 
-Encoder::Encoder()
-  : totalCount_(0), magaCount_(0), cnt_(0),
+Encoder::Encoder(const EncoderConfig& cfg)
+  : _config(cfg),
+    totalCount_(0), magaCount_(0), cnt_(0),
     filterIdx_(0), avg_(0.0f), rc_(0.0f)
 {
   for (int i = 0; i < FILTER_N; i++)
@@ -55,12 +57,12 @@ bool Encoder::init()
 }
 
 // ---------------------------------------------------------------------
-// updateOutput() — 1ms 割り込みから呼ぶ（Step 8 で updateInput に振り分け予定）
-// MTU2TCNT_1 を読み取ってリセットし、各カウンタ・フィルタを更新する
+// updateInput() — 1ms 割り込みから呼ぶ
+// MTU2TCNT_1 を読み取ってリセットし、各カウンタ・フィルタを更新後、
+// SystemData の sys.enc.* に結果を格納する。
 // ---------------------------------------------------------------------
-void Encoder::updateOutput(SystemData& sys)
+void Encoder::updateInput(SystemData& sys)
 {
-  (void)sys;
   // カウンタ値を取得してリセット
   cnt_         = (int)(short)MTU2TCNT_1; // 符号付きで解釈
   MTU2TCNT_1  = 0x0000;
@@ -69,22 +71,33 @@ void Encoder::updateOutput(SystemData& sys)
   totalCount_ += cnt_;
   magaCount_  += cnt_;
 
-  // 移動平均フィルタ更新
+  // 移動平均フィルタの実効段数を _config から取得 (上限は FILTER_N)
+  int n = _config.filterN;
+  if (n > FILTER_N) n = FILTER_N;
+  if (n < 1)        n = 1;
+
   filterBuf_[filterIdx_] = cnt_;
   filterIdx_++;
-  if (filterIdx_ >= FILTER_N)
+  if (filterIdx_ >= n)
   {
     filterIdx_ = 0;
   }
   float sum = 0.0f;
-  for (int i = 0; i < FILTER_N; i++)
+  for (int i = 0; i < n; i++)
   {
     sum += filterBuf_[i];
   }
-  avg_ = sum / FILTER_N;
+  avg_ = sum / (float)n;
 
-  // RCフィルタ (指数移動平均) 更新
-  rc_ = RC_ALPHA * rc_ + (1.0f - RC_ALPHA) * (float)cnt_;
+  // RCフィルタ (指数移動平均) 更新 — Config の rcAlpha を使用
+  rc_ = _config.rcAlpha * rc_ + (1.0f - _config.rcAlpha) * (float)cnt_;
+
+  // SystemData へ書き込み
+  sys.enc.totalCount  = totalCount_;
+  sys.enc.magaCount   = magaCount_;
+  sys.enc.cnt         = cnt_;
+  sys.enc.avgCnt      = (int)avg_;
+  sys.enc.filteredCnt = rc_;
 }
 
 void Encoder::clearTotal()

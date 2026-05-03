@@ -2,40 +2,46 @@
  * Encoder.h
  *
  *  エンコーダドライバ (MTU2 チャンネル1 位相計数モード2)
+ *  EMA 準拠版: SystemData / Config ベース
  *  For GR-PEACH (RZ/A1H)
  *
  *  A相: TCLKA (P1_0)
  *  B相: TCLKB (P1_10)
  *
- *  update() を 1ms 割り込みから呼ぶことで、10ms 平均の速度と
- *  累積カウント (走行距離) を取得できる。
+ *  Input : updateInput(sys) で MTU2TCNT_1 を読み取って各カウンタ・
+ *          フィルタを更新し、結果を sys.enc.* に格納する。
  *
- *  移動平均: 直近 FILTER_N 回分のカウントを平均
- *  RCフィルタ: α=0.5 の指数移動平均
+ *  移動平均: 直近 EncoderConfig.filterN 回分のカウントを平均
+ *           (FILTER_N が配列上限)
+ *  RCフィルタ: α = EncoderConfig.rcAlpha の指数移動平均
+ *
+ *  注意: Step 8 段階では main での init() / s_inputModules への登録は
+ *  保留。SDLogger 連携が必要になる Step 12 以降で有効化予定。
  */
 
 #ifndef DRIVERS_ENCODER_H_
 #define DRIVERS_ENCODER_H_
 
 #include "../core/IModule.h"
+#include "../core/ProjectConfig.h"
 
 class Encoder : public IModule
 {
 public:
-  // 移動平均フィルタ段数
+  // 移動平均フィルタ段数の上限 (配列サイズ)
+  // 実際の段数は _config.filterN で指定（<= FILTER_N）
   static const int FILTER_N = 4;
-  // RCフィルタ係数 (0.0〜1.0)
+  // 後方互換用 RC フィルタ係数 (実値は _config.rcAlpha)
   static constexpr float RC_ALPHA = 0.5f;
 
-  Encoder();
+  // Config を注入してインスタンス生成
+  explicit Encoder(const EncoderConfig& cfg);
 
   // MTU2チャンネル1 (位相計数モード) + P1_0, P1_10 の初期化
   bool init() override;
 
-  // 1ms 割り込みから呼ぶカウント更新処理
-  // MTU2TCNT_1 を読み取ってリセットし、各カウンタを更新する
-  // ※Step 4 段階では機械置換のみ。Step 8 で updateInput に正しく振り分ける。
-  void updateOutput(SystemData& sys) override;
+  // Input : 1ms 割り込みから呼び、MTU2TCNT_1 を読み取って sys.enc.* に格納
+  void updateInput(SystemData& sys) override;
 
   // 累積カウントをリセット
   void clearTotal();
@@ -43,33 +49,23 @@ public:
   // クランク検出用カウントをリセット
   void clearMaga();
 
-  // 累積カウント取得 (走行距離換算に使用)
-  int getTotalCount() const { return totalCount_; }
-
-  // クランク検出用累積カウント取得
-  int getMagaCount() const { return magaCount_; }
-
-  // 直近 FILTER_N 回の移動平均カウントを取得 (速度フィードバック)
-  int getCnt() const { return (int)avg_; }
-
-  // RCフィルタ後の速度カウントを取得
+  // 後方互換 getter (将来は sys.enc.* を直読推奨)
+  int   getTotalCount() const { return totalCount_; }
+  int   getMagaCount()  const { return magaCount_; }
+  int   getCnt()        const { return (int)avg_; }
   float getFilteredCnt() const { return rc_; }
 
 private:
-  // 累積カウント
-  int   totalCount_;
-  // クランク用カウント
-  int   magaCount_;
+  EncoderConfig _config;
 
-  // 今回の 1ms カウント値
+  int   totalCount_;
+  int   magaCount_;
   int   cnt_;
 
-  // 移動平均フィルタ
   int   filterBuf_[FILTER_N];
   int   filterIdx_;
   float avg_;
 
-  // RCフィルタ (指数移動平均)
   float rc_;
 };
 

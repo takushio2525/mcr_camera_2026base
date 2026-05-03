@@ -40,6 +40,7 @@ extern void __main()
 #include "drivers/LineDetector.h"
 #include "drivers/SDLogger.h"
 #include "drivers/RunController.h"
+#include "drivers/Encoder.h"
 #include "core/SystemData.h"
 #include "core/ProjectConfig.h"
 
@@ -75,6 +76,7 @@ static bool s_debugMode = false;
 Onboard g_onboard(ONBOARD_CONFIG);
 Motor   g_motor  (MOTOR_CONFIG);
 Servo   g_servo  (SERVO_CONFIG);
+Encoder g_encoder(ENCODER_CONFIG);  // Step 8 段階では init/呼出は未接続
 
 // ====================================================================
 // IModule* 配列 — EMA 準拠の 3 フェーズ呼出
