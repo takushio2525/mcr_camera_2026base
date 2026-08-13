@@ -54,6 +54,7 @@ add_executable(run_tests
   test_motor.cpp
   test_servo.cpp
   test_encoder.cpp
+  test_module_contract.cpp
 )
 
 target_link_libraries(run_tests
