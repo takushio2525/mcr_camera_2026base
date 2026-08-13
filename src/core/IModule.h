@@ -29,6 +29,10 @@ public:
 
     // 初期化処理（成功 = true、失敗 = false）。
     // 失敗時は呼び出し側で enabled = false に落とす運用を推奨。
+    //
+    // 現状この運用は未実装: main() は全ての init() の戻り値を捨てており、
+    // enabled に false を書く箇所も存在しない（下の enabled も読まれるだけ）。
+    // そのため SDLogger::init() が SD 未挿入で false を返しても隔離されない。
     virtual bool init() = 0;
 
     // 入力フェーズ: ハードウェア → SystemData

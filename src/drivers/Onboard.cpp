@@ -24,7 +24,14 @@ static const int LED_PINS[ONBOARD_LED_COUNT] = {PIN_LED_RED, PIN_LED_GRN,
                                                 PIN_LED_BLU, PIN_LED_USER};
 
 Onboard::Onboard(const OnboardConfig& cfg) : _config(cfg) {
-  // Initialize latch buffer (All OFF)
+  // ラッチバッファの初期化。
+  // ledState_[i] は論理値で 1=点灯 / 0=消灯（GPIO は Low Active なので
+  // updateOutput() 側で反転して出力する）。つまりここで入れている 1 は
+  // 「全消灯」ではなく **全点灯** を意味する点に注意。
+  //
+  // 実害が出ていないのは、init() が GPIO.P6 |= ledMask で物理的に全消灯し、
+  // runLogicInit() が sys.ob.*LedCmd をゼロクリアするため、最初の
+  // updateOutput() で 0（消灯）に上書きされるから。
   for (int i = 0; i < ONBOARD_LED_COUNT; i++) {
     ledState_[i] = 1;
   }

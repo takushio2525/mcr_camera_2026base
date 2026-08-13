@@ -55,8 +55,13 @@ bool Serial::init()
   // Clear FIFO (TFRST=1, RFRST=1) in SCFCR
   SCIF2.SCFCR = 0x0006;
 
-  // Set Read/Write pointers in FIFO to 0
-  // ステータスレジスタをクリア（W0C方式: 1を読んで0を書く）
+  // 上の SCFCR への書き込みで送受信 FIFO のリード/ライトポインタが 0 に戻る。
+  //
+  // ステータスフラグのクリア。SCFSR / SCLSR は W0C（1 が読めたビットに 0 を
+  // 書くとクリアされる）なので、read-modify-write の &= ~mask で
+  // 「mask のビットにだけ 0 を書き戻す」形になりクリアが成立する。
+  // 逆に mask 外のビットは読んだ値がそのまま書き戻されるため、
+  // ここでクリアされるのは下のマスクに含まれるフラグだけである。
   SCIF2.SCFSR &= ~0x00F3; // ER,TEND,TDFE,BRK,RDF,DR をクリア
   SCIF2.SCLSR &= ~0x0001; // ORER をクリア
 
@@ -95,7 +100,9 @@ void Serial::updateOutput(SystemData& sys)
 void Serial::putChar(char c)
 {
   // SCIF2 の送信FIFOに空きがあるまで待つ
-  // SCFDR下位5bit = 送信FIFOに入っているデータ数（最大16）
+  // SCFDR は上位バイト(bit15-8)=送信FIFO 格納数 T、
+  //          下位バイト(bit7-0) =受信FIFO 格納数 R の 2 段構成。
+  // ここは送信側を見るので >> 8 で上位バイトを取り出す（FIFO 段数は 16）。
   // FIFOに空きがあれば待たずに即座に書き込み
   while ((SCIF2.SCFDR >> 8) >= 16)
   {

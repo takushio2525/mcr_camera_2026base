@@ -39,6 +39,11 @@ LineDetector::LineDetector(const LineDetectorConfig& cfg)
 // init()
 // ベアメタル環境ではグローバルコンストラクタが呼ばれない可能性への対策として
 // メンバ変数を明示的に初期化する
+//
+// 注: この前提はコミット 40eca9b で変わった。現在は main() 冒頭の
+//     runGlobalConstructors() が .init_array を手動反復するのでコンストラクタは
+//     実行される。よって本関数はコンストラクタと同じ処理を重複実行している
+//     （害はないが、消すなら runGlobalConstructors() が動くことが前提）。
 // ====================================================================
 bool LineDetector::init()
 {

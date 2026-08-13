@@ -30,7 +30,11 @@ struct SDLoggerConfig
 {
   int maxEntries;       // 4000 (バッファサイズ)
   int imageWidth;       // 160  (画像 1 行記録時の幅)
-  int recordImageRow;   // 45   (画像 1 行記録時の行番号 = TRACE_ROW)
+  // 45  (画像 1 行記録時の行番号。e.hennsa もこの行の偏差を記録する)
+  // 注意: かつては RUN_CONFIG.traceRow と同値だったが、現在は traceRow=48 で
+  //       **一致していない**。走行制御が見ている行とログに残る偏差の行が
+  //       別になっているので、ログ解析時は取り違えないこと。
+  int recordImageRow;
   int patternMinForLog; // 11   (TRACE_NORMAL 以上で記録開始)
   int finishPattern;    // 101  (FINISH パターン番号 — 記録対象外)
 };

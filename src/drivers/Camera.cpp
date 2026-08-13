@@ -15,7 +15,14 @@
 
 // ====================================================================
 // VDC5ビデオキャプチャ用フレームバッファ（NonCacheable領域に配置）
-// ダブルバッファ方式: VDC5が書き込む先とソフトウェアが読む先を分離
+//
+// 2 面を確保しダブルバッファに切り替えられる形にはなっているが、
+// 切替を行う changeFrameBuffer() が現状どこからも呼ばれないため、
+// **実際にはシングルバッファ運用**になっている:
+//   - VDC5 は init() の Video_Write_Setting() で指定した s_frameBufA に書き続ける
+//   - imageCopy() も s_writeBuf (= s_frameBufA) から直接読む
+//   - s_saveBuf / s_frameBufB は書き込まれるだけで読み出されない
+// フィールドの整合は Vfield 割り込み待ち (updateInput) で取っている。
 // ====================================================================
 static uint8_t s_frameBufA[CAM_VIDEO_BUFFER_STRIDE * CAM_PIXEL_VW]
     __attribute__((section("NC_BSS"), aligned(32)));
@@ -23,6 +30,7 @@ static uint8_t s_frameBufB[CAM_VIDEO_BUFFER_STRIDE * CAM_PIXEL_VW]
     __attribute__((section("NC_BSS"), aligned(32)));
 
 // 現在VDC5が書き込み中のバッファと、ソフトウェアが読み出すバッファ
+// （s_saveBuf は changeFrameBuffer() が未使用のため現状ずっと s_frameBufB のまま）
 static volatile uint8_t *s_writeBuf = s_frameBufA;
 static volatile uint8_t *s_saveBuf = s_frameBufB;
 
@@ -53,6 +61,10 @@ bool Camera::init()
   DisplayBase::graphics_error_t error;
 
   // グローバルコンストラクタが呼ばれない環境への対策として、ここで明示的に初期化する
+  // 注: この前提はコミット 40eca9b で変わった。現在は main() 冒頭の
+  //     runGlobalConstructors() が .init_array を手動反復するのでコンストラクタは
+  //     実行される。よって以下はコンストラクタと重複した再初期化になっている
+  //     （害はないが、消すなら runGlobalConstructors() が動くことが前提）。
   display_ = DisplayBase();
   frameStep_ = 0;
   fieldToggle_ = 1;
@@ -132,6 +144,12 @@ bool Camera::init()
   // 毎回フェッチするため実効2〜5MHz相当 → 6,000,000回で30秒以上かかる）。
   // 代わりにVideo_Startを先に呼んでVsync割り込みを発生させ、
   // 割り込みベースのカウントで約200msを測る（NTSC 60Hz × 12回 = 200ms）。
+  //
+  // 注: 上の「L1キャッシュ無効」という前提は現在は成り立たない。
+  //     コミット 3216ec4 以降 main() が SystemInit() を呼び、
+  //     system_init.c で MMU_Enable() / L1C_EnableCaches() を実行している。
+  //     実効速度は改善しているはずだが再測していない（要実機計測）。
+  //     いずれにせよ本待ちは Vsync 割り込み駆動なので実行速度に依存しない。
   g_serial.printf("[Camera::init] Video_Start (for Vsync stabilize wait)...\n");
   s_vsyncCount = 12; // Vsync 12回 ≈ 200ms
   display_.Video_Start(DisplayBase::VIDEO_INPUT_CHANNEL_0);
@@ -189,6 +207,9 @@ void Camera::stopCapture()
 
 // ====================================================================
 // フレームバッファ切替（ダブルバッファ方式）
+//
+// 現状どこからも呼ばれていない（呼ぶと imageCopy() の読み出し先も
+// 切り替わるため、s_writeBuf / s_saveBuf の役割を見直す必要がある）。
 // ====================================================================
 void Camera::changeFrameBuffer()
 {

@@ -314,7 +314,10 @@ static void runCrosslineAfter(SystemData& sys)
         return;
     }
 
-    // ハーフ/クロスがしばらく検知されないままの場合は通常トレースへ戻す
+    // ハーフ/クロスのどちらも検知されない間は、ブレーキ走行のまま
+    // pattern 23 に留まってトレースを続ける。
+    // （時間経過で通常トレースへ戻す遷移は実装されていない。抜けるのは
+    //   上の leftLine / rightLine 検知でクランクへ入るときだけ）
     calcBrakeMotorVal(sys, RUN_CONFIG.brakeTargetMotor);
     outMotor(sys, sys.run.leftBrake, sys.run.rightBrake);
     outHandle(sys, sys.run.handleVal);
@@ -572,7 +575,7 @@ static void runFinish(SystemData& sys)
     }
     outHandle(sys, sys.run.lastHandle101);
 
-    // ボタン押下で再加速、それ以外は弱いブレーキ
+    // ボタン押下で再加速、それ以外は出力 0（デューティ 0 で惰性停止）
     if (sys.ob.sw)
     {
         outMotor(sys, MOTOR_CONFIG.maxPower, MOTOR_CONFIG.maxPower);
