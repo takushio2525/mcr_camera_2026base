@@ -3,6 +3,11 @@ project(mcr_motor_tests CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 
+# CTest 有効化。これが無いと gtest_discover_tests() が生成した
+# テスト定義を CTestTestfile.cmake が取り込まず、ctest が
+# "No tests were found!!!" になる。
+enable_testing()
+
 # ============================================================
 # Google Test (FetchContent 自動ダウンロード)
 # ============================================================
@@ -44,13 +49,17 @@ set(MOCK_SOURCES
 
 # ============================================================
 # テスト実行ファイル
+#   test_globals.cpp は main.cpp をリンクしない代わりに
+#   g_sys / g_motor / g_servo / g_encoder / g_timer_1ms を定義する
 # ============================================================
 add_executable(run_tests
   ${DRIVER_SOURCES}
   ${MOCK_SOURCES}
+  test_globals.cpp
   test_motor.cpp
   test_servo.cpp
   test_encoder.cpp
+  test_module_contract.cpp
 )
 
 target_link_libraries(run_tests

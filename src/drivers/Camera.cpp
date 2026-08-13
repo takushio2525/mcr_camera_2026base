@@ -68,6 +68,11 @@ Camera::Camera(const CameraConfig& cfg)
 // ====================================================================
 // VDC5 + DVDEC 初期化
 // ====================================================================
+// 各ステップの失敗時は false を返して呼び出し側に判断を委ねる。
+// （以前はここで while(1); と無限ループしていたため、カメラ未接続時に
+//  GIC 初期化直後で完全にハングし、シリアル出力も走行も一切行われなかった。
+//  現在は main() の initModule() が enabled=false に落とすので、カメラ無しでも
+//  シリアル表示とメインループは動き続ける。）
 bool Camera::init()
 {
   DisplayBase::graphics_error_t error;
@@ -91,8 +96,7 @@ bool Camera::init()
   if (error != DisplayBase::GRAPHICS_OK)
   {
     g_serial.printf("[Camera::init] ERROR at Graphics_init: %d\n", error);
-    while (1)
-      ;
+    return false;
   }
   g_serial.printf("[Camera::init] Graphics_init OK.\n");
 
@@ -102,8 +106,7 @@ bool Camera::init()
   if (error != DisplayBase::GRAPHICS_OK)
   {
     g_serial.printf("[Camera::init] ERROR at Graphics_Video_init: %d\n", error);
-    while (1)
-      ;
+    return false;
   }
   g_serial.printf("[Camera::init] Graphics_Video_init OK.\n");
 
@@ -116,8 +119,7 @@ bool Camera::init()
     g_serial.printf(
         "[Camera::init] ERROR at Graphics_Irq_Handler_Set (VSYNC): %d\n",
         error);
-    while (1)
-      ;
+    return false;
   }
   g_serial.printf("[Camera::init] Graphics_Irq_Handler_Set (VSYNC) OK.\n");
 
@@ -131,8 +133,7 @@ bool Camera::init()
   if (error != DisplayBase::GRAPHICS_OK)
   {
     g_serial.printf("[Camera::init] ERROR at Video_Write_Setting: %d\n", error);
-    while (1)
-      ;
+    return false;
   }
   g_serial.printf("[Camera::init] Video_Write_Setting OK.\n");
 
@@ -146,8 +147,7 @@ bool Camera::init()
     g_serial.printf(
         "[Camera::init] ERROR at Graphics_Irq_Handler_Set (VFIELD): %d\n",
         error);
-    while (1)
-      ;
+    return false;
   }
   g_serial.printf("[Camera::init] Graphics_Irq_Handler_Set (VFIELD) OK.\n");
 

@@ -23,7 +23,14 @@
 
 // 各モジュールヘッダを include することで {Module}Data 型を取得
 // (各モジュールが自身の Data 構造体を所有)
-#include "../drivers/Camera.h"          // CameraData
+//
+// Camera だけは Camera.h ではなく CameraData.h を include する。
+// Camera.h は VDC5 ドライバ (video/DisplayBace.h) を引き込み、その先で
+// 実機のレジスタ定義を要求するため、ここで include すると SystemData.h を
+// 使う全モジュールが VDC5 に依存してしまう（詳細は CameraData.h 冒頭）。
+// Camera クラス自体が要るファイル（main / Camera.cpp / LineDetector.cpp）は
+// いずれも Camera.h を直接 include している。
+#include "../drivers/CameraData.h"      // CameraConfig / CameraData
 #include "../drivers/LineDetector.h"    // LineDetectorData
 #include "../drivers/Motor.h"           // MotorData
 #include "../drivers/Servo.h"           // ServoData
