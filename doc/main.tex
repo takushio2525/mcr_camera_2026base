@@ -50,9 +50,9 @@
 \pagestyle{fancy}
 \fancyhf{}
 \fancyhead[L]{\small\color{headerblue}\textbf{mcr\_camera\_2026base} プログラム設計仕様書}
-\fancyhead[R]{\small\color{headerblue}Rev.\,1.1}
+\fancyhead[R]{\small\color{headerblue}Rev.\,2.0}
 \fancyfoot[C]{\small\thepage\,/\,\pageref{LastPage}}
-\fancyfoot[R]{\small\color{gray}2026-02-19}
+\fancyfoot[R]{\small\color{gray}2026-08-13}
 \renewcommand{\headrulewidth}{0.8pt}
 \renewcommand{\footrulewidth}{0.4pt}
 
@@ -172,8 +172,15 @@
 \newcommand{\doctitle}{mcr\_camera\_2026base\\プログラム設計仕様書}
 \newcommand{\docsubtitle}{GR-PEACH (RZ/A1H) マイコンカーラリー カメラクラス開発}
 \newcommand{\docauthor}{Shiozawa}
-\newcommand{\docversion}{1.1}
-\newcommand{\docdate}{2026年5月3日}
+\newcommand{\docversion}{2.0}
+\newcommand{\docdate}{2026年8月13日}
+
+%% ─── ビルド検証環境（§6.1 で使用） ─────────────
+%% e2 studio の製品バージョンはリポジトリ内に記録が無く、未確定。
+%% 判明したら「この1行だけ」を書き換えれば §6.1 の表に反映される。
+%% 例: \newcommand{\ideversion}{2025-07 (25.7.0)}
+%% (制御綴に数字は使えないため \e2studioversion ではなく \ideversion とする)
+\newcommand{\ideversion}{\textcolor{warnred}{\textbf{（確認中 --- 要記入）}}}
 
 %% ============================================================
 \begin{document}
@@ -214,7 +221,7 @@
   halign=center,
 ]
 \small
-本文書は \texttt{mcr\_camera\_2026base} プロジェクトのプログラム設計仕様書ですうううううううううう。uuuuuuuuuuuu\\
+本文書は \texttt{mcr\_camera\_2026base} プロジェクトのプログラム設計仕様書です。\\
 ベアメタル環境における割り込み駆動アーキテクチャの詳細設計を記述します。
 \end{tcolorbox}
 
@@ -248,6 +255,13 @@
 1.12 & 2026-02-26 & Shiozawa & LaTeXコンパイル用DevContainer環境の統合 \\
 1.13 & 2026-03-06 & Shiozawa & SPEC.mdの内容をTeXに統合・README.md新規作成 \\
 1.14 & 2026-05-03 & Shiozawa & RunController クラス（メイン走行制御）追加。エンコーダ距離制御をタイマー（ms単位）に置換。 \\
+2.0  & 2026-08-13 & Shiozawa & \textbf{実装準拠への全面改訂。}EMA (Embedded-Module-Architecture) 化を反映し、
+  \texttt{IModule} を \texttt{updateInput}/\texttt{updateOutput} 版に更新。
+  \texttt{SystemData} / \texttt{ProjectConfig} / \texttt{ModuleTimer} を新規記述。
+  実在しない Trace 章を LineDetector 章へ、RunController 章を RunLogic 章へ差し替え。
+  LineDetector / SDLogger / 起動シーケンス / パラメータ調整ガイドを追加。
+  \texttt{mcr\_camera\_2026base\_SPEC.md} の技術知見を「ベアメタル固有の実装知見」章と
+  付録「不具合と対策の記録」へ移植し、同ファイルを廃止。 \\
 \bottomrule
 \end{tabularx}
 
@@ -266,7 +280,13 @@ GR-PEACH (RZ/A1H) を使用した、マイコンカーラリー (MCR) カメラ�
 \begin{notebox}[設計思想]
 \begin{itemize}[nosep]
   \item mbed OS を使用せず、ルネサス標準の \texttt{iodefine.h} を用いたベアメタル（レジスタ直接操作）環境で構築する
-  \item 既存のスパゲッティコードを廃し、クラスベースの \texttt{init}/\texttt{update} パターンを採用したモダンなアーキテクチャを目指す
+  \item 既存のスパゲッティコードを廃し、EMA (Embedded-Module-Architecture) 準拠のモジュール分割を採用する。
+        全モジュールは共通インターフェース \texttt{IModule} を実装し、
+        \texttt{init()} / \texttt{updateInput()} / \texttt{updateOutput()} の3点で統一的に扱う
+  \item モジュール間のデータ受け渡しは共有構造体 \texttt{SystemData} に一本化し、
+        モジュールが他モジュールのメソッドを直接呼ぶことを禁止する
+  \item 調整対象の定数は \texttt{src/core/ProjectConfig.h} に集約し、
+        「走行調整のためにドライバのソースを触る」状況をなくす
 \end{itemize}
 \end{notebox}
 
@@ -278,9 +298,19 @@ GR-PEACH (RZ/A1H) を使用した、マイコンカーラリー (MCR) カメラ�
 \midrule
 MCR       & マイコンカーラリーの略称 \\
 GR-PEACH  & ルネサス RZ/A1H 搭載の開発ボード \\
-MTU2      & マルチファンクション・タイマ・ユニット2。PWM出力に使用 \\
-ラッチ方式 & セッターで値を内部変数に保持し、\texttt{update()} 呼び出し時にのみハードウェアへ反映する方式 \\
+MTU2      & マルチファンクション・タイマ・ユニット2。PWM出力・位相計数に使用 \\
+VDC5      & ビデオディスプレイコントローラ5。DVDEC と組み合わせて NTSC 映像を取り込む \\
+EMA       & Embedded-Module-Architecture。\texttt{IModule} / \texttt{SystemData} /
+            \texttt{\{Module\}Config} の3点セットでモジュールを構成する設計方針 \\
 IModule   & 全モジュール共通の基底インターフェース (\hyperref[sec:api-imodule]{§\ref*{sec:api-imodule}}) \\
+SystemData & 全モジュールの入出力データを集約する共有構造体 (\hyperref[sec:systemdata]{§\ref*{sec:systemdata}}) \\
+Config    & モジュールごとの設定構造体。実値は \texttt{ProjectConfig.h} で一括定義する
+            (\hyperref[sec:params]{§\ref*{sec:params}}) \\
+ModuleTimer & 1ms カウンタ \texttt{g\_timer\_1ms} を時刻源とするノンブロッキングタイマー
+            (\hyperref[sec:moduletimer]{§\ref*{sec:moduletimer}}) \\
+ラッチ方式 & 出力値をいったん内部バッファに保持し、出力フェーズでのみハードウェアへ一括反映する方式 \\
+XIP       & eXecute In Place。SPI フラッシュ上のコードを RAM へ展開せず直接実行する方式
+            (\hyperref[sec:xip]{§\ref*{sec:xip}}) \\
 \bottomrule
 \end{tabularx}
 
@@ -313,8 +343,10 @@ IModule   & 全モジュール共通の基底インターフェース (\hyperref
 %% ============================================================
 \section{システムアーキテクチャ}\label{sec:architecture}
 
-システムはタイマー割り込みによる定期実行（1ループ/1ms を想定）で完全に同期して動作する。
-処理は3つのフェーズに分離される。
+システムは OSTM0 による 1ms 周期のタイマー割り込みで同期して動作する。
+割り込みハンドラ \texttt{ostm0\_interrupt\_callback()} が
+Input $\rightarrow$ Logic $\rightarrow$ Output の3フェーズを毎周期実行し、
+メインループはフレーム完了待ち・ライン検出・ログ処理・デバッグ表示を担当する。
 
 \subsection{実行フロー図}\label{sec:flow}
 
@@ -324,69 +356,227 @@ IModule   & 全モジュール共通の基底インターフェース (\hyperref
   node distance=6mm and 10mm,
   phase/.style={
     draw=accentblue, fill=accentblue!10,
-    rounded corners=3pt, minimum width=55mm, minimum height=10mm,
+    rounded corners=3pt, minimum width=52mm, minimum height=10mm,
     font=\bfseries\small, align=center,
   },
   module/.style={
     draw=headerblue, fill=headerblue!8,
-    rounded corners=2pt, minimum width=40mm, minimum height=8mm,
+    rounded corners=2pt, minimum width=52mm, minimum height=8mm,
+    font=\small\ttfamily, align=center,
+  },
+  hub/.style={
+    draw=okgreen, fill=okgreen!8,
+    rounded corners=2pt, minimum width=22mm, minimum height=44mm,
     font=\small\ttfamily, align=center,
   },
   arr/.style={-{Stealth[length=3mm]}, thick, color=accentblue},
+  arrg/.style={-{Stealth[length=3mm]}, thick, color=okgreen!80!black},
 ]
 
 % フェーズ
-\node[phase] (input) {Input Phase};
-\node[phase, below=15mm of input] (logic) {Logic Phase (Pattern)};
-\node[phase, below=15mm of logic] (output) {Output Phase};
+\node[phase] (input) {Input フェーズ};
+\node[phase, below=17mm of input] (logic) {Logic フェーズ};
+\node[phase, below=17mm of logic] (output) {Output フェーズ};
 
 % Input モジュール
-\node[module, right=12mm of input, yshift=4mm]  (enc) {Encoder.update()};
-\node[module, right=12mm of input, yshift=-4mm] (cam) {Camera.update()};
+\node[module, right=32mm of input, yshift=5mm]  (onbi) {g\_onboard.updateInput()};
+\node[module, right=32mm of input, yshift=-5mm] (cam)  {g\_camera.updateInput()};
 
 % Logic
-\node[module, right=12mm of logic] (pat) {判断 → set...()};
+\node[module, right=32mm of logic] (pat) {applyDrivingPattern()};
 
 % Output モジュール
-\node[module, right=12mm of output, yshift=9mm]  (mot) {Motor.update()};
-\node[module, right=12mm of output, yshift=0mm]  (srv) {Servo.update()};
-\node[module, right=12mm of output, yshift=-9mm] (onb) {Onboard.update()};
+\node[module, right=32mm of output, yshift=10mm] (mot) {g\_motor.updateOutput()};
+\node[module, right=32mm of output, yshift=0mm]  (srv) {g\_servo.updateOutput()};
+\node[module, right=32mm of output, yshift=-10mm](onbo) {g\_onboard.updateOutput()};
 
-% 矢印
+% SystemData ハブ
+\node[hub, left=14mm of logic] (sys) {g\_sys\\(SystemData)};
+
+% 矢印（フェーズの進行）
 \draw[arr] (input) -- (logic);
 \draw[arr] (logic) -- (output);
 
-\draw[arr] (input.east) ++(0,4mm) -- (enc.west);
-\draw[arr] (input.east) ++(0,-4mm) -- (cam.west);
-
+\draw[arr] (input.east) ++(0,5mm) -- (onbi.west);
+\draw[arr] (input.east) ++(0,-5mm) -- (cam.west);
 \draw[arr] (logic.east) -- (pat.west);
-
-\draw[arr] (output.east) ++(0,9mm) -- (mot.west);
+\draw[arr] (output.east) ++(0,10mm) -- (mot.west);
 \draw[arr] (output.east) -- (srv.west);
-\draw[arr] (output.east) ++(0,-9mm) -- (onb.west);
+\draw[arr] (output.east) ++(0,-10mm) -- (onbo.west);
+
+% SystemData との読み書き
+\draw[arrg] (input.west)  -| node[font=\scriptsize\color{gray}, above, pos=0.25]{書込} (sys.north);
+\draw[arrg] (sys.east)    -- node[font=\scriptsize\color{gray}, above]{読書} (logic.west);
+\draw[arrg] (sys.south)   |- node[font=\scriptsize\color{gray}, below, pos=0.75]{読出} (output.west);
 
 \end{tikzpicture}
-\caption{割り込みハンドラ実行フロー}
+\caption{1ms 割り込みハンドラの3フェーズ実行フロー}
 \label{fig:flow}
 \end{figure}
 
-\subsection{3フェーズモデル}
+Input / Output の各フェーズは \texttt{IModule*} の配列 (\texttt{s\_inputModules[]} /
+\texttt{s\_outputModules[]}) をループして呼び出す。
+モジュールの \texttt{enabled} が \texttt{false} の間はスキップされるため、
+初期化に失敗したモジュールを配列から外さずに無効化できる。
+
+\begin{lstlisting}[caption={Input / Output フェーズの配列駆動 (mcr\_camera\_2026base.cpp)},label=lst:phasearray]
+static IModule* s_inputModules[] = {
+    &g_onboard,   // Input : SW 状態を sys.ob.sw へ
+    &g_camera,    // Input : 1ms ごとのフレーム段階処理
+};
+static IModule* s_outputModules[] = {
+    &g_motor,     // Output : sys.mot.*Cmd  -> PWM
+    &g_servo,     // Output : sys.srv.angleCmd -> PWM
+    &g_onboard,   // Output : sys.ob.*LedCmd  -> GPIO
+};
+
+for (int i = 0; i < N_IN; ++i) {
+    if (s_inputModules[i]->enabled) s_inputModules[i]->updateInput(g_sys);
+}
+\end{lstlisting}
+
+\subsection{3フェーズモデル}\label{sec:threephase}
 
 \begin{tabularx}{\textwidth}{c l X}
 \toprule
 \textbf{順序} & \textbf{フェーズ} & \textbf{内容} \\
 \midrule
-1 & Input Phase  & センサ値の読み取り（Encoder, Camera） \\
-2 & Logic Phase  & 判断ロジック実行、各ドライバの \texttt{set...()} を呼び出し（\textbf{この時点では出力しない}） \\
-3 & Output Phase & 全ドライバの \texttt{update()} を呼び出し、ハードウェアへ反映 \\
+1 & Input  & ハードウェア $\rightarrow$ \texttt{SystemData}。各モジュールの
+             \texttt{updateInput(sys)} がセンサ値を \texttt{sys.*} へ書き込む \\
+2 & Logic  & \texttt{SystemData} $\rightarrow$ \texttt{SystemData}。
+             \texttt{applyDrivingPattern(sys)} が状態機械を進め、
+             出力指示を \texttt{sys.mot.*Cmd} / \texttt{sys.srv.angleCmd} /
+             \texttt{sys.ob.*LedCmd} へ\textbf{代入する}（\textbf{ドライバは呼ばない}） \\
+3 & Output & \texttt{SystemData} $\rightarrow$ ハードウェア。各モジュールの
+             \texttt{updateOutput(sys)} が \texttt{*Cmd} を読み、レジスタへ反映する \\
 \bottomrule
 \end{tabularx}
 
-\begin{notebox}[ラッチ方式の利点]
-Logic Phase でセットした値は即座にハードウェアへ反映されない。
-Output Phase で一括反映することで、割り込み内での出力タイミングを統一し、
-グリッチや不整合を防止する。
+\begin{notebox}[3フェーズ分離の利点]
+Logic フェーズはハードウェアに一切触れない純粋な計算になるため、
+\texttt{SystemData} を差し替えるだけで PC 上の単体テストに載せられる。
+また出力タイミングが Output フェーズに集約されるので、
+1ms 内で出力が二度書きされたり、Logic の途中経過が物理出力に漏れることがない。
 \end{notebox}
+
+\begin{cautionbox}[全モジュールがラッチ方式ではない]
+Output フェーズ内での反映方法はモジュールによって異なる。
+\texttt{Onboard} は4個の LED 状態を内部バッファ \texttt{ledState\_[]} にまとめてから
+GPIO へ一括書き込みする真のラッチ方式だが、
+\texttt{Motor} / \texttt{Servo} は \texttt{updateOutput()} 内で MTU2 レジスタへ直接書き込む。
+いずれも「Output フェーズでのみ書く」点は共通であり、
+Logic フェーズの途中経過が出力に漏れない性質は保たれている。
+\end{cautionbox}
+
+\subsection{共有データ構造 SystemData}\label{sec:systemdata}
+
+\texttt{SystemData}（\texttt{src/core/SystemData.h}）は全モジュールの入出力データを
+1つに集約した構造体である。実体はグローバル変数 \texttt{g\_sys}
+（\texttt{mcr\_camera\_2026base.cpp} で定義）1個のみで、
+3フェーズの全呼び出しがこの参照を受け取る。
+
+\begin{lstlisting}[caption={SystemData の定義},label=lst:systemdata]
+struct SystemData {
+    CameraData       cam;   // Camera       が所有
+    LineDetectorData line;  // LineDetector が所有
+    MotorData        mot;   // Motor        が所有
+    ServoData        srv;   // Servo        が所有
+    OnboardData      ob;    // Onboard      が所有
+    EncoderData      enc;   // Encoder      が所有
+    SerialData       ser;   // Serial       が所有
+    SDLoggerData     sd;    // SDLogger     が所有
+    RunData          run;   // RunLogic     が所有
+};
+extern SystemData g_sys;
+\end{lstlisting}
+
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{メンバ} & \textbf{型} & \textbf{主な内容} \\
+\midrule
+\texttt{cam}  & \texttt{CameraData}       & \texttt{frameReady}, \texttt{frameCount}, \texttt{field}, \texttt{imageBufferPtr} \\
+\texttt{line} & \texttt{LineDetectorData} & \texttt{deviation[120]}, \texttt{crossLine}, \texttt{leftLine}, \texttt{rightLine}, \texttt{centerLine}, \texttt{sensorBin} \\
+\texttt{mot}  & \texttt{MotorData}        & \texttt{leftCmd}, \texttt{rightCmd}, \texttt{leftActual}, \texttt{rightActual} \\
+\texttt{srv}  & \texttt{ServoData}        & \texttt{angleCmd}, \texttt{angleActual} \\
+\texttt{ob}   & \texttt{OnboardData}      & \texttt{sw}, \texttt{ledRedCmd}, \texttt{ledGreenCmd}, \texttt{ledBlueCmd}, \texttt{userLedCmd} \\
+\texttt{enc}  & \texttt{EncoderData}      & \texttt{totalCount}, \texttt{magaCount}, \texttt{cnt}, \texttt{avgCnt}, \texttt{filteredCnt} \\
+\texttt{ser}  & \texttt{SerialData}       & \texttt{txCount} \\
+\texttt{sd}   & \texttt{SDLoggerData}     & \texttt{ready}, \texttt{logCount}, \texttt{full}, \texttt{saveRequested}, \texttt{saveDone} \\
+\texttt{run}  & \texttt{RunData}          & \texttt{pattern}, \texttt{handleVal}, \texttt{finished}, 3本の \texttt{ModuleTimer} \\
+\bottomrule
+\end{tabularx}
+
+\begin{notebox}[データの所有権]
+\texttt{\{Module\}Data} 構造体の宣言は各モジュールのヘッダ側に置き、
+\texttt{SystemData.h} はそれを include して集約するだけである。
+各モジュールは原則として\textbf{自身の Data だけ}を読み書きし、
+他モジュールのデータを横断参照してよいのは Logic フェーズの関数だけ、というルールで運用する。
+\end{notebox}
+
+\begin{cautionbox}[画素バッファは SystemData に置かない]
+160$\times$120 の輝度バッファ（約 19KB）と YCbCr422 中間バッファ（約 38KB）は
+\texttt{Camera} クラス内に実体を持ち、\texttt{SystemData} からは
+\texttt{cam.imageBufferPtr} 経由で参照する。
+巨大な配列を \texttt{SystemData} に持たせるとメモリ効率とコピーコストが悪化するため。
+\end{cautionbox}
+
+\subsection{ModuleTimer --- ノンブロッキング時間計測}\label{sec:moduletimer}
+
+ベアメタル環境には Arduino の \texttt{millis()} に相当する API がないため、
+OSTM0 の 1ms 割り込みでインクリメントされるグローバルカウンタ
+\texttt{volatile unsigned long g\_timer\_1ms} を時刻源とする軽量クラスを用意している
+（\texttt{src/core/ModuleTimer.h}）。
+
+\begin{tabularx}{\textwidth}{l X}
+\toprule
+\textbf{メソッド} & \textbf{機能} \\
+\midrule
+\texttt{void setTime()}                    & 現在時刻を起点としてタイマーを開始する \\
+\texttt{unsigned long getNowTime() const}  & \texttt{setTime()} からの経過時間 [ms]。未起動なら 0 \\
+\texttt{bool isExpired(unsigned long ms) const} & 指定時間以上経過したか。未起動なら \texttt{false} \\
+\texttt{void reset()}                      & 停止状態に戻す \\
+\texttt{bool isRunning() const}            & 起動中かどうか \\
+\bottomrule
+\end{tabularx}
+
+\vspace{2mm}
+\texttt{RunData} はこれを3本保持し、旧実装のカウンタ変数を置き換えている
+(\hyperref[sec:api-runlogic]{§\ref*{sec:api-runlogic}})。
+
+\begin{notebox}[待ちループを書かないこと]
+\texttt{ModuleTimer} は「経過したか」を問い合わせるだけで、内部でブロックしない。
+1ms 割り込みの中で \texttt{while (!timer.isExpired(n))} のような待機を書くと
+\texttt{g\_timer\_1ms} が進まなくなり、確実にハングする。
+\end{notebox}
+
+\subsection{設定注入と ProjectConfig}\label{sec:configinject}
+
+各モジュールは \texttt{\{Module\}Config} 構造体を\textbf{コンストラクタ引数で受け取り}、
+内部に \texttt{\_config} としてコピーして保持する。
+実値の定義は \texttt{src/core/ProjectConfig.h} の1ファイルに集約されており、
+走行パラメータの調整でドライバのソースを編集する必要はない。
+
+\begin{lstlisting}[caption={Config 注入によるインスタンス生成 (mcr\_camera\_2026base.cpp)},label=lst:configinject]
+Serial       g_serial      (SERIAL_CONFIG);
+Onboard      g_onboard     (ONBOARD_CONFIG);
+Motor        g_motor       (MOTOR_CONFIG);
+Servo        g_servo       (SERVO_CONFIG);
+Encoder      g_encoder     (ENCODER_CONFIG);   // 現状 init/呼出は未接続
+Camera       g_camera      (CAMERA_CONFIG);
+LineDetector g_lineDetector(LINE_DETECTOR_CONFIG);
+SDCard       g_sdcard      (SDCARD_CONFIG);
+SDLogger     g_sdlogger    (SDLOGGER_CONFIG);
+\end{lstlisting}
+
+実際の設定値は \hyperref[sec:params]{§\ref*{sec:params}}「パラメータ調整ガイド」にまとめる。
+
+\begin{cautionbox}[Config はグローバル ctor に依存する]
+\texttt{\_config} メンバはコンストラクタ初期化で埋まる。
+本プロジェクトの \texttt{start.S} は \texttt{\_\_libc\_init\_array()} を呼ばないため、
+\texttt{main()} 冒頭の \texttt{runGlobalConstructors()} を経由しないと
+\texttt{\_config} が BSS のゼロのままになり、サーボ出力が 0 になる等の致命的な不具合になる。
+詳細は \hyperref[sec:ctors]{§\ref*{sec:ctors}} を参照。
+\end{cautionbox}
 
 %% ============================================================
 %% 5. ファイル構成
@@ -399,26 +589,39 @@ Output Phase で一括反映することで、割り込み内での出力タイ�
 \ttfamily\small
 \begin{tabbing}
 \hspace{4mm}\=\hspace{4mm}\=\hspace{4mm}\=\hspace{4mm}\=\kill
-mcr\_camera\_test1/ \\
+mcr\_camera\_2026base/ \\
 \> src/ \\
-\>\> mcr\_camera\_test1.cpp \quad\textrm{\color{gray}← メイン・割り込みハンドラ} \\
+\>\> mcr\_camera\_2026base.cpp \quad\textrm{\color{gray}← メイン・GIC/OSTM0 初期化・割り込みハンドラ} \\
 \>\> core/ \\
 \>\>\> IModule.h \quad\textrm{\color{gray}← 基底インターフェース} \\
+\>\>\> SystemData.h \quad\textrm{\color{gray}← 全モジュール共有データ} \\
+\>\>\> ProjectConfig.h \quad\textrm{\color{gray}← 全パラメータの実値定義} \\
+\>\>\> ModuleTimer.h \quad\textrm{\color{gray}← ノンブロッキングタイマー} \\
+\>\> logic/ \\
+\>\>\> RunLogic.h / RunLogic.cpp \quad\textrm{\color{gray}← 走行状態機械（純関数）} \\
 \>\> drivers/ \\
-\>\>\> Camera.h / Camera.cpp \quad\textrm{\color{gray}← カメラ制御} \\
+\>\>\> Camera.h / Camera.cpp \quad\textrm{\color{gray}← NTSC キャプチャ (VDC5+DVDEC)} \\
+\>\>\> LineDetector.h / .cpp \quad\textrm{\color{gray}← ライン検出・偏差算出} \\
 \>\>\> Encoder.h / Encoder.cpp \quad\textrm{\color{gray}← エンコーダ制御} \\
 \>\>\> Motor.h / Motor.cpp \quad\textrm{\color{gray}← モータ制御} \\
-\>\>\> Onboard.h / Onboard.cpp \quad\textrm{\color{gray}← LED・スイッチ制御} \\
-\>\>\> SDCard.h / SDCard.cpp \quad\textrm{\color{gray}← SDカード制御} \\
-\>\>\> Serial.h / Serial.cpp \quad\textrm{\color{gray}← シリアル通信} \\
 \>\>\> Servo.h / Servo.cpp \quad\textrm{\color{gray}← サーボ制御} \\
-\>\> modules/ \\
-\>\>\> Trace.h / Trace.cpp \quad\textrm{\color{gray}← ライントレースロジック} \\
-\>\> utils/ \quad\textrm{\color{gray}← ユーティリティ (予定)} \\
-\> generate/ \\
-\>\> iodefine.h \quad\textrm{\color{gray}← レジスタ定義 (自動生成)} \\
+\>\>\> Onboard.h / Onboard.cpp \quad\textrm{\color{gray}← LED・スイッチ制御} \\
+\>\>\> Serial.h / Serial.cpp \quad\textrm{\color{gray}← シリアル通信} \\
+\>\>\> SDCard.h / SDCard.cpp \quad\textrm{\color{gray}← SD カード SPI ブロックドライバ} \\
+\>\>\> SDLogger.h / SDLogger.cpp \quad\textrm{\color{gray}← ログバッファ + CSV 書き出し} \\
+\>\>\> fatfs/ \quad\textrm{\color{gray}← ChaN's FatFs R0.11a + diskio ブリッジ} \\
+\>\>\> video/ \quad\textrm{\color{gray}← VDC5/DVDEC ドライバ群 (DisplayBase API)} \\
+\>\> system/ \\
+\>\>\> system\_init.c \quad\textrm{\color{gray}← FPU/MMU/L1 キャッシュ有効化} \\
+\>\>\> mmu\_rzA1H.c \quad\textrm{\color{gray}← MMU 翻訳テーブル生成} \\
+\> generate/ \quad\textrm{\color{gray}← e2 studio 自動生成（一部手動修正あり）} \\
+\>\> iodefine.h \quad\textrm{\color{gray}← レジスタ定義} \\
+\>\> inthandler.c \quad\textrm{\color{gray}← 割り込みディスパッチ ★手動修正} \\
+\>\> start.S / linker\_script.ld \quad\textrm{\color{gray}← 起動コード・リンカスクリプト ★手動修正} \\
+\> tests/ \quad\textrm{\color{gray}← PC 上の単体テスト (CMake + レジスタモック)} \\
 \> doc/ \\
-\>\> main.tex \quad\textrm{\color{gray}← 本仕様書} \\
+\>\> main.tex / main.pdf \quad\textrm{\color{gray}← 本仕様書} \\
+\> .devcontainer/ \quad\textrm{\color{gray}← LaTeX ビルド用 DevContainer} \\
 \end{tabbing}
 \end{tcolorbox}
 
@@ -428,32 +631,48 @@ mcr\_camera\_test1/ \\
 \toprule
 \textbf{ディレクトリ} & \textbf{役割} \\
 \midrule
-\texttt{src/core/}    & システム基盤（\texttt{IModule} インターフェース） \\
-\texttt{src/modules/} & ロジックモジュール（\texttt{Trace} 等 --- 未実装） \\
-\texttt{src/drivers/} & ハードウェアドライバ（Motor, Servo, Encoder, Camera, Serial, SDCard, Onboard） \\
-\texttt{src/utils/}   & ユーティリティ関数 \\
-\texttt{generate/}    & e2 studio 自動生成ファイル（\texttt{iodefine.h} 等） \\
-\texttt{doc/}         & ドキュメント \\
+\texttt{src/core/}    & システム基盤（\texttt{IModule}, \texttt{SystemData}, \texttt{ProjectConfig}, \texttt{ModuleTimer}） \\
+\texttt{src/logic/}   & Logic フェーズの走行ロジック（\texttt{RunLogic}）。ハードウェアに触れない \\
+\texttt{src/drivers/} & ハードウェアドライバ（Camera, LineDetector, Motor, Servo, Encoder, Onboard, Serial, SDCard, SDLogger） \\
+\texttt{src/drivers/fatfs/} & ChaN's FatFs R0.11a と \texttt{SDCard} へのブリッジ（\texttt{diskio.cpp}） \\
+\texttt{src/drivers/video/} & \texttt{mbed-gr-libs} 由来の VDC5/DVDEC ドライバ群と \texttt{DisplayBase} API \\
+\texttt{src/system/}  & FPU / MMU / L1 キャッシュ初期化（mbed OS の \texttt{SystemInit()} 移植） \\
+\texttt{generate/}    & e2 studio 自動生成ファイル（\hyperref[sec:generate]{§\ref*{sec:generate}} の手動修正あり） \\
+\texttt{tests/}       & PC 上で動かす単体テスト（レジスタをモック化して Motor/Servo/Encoder を検証） \\
+\texttt{doc/}         & 本仕様書（\texttt{main.tex} / \texttt{main.pdf}） \\
+\texttt{.devcontainer/} & LaTeX ドキュメントビルド用のコンテナ環境定義 \\
 \bottomrule
 \end{tabularx}
 
 \subsection{全ファイル一覧}
 
-\begin{longtable}{l p{95mm}}
+\begin{longtable}{l p{92mm}}
 \toprule
 \textbf{ファイル} & \textbf{役割} \\
 \midrule
 \endhead
-\texttt{src/mcr\_camera\_2026base.cpp}    & メインエントリ・割り込みハンドラ・Pattern ロジック \\
-\texttt{src/core/IModule.h}            & 全モジュール共通の基底インターフェース \\
-\texttt{src/drivers/Motor.h/.cpp}      & モータPWM制御 (MTU2 ch3/4) \\
-\texttt{src/drivers/Servo.h/.cpp}      & サーボPWM制御 (MTU2 ch0) \\
-\texttt{src/drivers/Encoder.h/.cpp}    & ロータリーエンコーダ読取 (MTU2 位相計数) \\
-\texttt{src/drivers/Camera.h/.cpp}     & カメラ画像取得・ライン検出 (CEU/DMA) \\
-\texttt{src/drivers/Serial.h/.cpp}     & シリアル通信 (SCIF) \\
-\texttt{src/drivers/SDCard.h/.cpp}     & SDカードログ書込み (SPI) \\
-\texttt{src/drivers/Onboard.h/.cpp}    & オンボードLED・スイッチ制御 (GPIO) \\
-\texttt{src/modules/Trace.h/.cpp}      & ライントレース・PID制御ロジック \\
+\texttt{src/mcr\_camera\_2026base.cpp} & メインエントリ・GIC/OSTM0 初期化・3フェーズ割り込みハンドラ・2つの動作モードループ \\
+\texttt{src/core/IModule.h}         & 全モジュール共通の基底インターフェース \\
+\texttt{src/core/SystemData.h}      & 全モジュールの Data を集約した共有構造体 \\
+\texttt{src/core/ProjectConfig.h}   & 全 \texttt{*\_CONFIG} インスタンスの実値定義（調整の入口） \\
+\texttt{src/core/ModuleTimer.h}     & \texttt{g\_timer\_1ms} を時刻源とするノンブロッキングタイマー \\
+\texttt{src/logic/RunLogic.h/.cpp}  & 走行状態機械（\texttt{applyDrivingPattern()}）・\texttt{RunPattern} 定義 \\
+\texttt{src/drivers/Camera.h/.cpp}  & NTSC 160$\times$120 キャプチャ（VDC5 ch0 + DVDEC0） \\
+\texttt{src/drivers/LineDetector.h/.cpp} & 偏差算出・クロス/ハーフ/センターライン検出・8点センサ生成 \\
+\texttt{src/drivers/Motor.h/.cpp}   & モータ PWM 制御 (MTU2 ch3/4 リセット同期PWM) \\
+\texttt{src/drivers/Servo.h/.cpp}   & サーボ PWM 制御 (MTU2 ch0 PWMモード1) \\
+\texttt{src/drivers/Encoder.h/.cpp} & ロータリーエンコーダ読取 (MTU2 ch1 位相計数モード2) \\
+\texttt{src/drivers/Onboard.h/.cpp} & オンボード LED・スイッチ制御 (GPIO ポート6) \\
+\texttt{src/drivers/Serial.h/.cpp}  & デバッグシリアル通信 (SCIF2, 230400bps) \\
+\texttt{src/drivers/SDCard.h/.cpp}  & SD カード SPI ブロックドライバ (RSPI2)。FatFs の下位層 \\
+\texttt{src/drivers/SDLogger.h/.cpp}& 走行ログのバッファリングと CSV 書き出し \\
+\texttt{src/drivers/fatfs/ff.c}     & FatFs R0.11a 本体 \\
+\texttt{src/drivers/fatfs/diskio.cpp} & FatFs $\rightarrow$ \texttt{SDCard} のディスク I/O ブリッジ \\
+\texttt{src/drivers/video/}         & VDC5/DVDEC ドライバ群と \texttt{DisplayBase} API (40 ファイル超) \\
+\texttt{src/system/system\_init.c}  & FPU / MMU / L1 キャッシュ有効化 \\
+\texttt{generate/inthandler.c}      & IRQ ディスパッチャと OSTM0 コールバック呼び出し（手動修正） \\
+\texttt{generate/linker\_script.ld} & \texttt{.init\_array} 収集を追加したリンカスクリプト（手動修正） \\
+\texttt{generate/start.S}           & 起動コード（VBAR 設定・IRQ スタック確保を追加、手動修正） \\
 \bottomrule
 \end{longtable}
 
@@ -463,15 +682,17 @@ mcr\_camera\_test1/ \\
 \toprule
 \textbf{機能} & \textbf{メインファイル} & \textbf{関連ファイル} \\
 \midrule
-割り込みハンドラ & \texttt{mcr\_camera\_2026base.cpp} & 全ドライバ・モジュール \\
+3フェーズ割り込み & \texttt{mcr\_camera\_2026base.cpp} & IModule.h, SystemData.h, inthandler.c \\
+走行状態機械     & \texttt{RunLogic.cpp}    & SystemData.h, ProjectConfig.h, ModuleTimer.h \\
+ライン検出       & \texttt{LineDetector.cpp}& Camera.h, SystemData.h, ProjectConfig.h \\
+カメラ入力       & \texttt{Camera.cpp}      & video/DisplayBace.h, video/gr\_peach\_vdc5.c \\
 モータ制御       & \texttt{Motor.cpp}       & IModule.h, iodefine.h \\
 サーボ制御       & \texttt{Servo.cpp}       & IModule.h, iodefine.h \\
 エンコーダ       & \texttt{Encoder.cpp}     & IModule.h, iodefine.h \\
-カメラ           & \texttt{Camera.cpp}      & IModule.h, iodefine.h \\
-シリアル通信     & \texttt{Serial.cpp}      & IModule.h, iodefine.h \\
-SDカード         & \texttt{SDCard.cpp}      & IModule.h, iodefine.h \\
 LED・スイッチ    & \texttt{Onboard.cpp}     & IModule.h, iodefine.h \\
-ライントレース   & \texttt{Trace.cpp}       & IModule.h, Camera.h, Encoder.h \\
+シリアル通信     & \texttt{Serial.cpp}      & IModule.h, iodefine.h \\
+走行ログ         & \texttt{SDLogger.cpp}    & SDCard.cpp, fatfs/ff.c, fatfs/diskio.cpp \\
+起動時初期化     & \texttt{system\_init.c}  & mmu\_rzA1H.c, start.S \\
 \bottomrule
 \end{tabularx}
 
@@ -485,20 +706,115 @@ LED・スイッチ    & \texttt{Onboard.cpp}     & IModule.h, iodefine.h \\
 \textbf{項目} & \textbf{内容} \\
 \midrule
 ターゲットボード & GR-PEACH (ルネサス RZ/A1H, ARM Cortex-A9) \\
-開発環境         & Renesas e2 studio \\
-言語             & C++ (ベアメタル、mbed OS 不使用) \\
-コンパイラ       & GCC ARM (e2 studio 標準) \\
-レジスタ定義     & \texttt{iodefine.h} (e2 studio 自動生成) \\
+開発環境         & Renesas e2 studio（ビルド構成 \texttt{HardwareDebug}） \\
+言語             & C++（ベアメタル、mbed OS 不使用）。\texttt{ProjectConfig.h} が
+                   \texttt{inline const} を使うため \textbf{C++17 以上}が必要 \\
+コンパイラ       & GCC for Renesas ARM (\texttt{arm-none-eabi-gcc/g++} 13.3.1)。
+                   確認済みの組み合わせは \hyperref[sec:buildenv]{§\ref*{sec:buildenv}} \\
+浮動小数点       & VFPv3-D16, hard ABI, リトルエンディアン \\
+実行方式         & XIP（SPI フラッシュ直接実行）+ MMU / L1 キャッシュ有効
+                   (\hyperref[sec:xip]{§\ref*{sec:xip}}) \\
+レジスタ定義     & \texttt{iodefine.h}（e2 studio 自動生成） \\
+割り込み         & GIC (Generic Interrupt Controller) + OSTM0 による 1ms インターバル \\
+映像ドライバ     & \texttt{mbed-gr-libs} 由来の VDC5/DVDEC ドライバ + \texttt{DisplayBase} API \\
+ファイルシステム & ChaN's FatFs R0.11a（\texttt{diskio.cpp} 経由で \texttt{SDCard} に接続） \\
+ドキュメント     & \LaTeX (uplatex + dvipdfmx, \texttt{latexmk})。DevContainer で環境統一 \\
 \bottomrule
 \end{tabularx}
+
+\subsection{ビルド検証環境}\label{sec:buildenv}
+
+ファームウェアのビルドが通ることを確認済みの環境を記録する。
+組み込み開発ではツールチェインのバージョン差でビルドが通らなくなることがあるため、
+別環境で再構築する際は\textbf{まずこの組み合わせを再現する}ことを勧める。
+
+\begin{tabularx}{\textwidth}{l X}
+\toprule
+\textbf{項目} & \textbf{確認済みの値} \\
+\midrule
+IDE                 & Renesas e2 studio \quad バージョン: \ideversion \\
+ビルド構成          & \texttt{HardwareDebug} \\
+ツールチェイン      & GNU Arm Embedded Toolchain（Arm GNU Toolchain \texttt{arm-none-eabi} 13.3 rel1） \\
+\texttt{.cproject} の登録値 & \texttt{toolchain.id = gcc-arm-embedded},
+                              \texttt{toolchain.version = 13.3.1.arm-13-24} \\
+コンパイラ          & \texttt{arm-none-eabi-gcc} / \texttt{arm-none-eabi-g++} 13.3.1
+                      （生成 makefile の \texttt{GCC\_VERSION=13.3.1} と一致） \\
+CDT ツールチェイン  & GCC for Renesas RZ
+                      (\texttt{com.renesas.cdt.managedbuild.gcc.rz.toolchain.debug.update}) \\
+\bottomrule
+\end{tabularx}
+
+\subsubsection{ターゲット設定}
+
+\texttt{.cproject} に登録されているビルドオプションと、
+実際に生成されたコンパイルコマンドの内容は次のとおり。
+
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{項目} & \textbf{設定値} & \textbf{コンパイラオプション} \\
+\midrule
+アーキテクチャ   & ARM (32bit)      & \texttt{-{}-} (\texttt{architecture.arm}) \\
+CPU              & Cortex-A9        & \texttt{-mcpu=cortex-a9} \\
+命令セット       & ARM              & \texttt{-marm} \\
+エンディアン     & リトルエンディアン & \texttt{-mlittle-endian} \\
+FPU              & VFPv3-D16        & \texttt{-mfpu=vfpv3-d16} \\
+Float ABI        & hard             & \texttt{-mfloat-abi=hard} \\
+最適化レベル     & なし (\texttt{-O0}) & \texttt{-O0} \\
+デバッグ情報     & DWARF 4          & \texttt{-g -gdwarf-4} \\
+\bottomrule
+\end{tabularx}
+
+\vspace{2mm}
+上記に加えて次のオプションが付与される。
+
+\begin{center}
+\ttfamily\small
+-fsigned-char\quad -ffunction-sections\quad -fdata-sections\quad -fno-strict-aliasing \\
+-fabi-version=0\quad -fmessage-length=0\quad -fdiagnostics-parseable-fixits \\
+-Wnull-dereference\quad -Wstack-usage=100
+\end{center}
+
+\begin{notebox}[値の出典]
+本節の値は次の実測に基づく。
+
+\begin{itemize}[nosep, leftmargin=*]
+  \item ツールチェインとターゲット設定: リポジトリ直下の \texttt{.cproject}
+        （\texttt{com.renesas.cdt.managedbuild.core.toolchainInfo} および各 \texttt{<option>} 要素）
+  \item コンパイラのバージョンとオプション列: git 履歴に残る
+        \texttt{HardwareDebug/} のビルド生成物
+        （\texttt{makefile.init} の \texttt{GCC\_VERSION}、\texttt{*.o.in} のコンパイルコマンド）。
+        現在 \texttt{HardwareDebug/} は \texttt{.gitignore} で除外されている
+\end{itemize}
+\end{notebox}
+
+\begin{cautionbox}[e2 studio の製品バージョンは未確定]
+e2 studio 本体のバージョンを特定できる情報は、
+リポジトリ内のどのファイルにも記録されていない
+（\texttt{.settings/e2studio\_project.prefs} が持つのは構成 ID のみ）。
+そのため上表の該当欄は\textbf{未記入のまま}である。
+
+バージョンが判明したら、プリアンブルの \texttt{\textbackslash newcommand\{\textbackslash ideversion\}\{...\}}
+\textbf{1 箇所}を書き換えるだけで本表に反映される。
+e2 studio 側での確認方法は「ヘルプ $\rightarrow$ e2 studio について」。
+\end{cautionbox}
 
 %% ============================================================
 %% 7. API仕様 (データシート)
 %% ============================================================
 \section{API仕様}\label{sec:api}
 
-本章では各クラスの公開APIをデータシート形式で記述する。
-全クラスは \texttt{IModule} インターフェース (\hyperref[sec:api-imodule]{§\ref*{sec:api-imodule}}) を継承する。
+本章では各モジュールの公開APIをデータシート形式で記述する。
+\texttt{src/drivers/} 配下の全クラスは \texttt{IModule} インターフェース
+(\hyperref[sec:api-imodule]{§\ref*{sec:api-imodule}}) を実装する。
+Logic レイヤーの \texttt{RunLogic}
+(\hyperref[sec:api-runlogic]{§\ref*{sec:api-runlogic}}) だけはクラスではなく
+自由関数の集合であり、\texttt{IModule} を継承しない。
+
+\begin{notebox}[定数値の扱い]
+各クラスの \texttt{static const}（\texttt{Motor::MAX\_POWER} 等）は後方互換のために
+残されているもので、\textbf{実行時に使われるのは \texttt{\_config} 経由の値}である。
+実値の一覧は \hyperref[sec:params]{§\ref*{sec:params}} を参照すること。
+\end{notebox}
 
 %% ── 7.1 IModule ──
 \subsection{IModule インターフェース}\label{sec:api-imodule}
@@ -512,42 +828,103 @@ LED・スイッチ    & \texttt{Onboard.cpp}     & IModule.h, iodefine.h \\
 
 \apisection{概要}
 
-全てのドライバおよびロジックモジュールが実装すべき共通インターフェース。
-\texttt{init()} で初期化、\texttt{update()} で周期処理を行う。
-
-\apisection{機能一覧}
+全てのドライバが実装する共通インターフェース。
+3フェーズ実行モデル (\hyperref[sec:threephase]{§\ref*{sec:threephase}}) に対応し、
+入力と出力を別メソッドに分けている点が特徴である。
 
 \begin{itemize}[nosep]
-  \item 全モジュール共通の初期化・周期処理メソッドを定義
-  \item 仮想デストラクタによる安全なポリモーフィズム
+  \item 入力専用モジュール（Camera, Encoder）は \texttt{updateInput()} のみを override する
+  \item 出力専用モジュール（Motor, Servo, Serial, SDCard, SDLogger）は \texttt{updateOutput()} のみを override する
+  \item 入出力両方のモジュール（Onboard）は両方を override する
 \end{itemize}
+
+\texttt{SystemData} は前方宣言のみを行い、各モジュールヘッダから
+\texttt{SystemData.h} を include させないことで循環依存を避けている。
 
 \apisection{関数ドキュメント}
 
 \begin{funcblock}{init()}
-\texttt{virtual void init() = 0}
+\texttt{virtual bool init() = 0}
 
 \vspace{1.5mm}
-初期化処理。レジスタ設定・変数初期化を行う。システム起動時に1回のみ呼び出される。
-\end{funcblock}
-
-\begin{funcblock}{update()}
-\texttt{virtual void update() = 0}
+初期化処理。レジスタ設定・変数初期化を行う。システム起動時に \texttt{main()} から1回のみ呼び出される。
 
 \vspace{1.5mm}
-周期処理。割り込みハンドラまたはメインループから定期的に呼び出される。
+\textbf{戻り値:} \texttt{bool} --- \texttt{true}=成功 / \texttt{false}=失敗。
+失敗時は呼び出し側で \texttt{enabled = false} に落とす運用を推奨する。
 \end{funcblock}
 
-\apisection{実装例}
+\begin{funcblock}{updateInput(sys)}
+\texttt{virtual void updateInput(SystemData\& sys)}
+
+\vspace{1.5mm}
+入力フェーズ。ハードウェアを読み取り、結果を \texttt{sys} の自モジュール領域へ書き込む。
+デフォルトは空実装のため、出力専用モジュールは override 不要。
+\end{funcblock}
+
+\begin{funcblock}{updateOutput(sys)}
+\texttt{virtual void updateOutput(SystemData\& sys)}
+
+\vspace{1.5mm}
+出力フェーズ。\texttt{sys} の指示値（\texttt{*Cmd}）を読み、ハードウェアへ反映する。
+デフォルトは空実装のため、入力専用モジュールは override 不要。
+\end{funcblock}
+
+\begin{funcblock}{deinit()}
+\texttt{virtual void deinit()}
+
+\vspace{1.5mm}
+終了処理（バス停止、リソース解放等）。デフォルトは何もしない。
+\end{funcblock}
+
+\apisection{メンバ変数}
+
+\begin{tabularx}{\textwidth}{l l l X}
+\toprule
+\textbf{変数名} & \textbf{型} & \textbf{初期値} & \textbf{説明} \\
+\midrule
+\texttt{enabled} & \texttt{bool} & \texttt{true} &
+  \texttt{false} の間は呼び出し側の配列ループが
+  \texttt{updateInput}/\texttt{updateOutput} をスキップする \\
+\bottomrule
+\end{tabularx}
+
+\apisection{インターフェース定義}
 
 \begin{lstlisting}[caption={IModule インターフェース定義},label=lst:imodule]
+struct SystemData;   // 前方宣言（循環依存の回避）
+
 class IModule {
 public:
   virtual ~IModule() {}
-  virtual void init() = 0;   // 初期化処理
-  virtual void update() = 0; // 周期処理
+
+  // 初期化処理（成功 = true、失敗 = false）
+  virtual bool init() = 0;
+
+  // 入力フェーズ: ハードウェア -> SystemData
+  virtual void updateInput(SystemData& sys) { (void)sys; }
+
+  // 出力フェーズ: SystemData -> ハードウェア
+  virtual void updateOutput(SystemData& sys) { (void)sys; }
+
+  // 終了処理（バス停止、リソース解放等）
+  virtual void deinit() {}
+
+  // false の間は updateInput / updateOutput をスキップする
+  bool enabled = true;
 };
 \end{lstlisting}
+
+\apisection{新規モジュールの追加手順}
+
+\begin{enumerate}[nosep, leftmargin=*]
+  \item \texttt{src/drivers/Xxx.h} に \texttt{XxxConfig} と \texttt{XxxData} を宣言する
+  \item \texttt{class Xxx : public IModule} を定義し、\texttt{explicit Xxx(const XxxConfig\&)} を用意する
+  \item \texttt{SystemData.h} に \texttt{XxxData xxx;} を追加し、ヘッダを include する
+  \item \texttt{ProjectConfig.h} に \texttt{XXX\_CONFIG} の実値を定義する
+  \item \texttt{mcr\_camera\_2026base.cpp} でグローバルインスタンス \texttt{g\_xxx} を生成し、
+        \texttt{main()} で \texttt{init()} を呼び、必要なフェーズの配列へ登録する
+\end{enumerate}
 
 \end{apibox}
 
@@ -558,313 +935,438 @@ public:
 
 \textbf{ファイル:} \texttt{src/drivers/Encoder.h}, \texttt{Encoder.cpp} \hfill
 \textbf{継承:} \texttt{IModule} \hfill
-\phasebadge{Input Phase}
+\phasebadge{Input フェーズ}
 
 \vspace{2mm}\hrule\vspace{2mm}
 
 \apisection{概要}
 
-MTU2 (チャネル1) の位相計数モード2を使用し、エンコーダのパルスをカウントする。
-フィルタリング処理を行い、走行距離と現在の速度を算出・管理する。
+MTU2 チャネル1の位相計数モード2を使用し、エンコーダのパルスをカウントする。
+1ms ごとに \texttt{MTU2TCNT\_1} を読んでゼロクリアし、
+その差分（1ms あたりのパルス数）を累積カウンタと2種類のフィルタに通す。
+
+\begin{cautionbox}[現状 ISR に未接続]
+\texttt{g\_encoder} のインスタンス自体は生成されているが、
+\texttt{main()} での \texttt{init()} 呼び出しと \texttt{s\_inputModules[]} への登録は
+まだ行われていない。したがって \texttt{sys.enc.*} は常に 0 のままである。
+SDLogger 連携が必要になった時点で有効化する予定。
+\end{cautionbox}
 
 \apisection{機能一覧}
 
 \begin{itemize}[nosep]
-  \item トータル走行距離・コース走行距離の管理
-  \item 現在速度の算出
-  \item 距離の任意設定（クリア機能含む）
+  \item MTU2 位相計数モード2による前進/後退を区別したパルス計数
+  \item 走行距離換算用の累積カウント（\texttt{totalCount}）とクランク検出用（\texttt{magaCount}）の2系統
+  \item 移動平均フィルタ（段数 \texttt{filterN}）
+  \item RC フィルタ（指数移動平均、係数 \texttt{rcAlpha}）
 \end{itemize}
 
-\apisection{内部定数}
-
-\begin{tabularx}{\textwidth}{l l X}
-\toprule
-\textbf{定数名} & \textbf{値} & \textbf{説明} \\
-\midrule
-\texttt{Filter\_N} & 2 & フィルタバッファサイズ \\
-\texttt{DIST\_PER\_PULSE} & (定数) & 1パルスあたりの移動距離 [mm] \\
-\bottomrule
-\end{tabularx}
-
-\apisection{内部変数}
+\apisection{設定 (EncoderConfig)}
 
 \begin{tabularx}{\textwidth}{l l l X}
 \toprule
-\textbf{変数名} & \textbf{型} & \textbf{初期値} & \textbf{説明} \\
+\textbf{メンバ} & \textbf{型} & \textbf{実値} & \textbf{説明} \\
 \midrule
-\texttt{\_totalDistance}  & \texttt{float} & 0.0 & トータル走行距離 \\
-\texttt{\_courseDistance} & \texttt{float} & 0.0 & コース走行距離 \\
-\texttt{\_speed}          & \texttt{float} & 0.0 & 現在速度 \\
-\texttt{\_deltaCount}     & \texttt{int}   & 0   & 今回のパルス変動量 \\
-\texttt{\_filter\_buf[]}  & \texttt{int[]} & 0   & フィルタ用バッファ \\
+\texttt{filterN}  & \texttt{int}   & 4    & 移動平均の段数（上限は \texttt{Encoder::FILTER\_N = 4}） \\
+\texttt{rcAlpha}  & \texttt{float} & 0.5  & RC フィルタ係数 $\alpha$ \\
+\texttt{aPinFmt}  & \texttt{int}   & 0    & A相 P1\_0 (TCLKA) \\
+\texttt{bPinFmt}  & \texttt{int}   & 10   & B相 P1\_10 (TCLKB) \\
 \bottomrule
 \end{tabularx}
+
+\apisection{出力データ (EncoderData / sys.enc)}
+
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{メンバ} & \textbf{型} & \textbf{説明} \\
+\midrule
+\texttt{totalCount}  & \texttt{int}   & 走行距離換算用の累積カウント \\
+\texttt{magaCount}   & \texttt{int}   & クランク検出用の累積カウント \\
+\texttt{cnt}         & \texttt{int}   & 直近 1ms あたりのカウント（符号付き） \\
+\texttt{avgCnt}      & \texttt{int}   & 移動平均後のカウント \\
+\texttt{filteredCnt} & \texttt{float} & RC フィルタ後のカウント \\
+\bottomrule
+\end{tabularx}
+
+\begin{notebox}[距離ではなくパルス数を扱う]
+本実装が保持しているのは\textbf{パルスカウント（\texttt{int}）}であり、
+距離 [mm] や速度への換算は行っていない。
+走行状態の遷移条件は経過時間 [ms] で管理する方針
+(\hyperref[sec:api-runlogic]{§\ref*{sec:api-runlogic}}) のため、
+距離換算係数（1パルスあたりの移動距離）は定義していない。
+\end{notebox}
 
 \apisection{関数ドキュメント}
 
 \begin{funcblock}{init()}
-\texttt{void init(void)}
+\texttt{bool init() override}
 
 \vspace{1.5mm}
-MTU2の位相計数モード2を初期化する。GPIO設定およびタイマスタートを行う。
+MTU2 チャネル1を位相計数モード2で初期化する。
+P1\_0 / P1\_10 のピン設定、MTU2 のスタンバイ解除、カウンタスタートを行う。
 \end{funcblock}
 
-\begin{funcblock}{update()}
-\texttt{void update(void)}
+\begin{funcblock}{updateInput(sys)}
+\texttt{void updateInput(SystemData\& sys) override}
 
 \vspace{1.5mm}
-MTU2カウンタ値を読み取り、前回値との差分から距離・速度を更新する。
+\texttt{MTU2TCNT\_1} を符号付き 16bit として読み出して 0 にリセットし、
+累積カウンタ・移動平均・RC フィルタを更新して \texttt{sys.enc.*} に格納する。
+RC フィルタは $\mathit{rc} \leftarrow \alpha \cdot \mathit{rc} + (1-\alpha) \cdot \mathit{cnt}$ で更新する。
 \end{funcblock}
 
-\begin{funcblock}{getTotalDistance()}
-\texttt{float getTotalDistance(void)} --- トータル走行距離 (\texttt{\_totalDistance}) を返す。
+\begin{funcblock}{clearTotal() / clearMaga()}
+\texttt{void clearTotal()} / \texttt{void clearMaga()}
+
+\vspace{1.5mm}
+それぞれ \texttt{totalCount\_} / \texttt{magaCount\_} を 0 にリセットする。
 \end{funcblock}
 
-\begin{funcblock}{getCourseDistance()}
-\texttt{float getCourseDistance(void)} --- コース走行距離 (\texttt{\_courseDistance}) を返す。
+\begin{funcblock}{後方互換 getter}
+\texttt{int getTotalCount() const} / \texttt{int getMagaCount() const} /
+\texttt{int getCnt() const} / \texttt{float getFilteredCnt() const}
+
+\vspace{1.5mm}
+内部状態を直接返す。\texttt{getCnt()} は移動平均後の値（\texttt{avg\_}）を返す点に注意。
+新規コードでは \texttt{sys.enc.*} を読むこと。
 \end{funcblock}
 
-\begin{funcblock}{getSpeed()}
-\texttt{float getSpeed(void)} --- 現在速度 (\texttt{\_speed}) を返す。
-\end{funcblock}
+\apisection{ハードウェアマッピング}
 
-\begin{funcblock}{setTotalDistance(dist)}
-\texttt{void setTotalDistance(float dist)} --- トータル走行距離を任意の値に設定する (0でクリア)。
-\end{funcblock}
-
-\begin{funcblock}{setCourseDistance(dist)}
-\texttt{void setCourseDistance(float dist)} --- コース走行距離を任意の値に設定する (0でクリア)。
-\end{funcblock}
+\begin{tabularx}{\textwidth}{l l l X}
+\toprule
+\textbf{信号} & \textbf{ピン} & \textbf{レジスタ} & \textbf{説明} \\
+\midrule
+A相 & P1\_0  (TCLKA) & MTU2TCNT\_1 & 位相計数モード2の入力 \\
+B相 & P1\_10 (TCLKB) & MTU2TCNT\_1 & 同上（位相差で方向を判別） \\
+\bottomrule
+\end{tabularx}
 
 \end{apibox}
 
 %% ── 7.3 Camera ──
 \subsection{Camera クラス}\label{sec:api-camera}
 
-\begin{apibox}{Camera --- カメラ制御および画像処理ドライバ}
+\begin{apibox}{Camera --- NTSC ビデオキャプチャドライバ}
 
 \textbf{ファイル:} \texttt{src/drivers/Camera.h}, \texttt{Camera.cpp} \hfill
 \textbf{継承:} \texttt{IModule} \hfill
-\phasebadge{Input Phase}
+\phasebadge{Input フェーズ}
 
 \vspace{2mm}\hrule\vspace{2mm}
 
 \apisection{概要}
 
-
-\apisection{関数ドキュメント (画像処理)}
-
-\begin{funcblock}{resize(src, dst, percent)}
-\texttt{void resize(uint8\_t *src, uint8\_t *dst, double percent)}
-
-\vspace{1.5mm}
-(旧: \texttt{ImageReduction}) --- 画像を縮小する。
-\end{funcblock}
-
-\begin{funcblock}{extractBrightness(src, dst)}
-\texttt{void extractBrightness(uint8\_t *src, uint8\_t *dst)}
-
-\vspace{1.5mm}
-(旧: \texttt{Extraction\_Brightness}) --- YCbCr画像から輝度成文(Y)を抽出する。
-\end{funcblock}
-
-\begin{funcblock}{binarize(src, dst, threshold)}
-\texttt{void binarize(uint8\_t *src, uint8\_t *dst, int threshold)}
-
-\vspace{1.5mm}
-(旧: \texttt{Binarization}) --- 画像を指定閾値で二値化する。
-\end{funcblock}
-
-\begin{funcblock}{percentileMethod(src, percent)}
-\texttt{int percentileMethod(uint8\_t *src, int percent)}
-
-\vspace{1.5mm}
-(旧: \texttt{Percentile\_Method}) --- パーセンタイル法による閾値決定を行う。
-\end{funcblock}
-
-\begin{funcblock}{discriminantAnalysis(src)}
-\texttt{int discriminantAnalysis(uint8\_t *src)}
-
-\vspace{1.5mm}
-(旧: \texttt{DiscriminantAnalysis\_Method}) --- 判別分析法による閾値決定を行う。
-\end{funcblock}
-
-\begin{funcblock}{extractPart(src, x, y, dst, w, h)}
-\texttt{void extractPart(uint8\_t *src, int x, int y, uint8\_t *dst, int w, int h)}
-
-\vspace{1.5mm}
-(旧: \texttt{Image\_part\_Extraction}) --- 画像の一部を切り出す。
-\end{funcblock}
-
-\begin{funcblock}{standardDeviation(...)}
-\texttt{double standardDeviation(uint8\_t *data, double *devi, int w, int h)}
-
-\vspace{1.5mm}
-(旧: \texttt{Standard\_Deviation}) --- 標準偏差を算出する。
-\end{funcblock}
-
-\begin{funcblock}{covariance(...)}
-\texttt{double covariance(double *deviA, double *deviB, int w, int h)}
-
-\vspace{1.5mm}
-(旧: \texttt{Covariance}) --- 共分散を算出する。
-\end{funcblock}
-
-\begin{funcblock}{matchPattern(...)}
-\texttt{void matchPattern(uint8\_t *src, ImagePartPattern *tmplt, ...)}
-
-\vspace{1.5mm}
-(旧: \texttt{PatternMatching\_process}) --- パターンマッチングを行う。
-\end{funcblock}
-
-\begin{cautionbox}[実装上の注意]
-\begin{itemize}[nosep]
-  \item \texttt{DisplayBase} ライブラリのセットアップ手順は複雑なため、既存実装 (\texttt{init\_Camera}) を参考に移植する。
-  \item 画像処理関数は重いため、処理時間オーバーに注意が必要。
-\end{itemize}
-\end{cautionbox}
-
-\end{apibox}
-
-%% ── 7.4 Trace ──
-\subsection{Trace クラス}\label{sec:api-trace}
-
-\begin{apibox}{Trace --- ライントレースモジュール}
-
-\textbf{ファイル:} \texttt{src/modules/Trace.h}, \texttt{Trace.cpp} \hfill
-\textbf{継承:} \texttt{IModule} \hfill
-\phasebadge{Logic Phase}
-
-\vspace{2mm}\hrule\vspace{2mm}
-
-\apisection{概要}
-
-カメラ画像からライン位置を検出し、PID制御によりステアリング角度を算出する。
-\texttt{update()} 内で検出→PID計算の一連処理を実行する。
+VDC5 チャネル0 と DVDEC0 を用いて NTSC 映像を 160$\times$120 の YCbCr422 として取り込み、
+輝度（Y）成分のみを抽出して 160$\times$120 のグレースケールバッファに格納する。
+初期化には \texttt{mbed-gr-libs} 由来の \texttt{DisplayBase} API
+（\texttt{Graphics\_init} $\rightarrow$ \texttt{Graphics\_Video\_init} $\rightarrow$
+\texttt{Video\_Write\_Setting}）を使用する。
 
 \apisection{機能一覧}
 
 \begin{itemize}[nosep]
-  \item 画像二値化によるライン検出
-  \item PID制御によるステアリング角度算出
-  \item ゲインパラメータの動的設定
-  \item ステアリング角度のリミット処理
+  \item VDC5 + DVDEC による NTSC インターレース映像のキャプチャ
+  \item フレーム処理の4ステップ分割（XIP 環境の 1ms 制約に対応）
+  \item Vfield 割り込みによるフィールド同期
+  \item 座標指定の輝度取得 (\texttt{getPixel}) と 8点センサ変換 (\texttt{thresholdConvert})
 \end{itemize}
 
-\apisection{内部定数}
+\apisection{設定 (CameraConfig)}
+
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{メンバ} & \textbf{実値} & \textbf{説明} \\
+\midrule
+\texttt{pixelWidth}       & 160 & 水平ピクセル数 \\
+\texttt{pixelHeight}      & 120 & 垂直ピクセル数 \\
+\texttt{thresholdDefault} & 170 & 8点センサ取得時のデフォルト閾値 \\
+\texttt{thresholdRow}     & 60  & 8点センサ取得行 \\
+\texttt{thresholdDiff}    & 8   & 8点センサ閾値の差分 \\
+\bottomrule
+\end{tabularx}
+
+\apisection{出力データ (CameraData / sys.cam)}
+
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{メンバ} & \textbf{型} & \textbf{説明} \\
+\midrule
+\texttt{frameReady}     & \texttt{bool}     & 新フレーム完了フラグ。メインループが消費後に \texttt{false} へ戻す \\
+\texttt{frameCount}     & \texttt{uint32\_t}& 累積フレーム数（デバッグ表示用） \\
+\texttt{field}          & \texttt{int}      & 0=トップ / 1=ボトムフィールド \\
+\texttt{imageBufferPtr} & \texttt{const volatile unsigned char*} & 輝度バッファ（160$\times$120）へのポインタ \\
+\bottomrule
+\end{tabularx}
+
+\apisection{フレーム処理の4ステップ分割}
+
+XIP 実行環境では \texttt{imageCopy()} 1回に約 7--8ms を要し、1ms 割り込みに収まらない
+(\hyperref[sec:xip]{§\ref*{sec:xip}})。そのため1フレームの処理を4ステップに分割し、
+1ms 割り込みごとに1ステップだけ進める。
+
+\begin{tabularx}{\textwidth}{c l X}
+\toprule
+\textbf{ステップ} & \textbf{処理} & \textbf{内容} \\
+\midrule
+0 & \texttt{imageCopy(0)}         & Vfield 値を \texttt{capturedField\_} にキャプチャし、前半（0--59行）をコピー \\
+1 & \texttt{imageCopy(1)}         & 後半（60--119行）をコピー \\
+2 & \texttt{extractBrightness(0)} & 前半の Y 成分を抽出 \\
+3 & \texttt{extractBrightness(1)} & 後半の Y 成分を抽出。完了時に \texttt{frameReady\_} を立てる \\
+4以降 & Vfield 待ち              & 次の Vfield 発生まで即リターンし、メインループへ CPU 時間を返す \\
+\bottomrule
+\end{tabularx}
+
+\begin{notebox}[capturedField\_ 方式が必要な理由]
+XIP 環境では4ステップの合計が NTSC の Vfield 間隔（16.7ms）を超えるため、
+\texttt{imageCopy()} と \texttt{extractBrightness()} がそれぞれ Vfield トグルを読み直すと
+\textbf{異なるフィールド値を使ってしまい画像が乱れる}。
+ステップ0で1回だけ値を確保し、4ステップ全体で同じ値を使うことでこれを防いでいる。
+また、フレーム処理中（ステップ0--3）は Vfield 変化を無視する。
+処理中にリセットを掛けるとステップ1以降へ進めず、輝度バッファが永久に更新されない。
+\end{notebox}
+
+\apisection{関数ドキュメント}
+
+\begin{funcblock}{init()}
+\texttt{bool init() override}
+
+\vspace{1.5mm}
+\texttt{DisplayBase} API で VDC5 / DVDEC を初期化し（NTSC 160$\times$120 YCbCr422 入力）、
+メモリ書き込み設定を行ってビデオキャプチャを開始する。
+初期化中の Vsync / Vfield 待ちは割り込みベースで行うため、
+\textbf{事前に GIC が有効化されている必要がある} (\hyperref[sec:bootseq]{§\ref*{sec:bootseq}})。
+\end{funcblock}
+
+\begin{funcblock}{updateInput(sys)}
+\texttt{void updateInput(SystemData\& sys) override}
+
+\vspace{1.5mm}
+1ms ごとに呼ばれ、上表のステップを1つ進める。
+毎周期の末尾で \texttt{sys.cam.*} を最新状態に更新する。
+メインループが \texttt{sys.cam.frameReady} を \texttt{false} に戻すと内部状態もリセットされる。
+\end{funcblock}
+
+\begin{funcblock}{getPixel(x, y)}
+\texttt{unsigned char getPixel(int x, int y) const}
+
+\vspace{1.5mm}
+輝度バッファから座標 $(x, y)$ のピクセル値を返す。
+
+\vspace{1.5mm}
+\textbf{引数:} \texttt{x} (0--159), \texttt{y} (0--119)\quad
+\textbf{戻り値:} \texttt{unsigned char} --- 輝度 (0--255)
+\end{funcblock}
+
+\begin{funcblock}{getImageBuffer()}
+\texttt{const volatile unsigned char* getImageBuffer() const}
+
+\vspace{1.5mm}
+輝度バッファ先頭への読み取り専用ポインタを返す。
+\end{funcblock}
+
+\begin{funcblock}{thresholdConvert(gyou, threshold, diff)}
+\texttt{unsigned char thresholdConvert(int gyou, int threshold, int diff) const}
+
+\vspace{1.5mm}
+参考プロジェクトの \texttt{shikiichi\_henkan} 相当。
+指定行の8点（$x = 31, 43, 54, 71, 88, 105, 116, 128$）の輝度を取得し、
+閾値を自動調整して2進数8ビットに変換する。
+
+\vspace{1.5mm}
+\textbf{引数:} \texttt{gyou} --- 行番号 (0--119), \texttt{threshold} --- 閾値, \texttt{diff} --- 差分閾値
+
+\textbf{戻り値:} \texttt{unsigned char} --- 8点センサ値
+\end{funcblock}
+
+\begin{funcblock}{vfieldCallback / vsyncCallback \normalfont\small\color{gray}[static]}
+\texttt{static void vfieldCallback(DisplayBase::int\_type\_t)} /
+\texttt{static void vsyncCallback(DisplayBase::int\_type\_t)}
+
+\vspace{1.5mm}
+VDC5 の Vfield / Vsync 割り込みから呼ばれ、内部のフィールドトグルと
+カウンタを更新する。フレーム同期の起点となる。
+\end{funcblock}
+
+\apisection{内部変数（抜粋）}
+
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{変数名} & \textbf{型} & \textbf{説明} \\
+\midrule
+\texttt{frameStep\_}     & \texttt{int}  & フレーム処理ステップカウンタ (0--4) \\
+\texttt{fieldToggle\_}   & \texttt{volatile int} & トップ/ボトムフィールドのトグル \\
+\texttt{capturedField\_} & \texttt{int}  & ステップ0で確保したフィールド値 \\
+\texttt{imageBuffer\_}   & \texttt{volatile unsigned char[19200]} & 輝度データ（最終出力） \\
+\texttt{ycbcrBuffer\_}   & \texttt{unsigned char[38400]} & YCbCr422 中間バッファ \\
+\bottomrule
+\end{tabularx}
+
+\begin{cautionbox}[廃止された API]
+旧仕様の \texttt{isFrameReady()} / \texttt{clearFrameReady()} は\textbf{廃止済み}である。
+フレーム完了の検知は \texttt{sys.cam.frameReady} を直接読み書きする方式に変更された。
+また、旧仕様に記載されていた画像処理 API
+（\texttt{resize}, \texttt{binarize}, \texttt{percentileMethod},
+\texttt{discriminantAnalysis}, \texttt{extractPart},
+\texttt{standardDeviation}, \texttt{covariance}, \texttt{matchPattern}）は
+\textbf{いずれも実装されていない}。ライン検出は \texttt{LineDetector}
+(\hyperref[sec:api-linedetector]{§\ref*{sec:api-linedetector}}) が担当する。
+\end{cautionbox}
+
+\end{apibox}
+
+%% ── 7.4 LineDetector ──
+\subsection{LineDetector クラス}\label{sec:api-linedetector}
+
+\begin{apibox}{LineDetector --- ライン検出モジュール}
+
+\textbf{ファイル:} \texttt{src/drivers/LineDetector.h}, \texttt{LineDetector.cpp} \hfill
+\textbf{継承:} \texttt{IModule} \hfill
+\phasebadge{Input フェーズ（メインループ実行）}
+
+\vspace{2mm}\hrule\vspace{2mm}
+
+\apisection{概要}
+
+\texttt{Camera} が生成した輝度バッファからコースの白線を検出し、
+各行の偏差・各種ラインフラグ・8点センサ値を \texttt{sys.line.*} に格納する。
+PID 制御は行わず、ハンドル角の算出は \texttt{RunLogic} 側の
+\texttt{calcHandle()}（比例ゲイン3段切替）が担当する。
+
+\begin{cautionbox}[ISR ではなくメインループから呼ぶ]
+処理が HEIGHT $\times$ WIDTH のループで重いため、1ms 割り込み内では呼ばない。
+メインループが \texttt{sys.cam.frameReady == true} を検出したときにのみ
+\texttt{g\_lineDetector.updateInput(g\_sys)} を実行する。
+このため \texttt{s\_inputModules[]} 配列にも登録されていない。
+\end{cautionbox}
+
+\begin{notebox}[g\_camera を直接呼ぶ意図的な例外]
+本モジュールは \texttt{sys.cam.imageBufferPtr} を経由せず、
+\texttt{g\_camera.getPixel()} と \texttt{g\_camera.thresholdConvert()} を\textbf{直接呼ぶ}。
+\hyperref[sec:systemdata]{§\ref*{sec:systemdata}} の
+「他モジュールのデータを参照してよいのは Logic フェーズのみ」というルールの例外だが、
+1フレームあたり数万回の画素アクセスが発生するため、
+性能上の理由で\textbf{意図的にこの経路を採っている}。
+\end{notebox}
+
+\apisection{機能一覧}
+
+\begin{itemize}[nosep]
+  \item 全120行分の偏差算出（\texttt{deviation[]}）
+  \item クロスライン / 左ハーフライン / 右ハーフライン / センターラインの検出
+  \item 8点センサ値（\texttt{sensorBin}）の生成
+  \item 走行パターン（\texttt{sys.run.pattern}）に応じた検出パラメータの自動切替
+\end{itemize}
+
+\apisection{クラス定数}
 
 \begin{tabularx}{\textwidth}{l l X}
 \toprule
 \textbf{定数名} & \textbf{値} & \textbf{説明} \\
 \midrule
-\texttt{THRESHOLD}   & 未定 & 二値化閾値 \\
-\texttt{STEER\_MAX}  & 未定 & ステアリング角度上限 \\
-\texttt{STEER\_MIN}  & 未定 & ステアリング角度下限 \\
+\texttt{WIDTH}  & 160 & 画像幅 \\
+\texttt{HEIGHT} & 120 & 画像高さ（\texttt{deviation[]} の要素数と一致させること） \\
+\texttt{CENTER} & 80  & 画像中心の $x$ 座標。偏差 0 の基準 \\
 \bottomrule
 \end{tabularx}
 
-\apisection{内部変数}
+\apisection{出力データ (LineDetectorData / sys.line)}
 
-\begin{tabularx}{\textwidth}{l l l X}
+\begin{tabularx}{\textwidth}{l l X}
 \toprule
-\textbf{変数名} & \textbf{型} & \textbf{初期値} & \textbf{説明} \\
+\textbf{メンバ} & \textbf{型} & \textbf{説明} \\
 \midrule
-\texttt{\_kp}        & \texttt{float} & \texttt{0.0f}  & 比例ゲイン \\
-\texttt{\_ki}        & \texttt{float} & \texttt{0.0f}  & 積分ゲイン \\
-\texttt{\_kd}        & \texttt{float} & \texttt{0.0f}  & 微分ゲイン \\
-\texttt{\_integral}  & \texttt{float} & \texttt{0.0f}  & 積分値 \\
-\texttt{\_prevErr}   & \texttt{float} & \texttt{0.0f}  & 前回偏差 \\
-\texttt{\_steer}     & \texttt{float} & \texttt{0.0f}  & 算出ステアリング角度 \\
-\texttt{\_linePos}   & \texttt{float} & \texttt{0.0f}  & 検出ライン位置 \\
-\texttt{\_lineFound} & \texttt{bool}  & \texttt{false} & ライン検出成否 \\
+\texttt{deviation[120]} & \texttt{int}  & 各行の偏差。正=ラインが左寄り、負=ラインが右寄り \\
+\texttt{crossLine}   & \texttt{bool} & クロスライン検出フラグ \\
+\texttt{leftLine}    & \texttt{bool} & 左ハーフライン検出フラグ \\
+\texttt{rightLine}   & \texttt{bool} & 右ハーフライン検出フラグ \\
+\texttt{centerLine}  & \texttt{bool} & センターライン検出フラグ \\
+\texttt{sensorBin}   & \texttt{unsigned char} & 8点センサ値（ビット列） \\
+\texttt{detectRow}   & \texttt{int}  & 直近で使用された検出行（デバッグ表示用） \\
 \bottomrule
 \end{tabularx}
+
+\apisection{パターン別パラメータの切替}
+
+\texttt{sys.run.pattern} の値に応じて、3組のパラメータセット
+（\texttt{LineDetectorPatternParams}）を切り替える。
+
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{パラメータセット} & \textbf{適用条件} & \textbf{用途} \\
+\midrule
+\texttt{patternNormal} & \texttt{pattern == 11} (\texttt{RP\_TRACE\_NORMAL}) & 通常トレース時 \\
+\texttt{patternStart}  & \texttt{pattern == 1} または \texttt{2} & スタートバー接近・待機時 \\
+\texttt{patternOther}  & 上記以外 & クランク・レーンチェンジ等 \\
+\bottomrule
+\end{tabularx}
+
+\vspace{2mm}
+各セットのメンバの意味は次のとおり。負値には特別な意味がある。
+
+\begin{tabularx}{\textwidth}{l X}
+\toprule
+\textbf{メンバ} & \textbf{意味} \\
+\midrule
+\texttt{crosslineWidth}      & クロスライン判定に使う幅。$<0$ なら実行時に \texttt{detectRow\_ + 20} を算出 \\
+\texttt{detectHeight}        & 検出に使う行の厚み \\
+\texttt{crossCountThreshold} & クロスライン判定の画素数閾値。$<0$ なら \texttt{crosslineWidth} との加算値 \\
+\texttt{brightnessRatio}     & 最大輝度に対する相対閾値の比率 \\
+\texttt{brightnessAbs}       & $>0$ なら絶対閾値として使用、$=0$ なら \texttt{brightnessRatio} を使用 \\
+\texttt{centerWidth}         & センターライン判定に使う幅 \\
+\bottomrule
+\end{tabularx}
+
+\vspace{2mm}
+実値は \hyperref[sec:params-line]{§\ref*{sec:params-line}} を参照。
 
 \apisection{関数ドキュメント}
 
 \begin{funcblock}{init()}
-\texttt{void init(void)}
+\texttt{bool init() override}
 
 \vspace{1.5mm}
-PIDパラメータおよび内部状態変数を初期化する。
+偏差配列とフラグ類をゼロクリアし、検出行・検出高さを Config の既定値へ戻す。
+グローバルコンストラクタが走らない環境への保険として、
+コンストラクタと同じ初期化をここでも明示的に行っている。
 \end{funcblock}
 
-\begin{funcblock}{update()}
-\texttt{void update(void)}
+\begin{funcblock}{updateInput(sys)}
+\texttt{void updateInput(SystemData\& sys) override}
 
 \vspace{1.5mm}
-ライン検出→PID計算の一連処理を実行する。
-内部で \texttt{binarize()}→\texttt{detectLine()}→\texttt{calcPid()}→\texttt{clampSteer()} の順に呼び出す。
+以下を順に実行し、結果を \texttt{sys.line.*} へ書き込む。
+
+\begin{enumerate}[nosep, leftmargin=*]
+  \item \texttt{sys.run.pattern} を \texttt{pattern\_} へコピー（パラメータ切替に使用）
+  \item \texttt{calcDeviation()} --- 全行の偏差を算出
+  \item \texttt{calcLineFlags()} --- クロス/左右ハーフ/センターの各フラグを判定
+  \item \texttt{updateSensorBin()} --- 8点センサ値を生成
+\end{enumerate}
 \end{funcblock}
 
-\begin{funcblock}{getSteer()}
-\texttt{float getSteer(void)} --- 算出されたステアリング角度を返す。
-\end{funcblock}
-
-\begin{funcblock}{getLinePos()}
-\texttt{float getLinePos(void)} --- 検出されたライン位置を返す。
-\end{funcblock}
-
-\begin{funcblock}{isLineFound()}
-\texttt{bool isLineFound(void)} --- ラインが検出されたかどうかを返す。
-\end{funcblock}
-
-\begin{funcblock}{setKp(v)}
-\texttt{void setKp(float v)} --- 比例ゲインを設定する。($v \geq 0$)
-\end{funcblock}
-
-\begin{funcblock}{setKi(v)}
-\texttt{void setKi(float v)} --- 積分ゲインを設定する。($v \geq 0$)
-\end{funcblock}
-
-\begin{funcblock}{setKd(v)}
-\texttt{void setKd(float v)} --- 微分ゲインを設定する。($v \geq 0$)
-\end{funcblock}
-
-\begin{funcblock}{detectLine(data) \normalfont\small\color{gray}[内部]}
-\texttt{float detectLine(uint8\_t* data)}
+\begin{funcblock}{getDeviation(row)}
+\texttt{int getDeviation(int row) const}
 
 \vspace{1.5mm}
-二値化済みの画像データからライン中心位置を算出する。
-
-\vspace{1.5mm}
-\textbf{引数:} \texttt{data} (\texttt{uint8\_t*}) --- 二値化済み画像データ
-
-\textbf{戻り値:} \texttt{float} --- ライン中心位置
+指定行の偏差を返す。範囲外（$row < 0$ または $row \geq 120$）の場合は 0 を返す。
 \end{funcblock}
 
-\begin{funcblock}{calcPid(error) \normalfont\small\color{gray}[内部]}
-\texttt{float calcPid(float error)}
+\begin{funcblock}{フラグ getter}
+\texttt{bool isCrossLine() const} / \texttt{isLeftLine()} / \texttt{isRightLine()} / \texttt{isCenterLine()}
 
 \vspace{1.5mm}
-PID制御量を計算する。積分値(\texttt{\_integral}) と前回偏差(\texttt{\_prevErr}) を内部で更新する。
-
-\vspace{1.5mm}
-\textbf{引数:} \texttt{error} (\texttt{float}) --- 目標位置との偏差
-
-\textbf{戻り値:} \texttt{float} --- PID制御量
+各ラインフラグを返す。デバッグ表示用の後方互換 API であり、
+走行ロジックからは \texttt{sys.line.*} を読むこと。
 \end{funcblock}
 
-\begin{funcblock}{binarize(data) \normalfont\small\color{gray}[内部]}
-\texttt{void binarize(uint8\_t* data)}
+\begin{funcblock}{getSensorBin() / sensorInput(mask)}
+\texttt{unsigned char getSensorBin() const} /
+\texttt{unsigned char sensorInput(unsigned char mask) const}
 
 \vspace{1.5mm}
-画像データを閾値 (\texttt{THRESHOLD}) に基づいて二値化する。入力バッファを直接書き換える。
-
-\vspace{1.5mm}
-\textbf{引数:} \texttt{data} (\texttt{uint8\_t*}) --- 画像データ（in-place変換）
-\end{funcblock}
-
-\begin{funcblock}{clampSteer(val) \normalfont\small\color{gray}[内部]}
-\texttt{float clampSteer(float val)}
-
-\vspace{1.5mm}
-ステアリング角度を \texttt{STEER\_MIN}〜\texttt{STEER\_MAX} の範囲にクランプする。
-
-\vspace{1.5mm}
-\textbf{引数:} \texttt{val} (\texttt{float}) --- クランプ前のステアリング角度
-
-\textbf{戻り値:} \texttt{float} --- クランプ後のステアリング角度
+8点センサ値をそのまま、またはマスクを適用して返す。
+マスク定数は \texttt{MASK2\_2}(0x66), \texttt{MASK4\_4}(0xff) 等がヘッダに定義されている。
 \end{funcblock}
 
 \end{apibox}
@@ -876,115 +1378,110 @@ PID制御量を計算する。積分値(\texttt{\_integral}) と前回偏差(\te
 
 \textbf{ファイル:} \texttt{src/drivers/Motor.h}, \texttt{Motor.cpp} \hfill
 \textbf{継承:} \texttt{IModule} \hfill
-\phasebadge{Output Phase}
+\phasebadge{Output フェーズ}
 
 \vspace{2mm}\hrule\vspace{2mm}
 
 \apisection{概要}
 
-MTU2 チャネル3/4を使用したリセット同期PWMモードで左右モータを制御する。
-ラッチ方式を採用し、\texttt{setPower()} でデューティ比を内部保持、\texttt{update()} でレジスタへ反映する。
+MTU2 チャネル3/4 を使用したリセット同期 PWM モードで左右モータを制御する。
+出力指示は \texttt{sys.mot.leftCmd} / \texttt{rightCmd} に $-100 \sim +100$ [\%] の
+\textbf{整数}で与え、\texttt{updateOutput()} が PWM デューティと方向ピンへ反映する。
 
 \apisection{機能一覧}
 
 \begin{itemize}[nosep]
-  \item MTU2 リセット同期PWMモードによるモータ駆動
-  \item 左右独立のデューティ比制御 ($-1.0 \sim 1.0$)
+  \item MTU2 リセット同期 PWM モードによる左右独立駆動
   \item 符号による正転/逆転の方向制御
-  \item ラッチ方式による安全な出力タイミング
+  \item \texttt{maxPower} による出力上限クランプ
+  \item 反映後の値を \texttt{sys.mot.*Actual} へ書き戻し（ログ・デバッグ用）
 \end{itemize}
 
-\apisection{内部定数}
+\apisection{設定 (MotorConfig)}
 
 \begin{tabularx}{\textwidth}{l l X}
 \toprule
-\textbf{定数} & \textbf{値} & \textbf{説明} \\
+\textbf{メンバ} & \textbf{実値} & \textbf{説明} \\
 \midrule
-\texttt{PWM\_CYCLE} & 33332 & PWM周期カウント値 (1ms @ P0$\phi$/1) \\
+\texttt{pwmCycle}       & 33332 & PWM 周期カウント値 (1ms @ P0$\phi$/1) \\
+\texttt{maxPower}       & 70    & 出力上限 [\%]。\textbf{実効的な最大出力はこの値} \\
+\texttt{leftPwmPinFmt}  & 4     & P4\_4 (TIOC4A) \\
+\texttt{rightPwmPinFmt} & 5     & P4\_5 (TIOC4B) \\
+\texttt{leftDirPinFmt}  & 6     & P4\_6 (GPIO) \\
+\texttt{rightDirPinFmt} & 7     & P4\_7 (GPIO) \\
 \bottomrule
 \end{tabularx}
 
-\apisection{内部変数}
+\begin{notebox}[MAX\_POWER と maxPower は別物]
+ヘッダの \texttt{Motor::MAX\_POWER = 100} は後方互換のために残る \texttt{static const} であり、
+実行時のクランプに使われるのは \texttt{MOTOR\_CONFIG.maxPower = 70} のほうである。
+また \texttt{RunLogic::calcMotorVal()} は通常走行時のモータ出力を
+\texttt{MOTOR\_CONFIG.maxPower} そのものに設定するため、
+\textbf{この1項目を変えると通常走行速度が直接変わる}。
+\end{notebox}
+
+\apisection{入出力データ (MotorData / sys.mot)}
 
 \begin{tabularx}{\textwidth}{l l l X}
 \toprule
-\textbf{変数名} & \textbf{型} & \textbf{初期値} & \textbf{説明} \\
+\textbf{メンバ} & \textbf{型} & \textbf{方向} & \textbf{説明} \\
 \midrule
-\texttt{\_pwmLeft}  & \texttt{float} & \texttt{0.0f} & 左モータデューティ比 ($-1.0 \sim 1.0$) \\
-\texttt{\_pwmRight} & \texttt{float} & \texttt{0.0f} & 右モータデューティ比 ($-1.0 \sim 1.0$) \\
+\texttt{leftCmd}     & \texttt{int} & Logic $\rightarrow$ Motor & 左モータ指示値 $[-100, +100]$ \\
+\texttt{rightCmd}    & \texttt{int} & Logic $\rightarrow$ Motor & 右モータ指示値 $[-100, +100]$ \\
+\texttt{leftActual}  & \texttt{int} & Motor $\rightarrow$ 外部  & クランプ後に実際に反映した値 \\
+\texttt{rightActual} & \texttt{int} & Motor $\rightarrow$ 外部  & 同上 \\
 \bottomrule
 \end{tabularx}
 
 \apisection{関数ドキュメント}
 
 \begin{funcblock}{init()}
-\texttt{void init(void)}
+\texttt{bool init() override}
 
 \vspace{1.5mm}
-GPIO方向ピンおよびMTU2チャネル3/4のレジスタを初期化する。
-リセット同期PWMモードを設定し、カウント動作を開始する。
+P4\_4/P4\_5 をペリフェラル（PWM 出力）に、P4\_6/P4\_7 を GPIO 出力（方向制御）に設定し、
+MTU2 のスタンバイを解除してチャネル3/4 をリセット同期 PWM モードで起動する。
+周期レジスタ \texttt{MTU2TGRA\_3} / \texttt{MTU2TGRC\_3} に
+\texttt{\_config.pwmCycle} を設定し、デューティは 0 で開始する。
 \end{funcblock}
 
-\begin{funcblock}{update()}
-\texttt{void update(void)}
+\begin{funcblock}{updateOutput(sys)}
+\texttt{void updateOutput(SystemData\& sys) override}
 
 \vspace{1.5mm}
-内部変数のデューティ比をハードウェアへ反映する。
-内部で \texttt{setDirection()}→\texttt{calcDuty()}→\texttt{applyPwm()} の順に呼び出す。
+\texttt{sys.mot.leftCmd} / \texttt{rightCmd} を内部の \texttt{set()} に渡して PWM へ反映し、
+クランプ後の値を \texttt{sys.mot.leftActual} / \texttt{rightActual} に書き戻す。
 \end{funcblock}
 
-\begin{funcblock}{setPower(l, r)}
-\texttt{void setPower(float l, float r)}
+\begin{funcblock}{getLeft() / getRight()}
+\texttt{int getLeft() const} / \texttt{int getRight() const}
 
 \vspace{1.5mm}
-左右モータのデューティ比を内部変数に保存する（ラッチ方式）。
-この時点ではハードウェアへの反映は行わない。
-
-\vspace{1.5mm}
-\begin{itemize}[nosep, leftmargin=*]
-  \item \texttt{l} (\texttt{float}) --- 左モータデューティ比 ($-1.0 \sim 1.0$、負値で逆転)
-  \item \texttt{r} (\texttt{float}) --- 右モータデューティ比 ($-1.0 \sim 1.0$、負値で逆転)
-\end{itemize}
+内部に保持している現在の出力値を返す（デバッグ用）。
 \end{funcblock}
 
-\begin{funcblock}{calcDuty(pwm) \normalfont\small\color{gray}[内部]}
-\texttt{uint16\_t calcDuty(float pwm)}
+\begin{funcblock}{set(left, right) \normalfont\small\color{gray}[private]}
+\texttt{void set(int left, int right)}
 
 \vspace{1.5mm}
-デューティ比（浮動小数点数）をPWMカウント値に変換する。
-$\mathit{duty} = \lfloor |\mathit{pwm}| \times \mathtt{PWM\_CYCLE} \rfloor$
-
-\vspace{1.5mm}
-\textbf{引数:} \texttt{pwm} (\texttt{float}) --- デューティ比 ($-1.0 \sim 1.0$)
-
-\textbf{戻り値:} \texttt{uint16\_t} --- PWMカウント値
+両輪の値を \texttt{clamp()} で $[-\mathtt{maxPower}, +\mathtt{maxPower}]$ に丸めてから
+\texttt{applyLeft()} / \texttt{applyRight()} を呼ぶ。
 \end{funcblock}
 
-\begin{funcblock}{setDirection(l, r) \normalfont\small\color{gray}[内部]}
-\texttt{void setDirection(float l, float r)}
+\begin{funcblock}{applyLeft(val) / applyRight(val) \normalfont\small\color{gray}[private]}
+\texttt{void applyLeft(int val)} / \texttt{void applyRight(int val)}
 
 \vspace{1.5mm}
-デューティ比の符号に基づき、方向ピン (GPIO P4\_6, P4\_7) を設定する。
-正値で正転 (Low)、負値で逆転 (High)。
+方向ピンを設定し、デューティ値を MTU2 レジスタへ書き込む。
+書き込み先は\textbf{バッファレジスタである \texttt{MTU2TGRC\_4}（左）と
+\texttt{MTU2TGRD\_4}（右）のみ}で、\texttt{TGRA\_4} / \texttt{TGRB\_4} は
+\texttt{init()} 時の初期化にしか使わない。
 
 \vspace{1.5mm}
-\begin{itemize}[nosep, leftmargin=*]
-  \item \texttt{l} (\texttt{float}) --- 左モータデューティ比
-  \item \texttt{r} (\texttt{float}) --- 右モータデューティ比
-\end{itemize}
-\end{funcblock}
-
-\begin{funcblock}{applyPwm(l, r) \normalfont\small\color{gray}[内部]}
-\texttt{void applyPwm(uint16\_t l, uint16\_t r)}
-
-\vspace{1.5mm}
-MTU2レジスタ (TGRA\_4/TGRC\_4, TGRB\_4/TGRD\_4) へPWM値を書き込む。
-
-\vspace{1.5mm}
-\begin{itemize}[nosep, leftmargin=*]
-  \item \texttt{l} (\texttt{uint16\_t}) --- 左モータPWMカウント値
-  \item \texttt{r} (\texttt{uint16\_t}) --- 右モータPWMカウント値
-\end{itemize}
+デューティ値の計算式:
+\[
+  \mathit{duty} = \frac{(\mathtt{pwmCycle} - 1) \times |\mathit{val}|}{100}
+\]
 \end{funcblock}
 
 \apisection{ハードウェアマッピング}
@@ -993,12 +1490,29 @@ MTU2レジスタ (TGRA\_4/TGRC\_4, TGRB\_4/TGRD\_4) へPWM値を書き込む。
 \toprule
 \textbf{信号} & \textbf{ピン} & \textbf{レジスタ} & \textbf{説明} \\
 \midrule
-左モータ PWM  & P4\_4 (TIOC4A) & TGRA\_4 / TGRC\_4 & デューティ比 \\
-右モータ PWM  & P4\_5 (TIOC4B) & TGRB\_4 / TGRD\_4 & デューティ比 \\
-左モータ 方向 & P4\_6 (GPIO)   & GPIO.P4 bit6      & Low:正転 / High:逆転 \\
-右モータ 方向 & P4\_7 (GPIO)   & GPIO.P4 bit7      & Low:正転 / High:逆転 \\
+左モータ PWM  & P4\_4 (TIOC4A) & MTU2TGRC\_4 & デューティ（バッファレジスタ） \\
+右モータ PWM  & P4\_5 (TIOC4B) & MTU2TGRD\_4 & デューティ（バッファレジスタ） \\
+左モータ 方向 & P4\_6 (GPIO)   & GPIO.P4 bit6 & \textbf{High:前進 / Low:後退}（極性反転あり） \\
+右モータ 方向 & P4\_7 (GPIO)   & GPIO.P4 bit7 & Low:前進 / High:後退 \\
 \bottomrule
 \end{tabularx}
+
+\begin{cautionbox}[要実機確認: 左モータの方向ピン極性が左右で非対称]
+実装 (\texttt{Motor::applyLeft()}) では左モータのみ方向ピンの極性が反転しており、
+\textbf{前進時に P4\_6 を High} にする。右モータ (\texttt{applyRight()}) は
+前進時に P4\_7 を Low にする通常の極性である。
+
+ソース上のコメントは「左モーターは配線/ギアの都合で正転=後退となっているため、
+ソフト側で方向ピンの極性を反転して補正する」と説明しており、
+\textbf{機体側の配線に合わせた意図的な補正}と読める。
+ただし本仕様書の旧版は左右とも「Low:正転」と記述しており、記述が食い違っている。
+
+本表は\textbf{現在の実装の実態}を記載したものである。
+実機で左右モータの回転方向を実測し、
+\textbf{(a)} 配線都合の意図的な補正なのか、
+\textbf{(b)} 実装側のバグなのかを確定させること。
+実測結果によっては \texttt{Motor.cpp} の修正が必要になる。
+\end{cautionbox}
 
 \end{apibox}
 
@@ -1009,92 +1523,88 @@ MTU2レジスタ (TGRA\_4/TGRC\_4, TGRB\_4/TGRD\_4) へPWM値を書き込む。
 
 \textbf{ファイル:} \texttt{src/drivers/Servo.h}, \texttt{Servo.cpp} \hfill
 \textbf{継承:} \texttt{IModule} \hfill
-\phasebadge{Output Phase}
+\phasebadge{Output フェーズ}
 
 \vspace{2mm}\hrule\vspace{2mm}
 
 \apisection{概要}
 
-MTU2 チャネル0をPWMモード1で駆動し、ステアリングサーボの角度を制御する。
-ラッチ方式を採用し、\texttt{setAngle()} で角度を内部保持、\texttt{update()} でレジスタへ反映する。
+MTU2 チャネル0 を PWM モード1（分周 P0$\phi$/16、周期約 16ms）で駆動し、
+ステアリングサーボの角度を制御する。
+出力指示は \texttt{sys.srv.angleCmd} に\textbf{整数の角度 [度]}で与える。
 
 \apisection{機能一覧}
 
 \begin{itemize}[nosep]
-  \item MTU2 PWMモード1によるサーボ駆動
-  \item 角度→パルス幅の自動変換
-  \item ラッチ方式による安全な出力タイミング
+  \item MTU2 PWM モード1によるサーボ駆動
+  \item 角度 $\rightarrow$ パルス幅カウントの変換
+  \item \texttt{maxAngle} による舵角クランプ
+  \item 反映後の値を \texttt{sys.srv.angleActual} へ書き戻し
 \end{itemize}
 
-\apisection{内部定数}
+\apisection{設定 (ServoConfig)}
 
 \begin{tabularx}{\textwidth}{l l X}
 \toprule
-\textbf{定数名} & \textbf{値} & \textbf{説明} \\
+\textbf{メンバ} & \textbf{実値} & \textbf{説明} \\
 \midrule
-\texttt{SERVO\_CENTER} & 3090 & サーボ中心位置のパルス幅カウント値 \\
-\texttt{HANDLE\_STEP}  & 23   & 1度あたりのカウント値 \\
+\texttt{pwmCycle}   & 33332 & PWM 周期カウント値 \\
+\texttt{center}     & 3090  & 中心位置のパルス幅カウント値（約 1.5ms） \\
+\texttt{handleStep} & 23    & 1度あたりのカウント値 \\
+\texttt{maxAngle}   & 40    & 舵角の絶対値上限 [度] \\
+\texttt{pwmPinFmt}  & 0     & P4\_0 (TIOC0A) \\
 \bottomrule
 \end{tabularx}
 
-\apisection{内部変数}
+\apisection{入出力データ (ServoData / sys.srv)}
 
 \begin{tabularx}{\textwidth}{l l l X}
 \toprule
-\textbf{変数名} & \textbf{型} & \textbf{初期値} & \textbf{説明} \\
+\textbf{メンバ} & \textbf{型} & \textbf{方向} & \textbf{説明} \\
 \midrule
-\texttt{\_angle} & \texttt{float} & \texttt{0.0f} & サーボ角度 (度) \\
+\texttt{angleCmd}    & \texttt{int} & Logic $\rightarrow$ Servo & 指示角 $[-40, +40]$ [度] \\
+\texttt{angleActual} & \texttt{int} & Servo $\rightarrow$ 外部  & クランプ後に実際に反映した角度 \\
 \bottomrule
 \end{tabularx}
 
 \apisection{関数ドキュメント}
 
 \begin{funcblock}{init()}
-\texttt{void init(void)}
+\texttt{bool init() override}
 
 \vspace{1.5mm}
-GPIO および MTU2チャネル0のレジスタを初期化する。PWMモード1を設定し、カウント動作を開始する。
+P4\_0 を第2代替機能（TIOC0A）に設定し、MTU2 のスタンバイを解除して
+チャネル0 を PWM モード1で起動する。
+分周は P0$\phi$/16（\texttt{MTU2TCR\_0 = 0x02}）、バッファ転送は TCNT クリア時
+（\texttt{MTU2TBTM\_0 = 0x03}）に設定する。
+起動時のパルス幅は \texttt{\_config.center}（中央）である。
 \end{funcblock}
 
-\begin{funcblock}{update()}
-\texttt{void update(void)}
+\begin{funcblock}{updateOutput(sys)}
+\texttt{void updateOutput(SystemData\& sys) override}
 
 \vspace{1.5mm}
-内部変数の角度値をハードウェアへ反映する。
-内部で \texttt{calcPulse()}→\texttt{applyServo()} の順に呼び出す。
+\texttt{sys.srv.angleCmd} を内部の \texttt{setAngle()} に渡して PWM へ反映し、
+クランプ後の角度を \texttt{sys.srv.angleActual} に書き戻す。
 \end{funcblock}
 
-\begin{funcblock}{setAngle(angle)}
-\texttt{void setAngle(float angle)}
+\begin{funcblock}{getAngle()}
+\texttt{int getAngle() const}
 
 \vspace{1.5mm}
-サーボ角度を内部変数に保存する（ラッチ方式）。0が中心、正負で左右に振れる。
-
-\vspace{1.5mm}
-\textbf{引数:} \texttt{angle} (\texttt{float}) --- サーボ角度 (度、機体依存)
+内部に保持している現在の角度を返す（デバッグ用）。
 \end{funcblock}
 
-\begin{funcblock}{calcPulse(angle) \normalfont\small\color{gray}[内部]}
-\texttt{uint16\_t calcPulse(float angle)}
+\begin{funcblock}{setAngle(angle) \normalfont\small\color{gray}[private]}
+\texttt{void setAngle(int angle)}
 
 \vspace{1.5mm}
-角度をパルス幅カウント値に変換する。
-$\mathit{val} = \lfloor \mathit{angle} \times 23 \rfloor + \mathtt{SERVO\_CENTER}$
+角度をクランプしたうえで、バッファレジスタ \texttt{MTU2TGRD\_0} へ書き込む。
+変換式は次のとおりで、\textbf{正の角度でカウント値が減少する}。
 
-\vspace{1.5mm}
-\textbf{引数:} \texttt{angle} (\texttt{float}) --- サーボ角度 (度)
-
-\textbf{戻り値:} \texttt{uint16\_t} --- パルス幅カウント値
-\end{funcblock}
-
-\begin{funcblock}{applyServo(val) \normalfont\small\color{gray}[内部]}
-\texttt{void applyServo(uint16\_t val)}
-
-\vspace{1.5mm}
-MTU2レジスタ (TGRB\_0 / TGRD\_0) へパルス幅を書き込む。
-
-\vspace{1.5mm}
-\textbf{引数:} \texttt{val} (\texttt{uint16\_t}) --- パルス幅カウント値
+\[
+  \mathtt{MTU2TGRD\_0} = \mathtt{center} - \mathit{angle} \times \mathtt{handleStep}
+\]
 \end{funcblock}
 
 \apisection{ハードウェアマッピング}
@@ -1103,9 +1613,27 @@ MTU2レジスタ (TGRB\_0 / TGRD\_0) へパルス幅を書き込む。
 \toprule
 \textbf{信号} & \textbf{ピン} & \textbf{レジスタ} & \textbf{説明} \\
 \midrule
-サーボ PWM & P4\_0 (TIOC0A) & TGRB\_0 / TGRD\_0 & パルス幅 (立ち下がりエッジ) \\
+サーボ PWM & P4\_0 (TIOC0A) & MTU2TGRD\_0 & パルス幅（立ち下がりエッジ、バッファレジスタ） \\
 \bottomrule
 \end{tabularx}
+
+\begin{cautionbox}[要実機確認: 角度の符号と旋回方向の対応]
+実装では正の角度がカウント値の\textbf{減少}に対応する
+（\texttt{center - angle * handleStep}）。
+\texttt{Servo.h} と \texttt{Servo.cpp} のコメントは
+「\texttt{angle}: $-\mathtt{maxAngle}$(右) $\sim$ 0(中央) $\sim +\mathtt{maxAngle}$(左)」
+「参考プロジェクト \texttt{handle()} に準拠: 正=左」と記述しており、
+\textbf{正の角度で左旋回}という前提である。
+
+一方、本仕様書の旧版は $\mathit{val} = \mathit{angle} \times 23 + \mathtt{CENTER}$
+（正の角度でカウント値が増加）と記述しており、\textbf{符号が逆}であった。
+
+本節は\textbf{現在の実装の実態}を記載したものである。
+実機でサーボに正の角度を与え、車体が実際にどちらへ切れるかを確認し、
+\texttt{RunLogic} のクランク/レーンチェンジのハンドル指示（正=左を前提としている）と
+整合しているかを検証すること。
+食い違っていた場合は左右のクランクが逆方向に曲がるため、走行が成立しない。
+\end{cautionbox}
 
 \end{apibox}
 
@@ -1116,107 +1644,153 @@ MTU2レジスタ (TGRB\_0 / TGRD\_0) へパルス幅を書き込む。
 
 \textbf{ファイル:} \texttt{src/drivers/Onboard.h}, \texttt{Onboard.cpp} \hfill
 \textbf{継承:} \texttt{IModule} \hfill
-\phasebadge{Output Phase}
+\phasebadge{Input / Output 両フェーズ}
 
 \vspace{2mm}\hrule\vspace{2mm}
 
 \apisection{概要}
 
-GR-PEACH ボード上のRGB LED (3色) + ユーザーLED (1個) およびユーザースイッチ (1個) を制御する。
-LED はラッチ方式、スイッチは即時読み取り。
-
-\apisection{機能一覧}
+GR-PEACH ボード上のフルカラー LED（RGB 3色）+ ユーザー LED（1個）と
+ユーザースイッチ（1個）を制御する。
+本プロジェクトで唯一、\textbf{Input と Output の両フェーズに登録される}モジュールである。
 
 \begin{itemize}[nosep]
-  \item フルカラーLED (RGB 3色) + ユーザーLED 1個の制御
-  \item ラッチ方式によるLED出力
-  \item ユーザースイッチの即時読み取り
+  \item Input フェーズ: \texttt{updateInput()} が P6\_0 を読み \texttt{sys.ob.sw} へ格納
+  \item Output フェーズ: \texttt{updateOutput()} が \texttt{sys.ob.*LedCmd} を内部ラッチへ転記し、GPIO へ一括反映
 \end{itemize}
 
-\apisection{内部変数}
+\apisection{設定 (OnboardConfig)}
+
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{メンバ} & \textbf{実値} & \textbf{説明} \\
+\midrule
+\texttt{swPinFmt}       & 0  & P6\_0 (ユーザースイッチ) \\
+\texttt{ledUserPinFmt}  & 12 & P6\_12 (ユーザー LED) \\
+\texttt{ledRedPinFmt}   & 13 & P6\_13 (赤) \\
+\texttt{ledGreenPinFmt} & 14 & P6\_14 (緑) \\
+\texttt{ledBluePinFmt}  & 15 & P6\_15 (青) \\
+\bottomrule
+\end{tabularx}
+
+\apisection{入出力データ (OnboardData / sys.ob)}
 
 \begin{tabularx}{\textwidth}{l l l X}
 \toprule
-\textbf{変数名} & \textbf{型} & \textbf{初期値} & \textbf{説明} \\
+\textbf{メンバ} & \textbf{型} & \textbf{方向} & \textbf{説明} \\
 \midrule
-\texttt{\_userLed}   & \texttt{int} & \texttt{0} & ユーザーLED状態 (0:消灯, 1:点灯) \\
-\texttt{\_colorR}    & \texttt{int} & \texttt{0} & フルカラーLED 赤 (0:消灯, 1:点灯) \\
-\texttt{\_colorG}    & \texttt{int} & \texttt{0} & フルカラーLED 緑 (0:消灯, 1:点灯) \\
-\texttt{\_colorB}    & \texttt{int} & \texttt{0} & フルカラーLED 青 (0:消灯, 1:点灯) \\
+\texttt{sw}           & \texttt{int} & Onboard $\rightarrow$ Logic & 1=押下, 0=解放 \\
+\texttt{ledRedCmd}    & \texttt{int} & Logic $\rightarrow$ Onboard & 0=消灯, 1=点灯 \\
+\texttt{ledGreenCmd}  & \texttt{int} & Logic $\rightarrow$ Onboard & 同上 \\
+\texttt{ledBlueCmd}   & \texttt{int} & Logic $\rightarrow$ Onboard & 同上 \\
+\texttt{userLedCmd}   & \texttt{int} & Logic $\rightarrow$ Onboard & 同上 \\
+\bottomrule
+\end{tabularx}
+
+\apisection{内部変数}
+
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{変数名} & \textbf{型} & \textbf{説明} \\
+\midrule
+\texttt{ledState\_[4]} & \texttt{int} & LED ラッチバッファ。添字は 0=赤, 1=緑, 2=青, 3=ユーザー \\
 \bottomrule
 \end{tabularx}
 
 \apisection{関数ドキュメント}
 
 \begin{funcblock}{init()}
-\texttt{void init(void)}
+\texttt{bool init() override}
 
 \vspace{1.5mm}
-GPIO初期化を行う。全LEDを消灯し、スイッチを入力モードに設定する。
-\texttt{PIBC6} の入力バッファ有効化を含む。
+ポート6 の GPIO を初期化する。LED 4本をポートモード（\texttt{PMC6} クリア）・出力
+（\texttt{PM6} クリア）・ソフトウェア I/O 制御（\texttt{PIPC6} クリア）に設定し、
+全 LED を消灯（High 出力）する。
+スイッチ P6\_0 は \texttt{PIPC6} / \texttt{PMC6} をクリアして入力（\texttt{PM6} セット）とし、
+\textbf{\texttt{PIBC6} の入力バッファを有効化}する。
 \end{funcblock}
 
-\begin{funcblock}{update()}
-\texttt{void update(void)}
+\begin{funcblock}{updateInput(sys)}
+\texttt{void updateInput(SystemData\& sys) override}
 
 \vspace{1.5mm}
-内部変数のLED状態をGPIOへ反映する。Low Active（RGB LED）とHigh Active（ユーザーLED）を考慮して出力する。
+\texttt{sw()} の結果を \texttt{sys.ob.sw} へ格納する。
 \end{funcblock}
 
-\begin{funcblock}{setUserLed(val)}
-\texttt{void setUserLed(int val)}
+\begin{funcblock}{updateOutput(sys)}
+\texttt{void updateOutput(SystemData\& sys) override}
 
 \vspace{1.5mm}
-ユーザーLEDの状態を内部変数に保存する（ラッチ方式）。ハードウェアにはまだ反映しない。
-
-\vspace{1.5mm}
-\textbf{引数:} \texttt{val} (\texttt{int}) --- 0:消灯, 1:点灯
-\end{funcblock}
-
-\begin{funcblock}{setColorLed(r, g, b)}
-\texttt{void setColorLed(int r, int g, int b)}
-
-\vspace{1.5mm}
-フルカラーLED（RGB）の状態を内部変数に保存する（ラッチ方式）。ハードウェアにはまだ反映しない。
-
-\vspace{1.5mm}
-\begin{itemize}[nosep, leftmargin=*]
-  \item \texttt{r} (\texttt{int}) --- 赤 (0:消灯, 1:点灯)
-  \item \texttt{g} (\texttt{int}) --- 緑 (0:消灯, 1:点灯)
-  \item \texttt{b} (\texttt{int}) --- 青 (0:消灯, 1:点灯)
-\end{itemize}
+\texttt{sys.ob.*LedCmd} を内部ラッチ \texttt{ledState\_[]} へ転記した後、
+4本の LED をまとめて GPIO へ反映する。
+\texttt{ledState\_[i]} が真なら \texttt{GPIO.P6} の該当ビットをクリア（Low 出力＝点灯）、
+偽ならセット（High 出力＝消灯）する。
 \end{funcblock}
 
 \begin{funcblock}{sw()}
-\texttt{int sw(void)}
+\texttt{int sw()}
 
 \vspace{1.5mm}
-ユーザースイッチの状態を即時読み取りで返す。ラッチ方式\textbf{ではなく}、呼び出し時にGPIOを直接読む。
+ユーザースイッチの状態を即時読み取りで返す。ラッチ方式\textbf{ではなく}、
+呼び出し時に \texttt{GPIO.PPR6} を直接読む。
+スイッチは active-low のため、読み値が 0 のときに 1（押下）を返す。
 
 \vspace{1.5mm}
 \textbf{戻り値:} \texttt{int} --- 1:押下, 0:解放
+
+\vspace{1.5mm}
+\texttt{main()} 冒頭の起動モード判定（\hyperref[sec:bootseq]{§\ref*{sec:bootseq}}）で
+\texttt{sys.ob.sw} がまだ更新されていない時点から呼べるよう、public のまま残している。
+通常の走行ロジックからは \texttt{sys.ob.sw} を読むこと。
+\end{funcblock}
+
+\begin{funcblock}{setUserLed(val) / setColorLed(r, g, b) \normalfont\small\color{gray}[private]}
+\texttt{void setUserLed(int val)} / \texttt{void setColorLed(int r, int g, int b)}
+
+\vspace{1.5mm}
+\texttt{updateOutput()} が内部ラッチを更新するために使う。
+外部からは呼べない（旧仕様では public だった）。
+LED を操作したい場合は \texttt{sys.ob.*LedCmd} に代入すること。
 \end{funcblock}
 
 \apisection{ハードウェアマッピング}
 
-\begin{tabularx}{\textwidth}{l l l l X}
+\begin{tabularx}{\textwidth}{l l l X}
 \toprule
 \textbf{デバイス} & \textbf{ピン} & \textbf{論理} & \textbf{説明} \\
 \midrule
-LED Red    & P6\_13 & Low Active  & 赤色 LED \\
-LED Green  & P6\_14 & Low Active  & 緑色 LED \\
-LED Blue   & P6\_15 & Low Active  & 青色 LED \\
-LED User   & P6\_12 & High Active & ユーザー LED \\
-SW User    & P6\_0   & Low = 押下   & プルアップ、GND 接続 \\
+LED Red    & P6\_13 & Low Active & 赤色 LED \\
+LED Green  & P6\_14 & Low Active & 緑色 LED \\
+LED Blue   & P6\_15 & Low Active & 青色 LED \\
+LED User   & P6\_12 & Low Active & ユーザー LED（\textbf{要実機確認}、下記参照） \\
+SW User    & P6\_0  & Low = 押下 & プルアップ、GND 接続 \\
 \bottomrule
 \end{tabularx}
 
-\begin{cautionbox}[GPIO注意事項]
+\begin{cautionbox}[GPIO 注意事項]
 \begin{itemize}[nosep]
-  \item RGB LED は \textbf{Low Active}（GPIO Low で点灯）
   \item スイッチ読み取りには \texttt{PIBC6} の入力バッファ有効化が必須
-  \item \texttt{sw()} はラッチ方式\textbf{ではなく}、呼び出し時に直接GPIOを読む
+  \item スイッチ・LED とも \texttt{PIPC6} をクリアしてソフトウェア I/O 制御にすること
+        （ペリフェラル I/O 制御のままだと GPIO 操作が効かない）
+  \item \texttt{sw()} はラッチ方式\textbf{ではなく}、呼び出し時に直接 GPIO を読む
 \end{itemize}
+\end{cautionbox}
+
+\begin{cautionbox}[要実機確認: ユーザー LED の論理]
+実装 (\texttt{Onboard::updateOutput()}) は RGB 3色とユーザー LED の
+\textbf{4本すべてを同一ロジックで扱い}、点灯時に Low を出力する。
+\texttt{init()} も4本まとめて High（消灯）で初期化する。
+つまり実装上はユーザー LED も \textbf{Low Active} である。
+
+本仕様書の旧版はユーザー LED のみ \textbf{High Active} と記述しており、
+「Low Active（RGB）と High Active（ユーザー LED）を考慮して出力する」と説明していた。
+実装にはその分岐が存在しない。
+
+本表は\textbf{現在の実装の実態}を記載したものである。
+実機で \texttt{sys.ob.userLedCmd = 1} としたときにユーザー LED が
+実際に点灯するかを確認し、
+\textbf{(a)} 旧仕様の記述が誤りだったのか、
+\textbf{(b)} 実装に分岐が必要なのかを確定させること。
 \end{cautionbox}
 
 \end{apibox}
@@ -1228,96 +1802,210 @@ SW User    & P6\_0   & Low = 押下   & プルアップ、GND 接続 \\
 
 \textbf{ファイル:} \texttt{src/drivers/Serial.h}, \texttt{Serial.cpp} \hfill
 \textbf{継承:} \texttt{IModule} \hfill
-\phasebadge{Logic/Output Phase}
+\phasebadge{即時出力（フェーズに依存しない）}
 
 \vspace{2mm}\hrule\vspace{2mm}
 
 \apisection{概要}
 
-SCIF (Serial Communication Interface) を使用してデバッグ用シリアル通信を行う。
-他のドライバとは異なり、ラッチ方式（\texttt{update()}による遅延送出）は採用せず、\texttt{printf} 呼び出し時に\textbf{即時出力（ポーリング送信）}を行う。これにより、途中クラッシュ時にもデバッグ出力を確実に得られるようにする。
+SCIF2 を使用してデバッグ用シリアル通信を行う。
+他のドライバとは異なりラッチ方式を採用せず、
+\texttt{printf()} / \texttt{print()} 呼び出し時に\textbf{即時出力（ポーリング送信）}する。
+これにより、途中でクラッシュした場合でもそこまでの出力が確実に端末へ届く。
 
 \apisection{機能一覧}
 
 \begin{itemize}[nosep]
-  \item SCIF2 によるシリアル通信 (GR-PEACH USBシリアル通信ポート想定)
-  \item 書式付き出力 (\texttt{printf})
-  \item \textbf{即時出力}（バッファリングなし、ポーリング待機）
+  \item SCIF2 によるシリアル通信（GR-PEACH の DAPLink USB シリアル経由）
+  \item 書式付き出力 \texttt{printf()} と固定文字列出力 \texttt{print()}
+  \item 即時出力（バッファリングなし、FIFO 空き待ちのポーリング）
 \end{itemize}
 
-\apisection{内部定数}
+\apisection{設定 (SerialConfig)}
 
 \begin{tabularx}{\textwidth}{l l X}
 \toprule
-\textbf{定数名} & \textbf{値} & \textbf{説明} \\
+\textbf{メンバ} & \textbf{実値} & \textbf{説明} \\
 \midrule
-\texttt{BAUD\_RATE}   & 115200 & ボーレート \\
+\texttt{baud}       & \textbf{230400} & ボーレート [bps] \\
+\texttt{txPinFmt}   & 3   & P6\_3 (TxD2) \\
+\texttt{rxPinFmt}   & 2   & P6\_2 (RxD2) \\
+\texttt{bufferSize} & 512 & \texttt{vsnprintf} 用の内部バッファサイズ \\
+\bottomrule
+\end{tabularx}
+
+\begin{cautionbox}[ターミナルの設定は 230400bps]
+旧仕様の 115200bps は誤りである。
+端末（TeraTerm 等）を 115200bps に設定すると文字化けする。
+ボーレートの導出については \hyperref[sec:scif]{§\ref*{sec:scif}} を参照。
+\end{cautionbox}
+
+\apisection{出力データ (SerialData / sys.ser)}
+
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{メンバ} & \textbf{型} & \textbf{説明} \\
+\midrule
+\texttt{txCount} & \texttt{uint32\_t} & 送信文字の累計（デバッグ用） \\
 \bottomrule
 \end{tabularx}
 
 \apisection{内部変数}
 
-特になし（バッファ状態を持たない）。
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{変数名} & \textbf{型} & \textbf{説明} \\
+\midrule
+\texttt{buffer\_[512]} & \texttt{char} & \texttt{vsnprintf} の出力先。
+  ANSI 色付きの 160 文字行を扱うため 512 バイトに拡大している \\
+\bottomrule
+\end{tabularx}
 
 \apisection{関数ドキュメント}
 
 \begin{funcblock}{init()}
-\texttt{void init(void)}
+\texttt{bool init() override}
 
 \vspace{1.5mm}
-SCIFの初期化（ピン設定、モジュールストップ解除、ボーレート設定等）を行う。
+\texttt{STBCR4} の bit5 をクリアして SCIF2 のモジュールストップを解除し、
+P6\_3 / P6\_2 を Alt7（TxD2 / RxD2）に設定してから SCIF2 のレジスタを初期化する。
+FIFO リセット $\rightarrow$ ボーレート設定 $\rightarrow$ 1ビット時間以上の待機 $\rightarrow$
+FIFO リセット解除 $\rightarrow$ 送受信有効化（\texttt{SCSCR = 0x0030}）の順で行う。
 \end{funcblock}
 
-\begin{funcblock}{update()}
-\texttt{void update(void)}
+\begin{funcblock}{updateOutput(sys)}
+\texttt{void updateOutput(SystemData\& sys) override}
 
 \vspace{1.5mm}
-\texttt{IModule} インターフェースを満たすためのダミー関数。何もしない。
+\texttt{IModule} インターフェースを満たすためのダミー実装。何もしない。
+出力は \texttt{printf()} / \texttt{print()} の呼び出し時に即座に行われる。
 \end{funcblock}
 
 \begin{funcblock}{printf(fmt, ...)}
 \texttt{void printf(const char* fmt, ...)}
 
 \vspace{1.5mm}
-書式付き文字列を即時送信する。\texttt{vsnprintf} を内部で使用し、\texttt{putChar()} を経由して文字を送信する。
+書式付き文字列を \texttt{vsnprintf} で \texttt{buffer\_} に展開し、
+\texttt{putChar()} 経由で1文字ずつ即時送信する。
 
 \vspace{1.5mm}
 \textbf{引数:} \texttt{fmt} (\texttt{const char*}) --- 書式文字列（\texttt{printf} 互換）
 \end{funcblock}
 
-\begin{funcblock}{putChar(c) \normalfont\small\color{gray}[内部]}
+\begin{funcblock}{print(str)}
+\texttt{void print(const char* str)}
+
+\vspace{1.5mm}
+書式解析を行わずに文字列をそのまま送信する。
+固定文字列や事前に組み立て済みの行バッファを出す場合はこちらのほうが速い。
+
+\vspace{1.5mm}
+\textbf{引数:} \texttt{str} (\texttt{const char*}) --- 送信文字列
+\end{funcblock}
+
+\begin{funcblock}{putChar(c) \normalfont\small\color{gray}[private]}
 \texttt{void putChar(char c)}
 
 \vspace{1.5mm}
-1文字を即時書き込む。FIFO/送信レジスタに空きができるまで待機（ポーリング）してから送信する。
+送信 FIFO に空きができるまで \texttt{SCFDR} をポーリングしてから
+\texttt{SCFTDR} へ1文字書き込み、\texttt{SCFSR} の TDFE / TEND をクリアする。
 \end{funcblock}
+
+\apisection{ハードウェアマッピング}
+
+\begin{tabularx}{\textwidth}{l l l X}
+\toprule
+\textbf{信号} & \textbf{ピン} & \textbf{機能} & \textbf{説明} \\
+\midrule
+TxD2 & P6\_3 & SCIF2 Alt7 & DAPLink USB シリアルへ物理接続 \\
+RxD2 & P6\_2 & SCIF2 Alt7 & 同上 \\
+\bottomrule
+\end{tabularx}
+
+\begin{notebox}[ピン選択の根拠]
+SCIF2 の代替ピンとしては P3\_0 / P3\_2 も存在するが、
+\textbf{GR-PEACH の DAPLink 基板には接続されていない}。
+mbed の \texttt{PinNames.h} が \texttt{USBTX = P6\_3} と定義しているとおり、
+P6\_3 / P6\_2 を使用すること。
+\end{notebox}
 
 \end{apibox}
 
 %% ── 7.9 SDCard ──
 \subsection{SDCard クラス}\label{sec:api-sdcard}
 
-\begin{apibox}{SDCard --- SDカードログドライバ}
+\begin{apibox}{SDCard --- SD カード SPI ブロックドライバ}
 
 \textbf{ファイル:} \texttt{src/drivers/SDCard.h}, \texttt{SDCard.cpp} \hfill
 \textbf{継承:} \texttt{IModule} \hfill
-\phasebadge{Output Phase}
+\phasebadge{周期処理なし}
 
 \vspace{2mm}\hrule\vspace{2mm}
 
 \apisection{概要}
 
-SPI経由でSDカードへログデータを書き込む。
-データはバッファリングし、\texttt{update()} でブロック単位で書き出す。
+RSPI2 を用いた SPI 通信で SD カードにアクセスし、
+\textbf{512 バイトのブロック単位}での読み書きを提供する。
+本クラスはファイルシステムより下位の層であり、
+\textbf{FatFs の \texttt{diskio} 層から呼び出される}。
+ログのバッファリングや CSV 整形は
+\texttt{SDLogger} (\hyperref[sec:api-sdlogger]{§\ref*{sec:api-sdlogger}}) の役割である。
+
+\begin{notebox}[レイヤ構成]
+\texttt{SDLogger}（ログバッファ・CSV 整形）
+$\rightarrow$ \texttt{FatFs}（\texttt{f\_open}/\texttt{f\_write}）
+$\rightarrow$ \texttt{diskio.cpp}（ブリッジ）
+$\rightarrow$ \texttt{SDCard}（ブロック I/O）
+$\rightarrow$ RSPI2（SPI）
+\end{notebox}
 
 \apisection{機能一覧}
 
 \begin{itemize}[nosep]
-  \item SPI 経由の SD カードアクセス
-  \item バッファリングによる効率的なブロック書込み
-  \item ログ文字列の追記
-  \item 明示的フラッシュ・クローズ操作
+  \item RSPI2 による SPI 通信と CS の手動制御
+  \item SD カードの初期化シーケンスとカードタイプ判別
+  \item 複数ブロックの読み書き（\texttt{readBlocks} / \texttt{writeBlocks}）
+  \item カード検出ピンによる挿入判定、CSD からのセクタ数取得
 \end{itemize}
+
+\apisection{設定 (SDCardConfig)}
+
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{メンバ} & \textbf{実値} & \textbf{説明} \\
+\midrule
+\texttt{csPinFmt}   & 4 & P8\_4 (CS, GPIO 手動制御) \\
+\texttt{cdPinFmt}   & 8 & P7\_8 (CD, カード検出) \\
+\texttt{mosiPinFmt} & 5 & P8\_5 \\
+\texttt{misoPinFmt} & 6 & P8\_6 \\
+\texttt{sckPinFmt}  & 3 & P8\_3 \\
+\bottomrule
+\end{tabularx}
+
+\apisection{カードタイプ (CardType)}
+
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{列挙子} & \textbf{値} & \textbf{説明} \\
+\midrule
+\texttt{CARD\_NONE}   & 0 & 未検出 / 初期化失敗 \\
+\texttt{CARD\_V1}     & 1 & SD v1.x（標準容量） \\
+\texttt{CARD\_V2\_SC} & 2 & SD v2.x 標準容量 \\
+\texttt{CARD\_V2\_HC} & 3 & SDHC / SDXC（高容量） \\
+\bottomrule
+\end{tabularx}
+
+\apisection{内部変数}
+
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{変数名} & \textbf{型} & \textbf{説明} \\
+\midrule
+\texttt{initialized\_} & \texttt{bool}      & 初期化成功フラグ \\
+\texttt{cardType\_}    & \texttt{CardType}  & 判別したカードタイプ \\
+\texttt{sectorCount\_} & \texttt{uint32\_t} & CSD から算出したセクタ数 \\
+\bottomrule
+\end{tabularx}
 
 \apisection{内部定数}
 
@@ -1325,325 +2013,454 @@ SPI経由でSDカードへログデータを書き込む。
 \toprule
 \textbf{定数名} & \textbf{値} & \textbf{説明} \\
 \midrule
-\texttt{BLOCK\_SIZE}     & 512  & SDブロックサイズ (bytes) \\
-\texttt{WRITE\_BUF\_SIZE} & 1024 & 書込みバッファサイズ (bytes) \\
-\bottomrule
-\end{tabularx}
-
-\apisection{内部変数}
-
-\begin{tabularx}{\textwidth}{l l l X}
-\toprule
-\textbf{変数名} & \textbf{型} & \textbf{初期値} & \textbf{説明} \\
-\midrule
-\texttt{\_writeBuf[]} & \texttt{uint8\_t[]} & \texttt{0}     & 書込みバッファ \\
-\texttt{\_bufPos}     & \texttt{uint16\_t}  & \texttt{0}     & バッファ書込み位置 \\
-\texttt{\_isReady}    & \texttt{bool}       & \texttt{false} & SD初期化完了フラグ \\
-\texttt{\_blockAddr}  & \texttt{uint32\_t}  & \texttt{0}     & 現在の書込みブロックアドレス \\
+\texttt{CMD\_TIMEOUT} & 5000 & コマンド応答待ちのリトライ上限 \\
 \bottomrule
 \end{tabularx}
 
 \apisection{関数ドキュメント}
 
 \begin{funcblock}{init()}
-\texttt{void init(void)}
+\texttt{bool init() override}
 
 \vspace{1.5mm}
-SPI初期化およびSDカードの初期化シーケンス (CMD0→CMD8→ACMD41) を実行する。
-初期化成功で \texttt{\_isReady} を \texttt{true} に設定。
+RSPI2 を初期化し、SD カードの初期化シーケンス
+\textbf{CMD0 $\rightarrow$ CMD8 $\rightarrow$ ACMD41 $\rightarrow$ CMD58 $\rightarrow$ CMD16}
+を実行する。CMD58 で OCR を読んで SDHC / 標準容量を判別し、
+CMD16 でブロック長を 512 バイトに固定する。
+成功時に \texttt{initialized\_} を \texttt{true} にする。
 \end{funcblock}
 
-\begin{funcblock}{update()}
-\texttt{void update(void)}
+\begin{funcblock}{updateOutput(sys)}
+\texttt{void updateOutput(SystemData\& sys) override}
 
 \vspace{1.5mm}
-バッファが1ブロック分 (512B) 以上溜まっている場合、SDカードへブロック単位で書き出す。
-内部で \texttt{writeBlock()} を呼び出す。
+未使用。周期処理は行わない。
 \end{funcblock}
 
-\begin{funcblock}{log(str)}
-\texttt{void log(const char* str)}
+\begin{funcblock}{readBlocks(buf, block, count)}
+\texttt{int readBlocks(uint8\_t* buf, uint32\_t block, uint32\_t count)}
 
 \vspace{1.5mm}
-ログ文字列をバッファに追加する。
+\texttt{block} 番から \texttt{count} ブロック（512 バイト単位）読み出す。
 
 \vspace{1.5mm}
-\textbf{引数:} \texttt{str} (\texttt{const char*}) --- ログ文字列
+\textbf{戻り値:} \texttt{int} --- 0=成功, 非0=エラー
 \end{funcblock}
 
-\begin{funcblock}{flush()}
-\texttt{void flush(void)}
+\begin{funcblock}{writeBlocks(buf, block, count)}
+\texttt{int writeBlocks(const uint8\_t* buf, uint32\_t block, uint32\_t count)}
 
 \vspace{1.5mm}
-バッファ内容を即時書き出す。残りデータが512B未満でもパディングして書き出す。
+\texttt{block} 番から \texttt{count} ブロック書き込む。
+
+\vspace{1.5mm}
+\textbf{戻り値:} \texttt{int} --- 0=成功, 非0=エラー
 \end{funcblock}
 
-\begin{funcblock}{close()}
-\texttt{void close(void)}
+\begin{funcblock}{isReady() / getCardType() / getSectorCount()}
+\texttt{bool isReady() const} / \texttt{CardType getCardType() const} /
+\texttt{uint32\_t getSectorCount() const}
 
 \vspace{1.5mm}
-\texttt{flush()} を呼び出した後、ファイル終端処理を行う。
-SD通信を終了し、\texttt{\_isReady} を \texttt{false} に設定する。
+初期化状態・カードタイプ・セクタ数をそれぞれ返す。
 \end{funcblock}
 
-\begin{funcblock}{spiWrite(byte) \normalfont\small\color{gray}[内部]}
-\texttt{uint8\_t spiWrite(uint8\_t byte)}
+\begin{funcblock}{主な private メソッド}
+\texttt{void initSPI()} / \texttt{void setSPIClock(uint32\_t hz)} /
+\texttt{uint8\_t spiTransfer(uint8\_t data)} /
+\texttt{void csLow()} / \texttt{void csHigh()} /
+\texttt{bool isCardInserted()} /
+\texttt{int sendCommand(uint8\_t cmd, uint32\_t arg)} /
+\texttt{int sendAppCommand(uint8\_t cmd, uint32\_t arg)} /
+\texttt{int readData(uint8\_t* buf, uint32\_t len)} /
+\texttt{int writeData(const uint8\_t* buf, uint8\_t token)} /
+\texttt{void waitReady()}
 
 \vspace{1.5mm}
-SPI 1バイト送受信を行う。送信と同時に受信データを返す。
-
-\vspace{1.5mm}
-\textbf{引数:} \texttt{byte} (\texttt{uint8\_t}) --- 送信バイト
-
-\textbf{戻り値:} \texttt{uint8\_t} --- 受信バイト
+\texttt{sendCommand()} は R1 レスポンスを返し、タイムアウト時は $-1$ を返す。
+\texttt{waitReady()} は\textbf{戻り値を持たない}（ビジー解除まで待つだけ）。
+\texttt{isCardInserted()} は CD ピンが Low のときカードありと判定する。
 \end{funcblock}
 
-\begin{funcblock}{sendCmd(cmd, arg) \normalfont\small\color{gray}[内部]}
-\texttt{uint8\_t sendCmd(uint8\_t cmd, uint32\_t arg)}
+\apisection{ハードウェアマッピング}
 
-\vspace{1.5mm}
-SDカードコマンドを送信し、レスポンスを返す。
-
-\vspace{1.5mm}
-\begin{itemize}[nosep, leftmargin=*]
-  \item \texttt{cmd} (\texttt{uint8\_t}) --- SDコマンド番号
-  \item \texttt{arg} (\texttt{uint32\_t}) --- コマンド引数
-\end{itemize}
-
-\textbf{戻り値:} \texttt{uint8\_t} --- R1レスポンス
-\end{funcblock}
-
-\begin{funcblock}{writeBlock(data) \normalfont\small\color{gray}[内部]}
-\texttt{bool writeBlock(const uint8\_t* data)}
-
-\vspace{1.5mm}
-512Bブロックをアドレス \texttt{\_blockAddr} に書き込む。成功で \texttt{\_blockAddr} をインクリメント。
-
-\vspace{1.5mm}
-\textbf{引数:} \texttt{data} (\texttt{const uint8\_t*}) --- 書込みデータ (512B)
-
-\textbf{戻り値:} \texttt{bool} --- 書込み成功/失敗
-\end{funcblock}
-
-\begin{funcblock}{waitReady() \normalfont\small\color{gray}[内部]}
-\texttt{bool waitReady(void)}
-
-\vspace{1.5mm}
-SDカードのビジー状態が解除されるまで待機する。タイムアウト時は \texttt{false} を返す。
-
-\vspace{1.5mm}
-\textbf{戻り値:} \texttt{bool} --- ビジー解除成功/タイムアウト
-\end{funcblock}
+\begin{tabularx}{\textwidth}{l l l X}
+\toprule
+\textbf{信号} & \textbf{ピン} & \textbf{機能} & \textbf{説明} \\
+\midrule
+MOSI & P8\_5 & RSPI2 MOSI (Function 3)  & \\
+MISO & P8\_6 & RSPI2 MISO (Function 3)  & \\
+CLK  & P8\_3 & RSPI2 RSPCK (Function 3) & \\
+CS   & P8\_4 & GPIO 出力 & 手動制御 \\
+CD   & P7\_8 & GPIO 入力 & カード検出（Low = 挿入） \\
+\bottomrule
+\end{tabularx}
 
 \end{apibox}
 
+%% ── 7.10 SDLogger ──
+\subsection{SDLogger クラス}\label{sec:api-sdlogger}
 
-%% ── 7.10 RunController ──
-\subsection{RunController クラス}\label{sec:api-runcontroller}
+\begin{apibox}{SDLogger --- 走行ログ記録モジュール}
 
-\begin{apibox}{RunController --- メイン走行制御モジュール（初心者向けベース）}
-
-\textbf{ファイル:} \texttt{src/drivers/RunController.h}, \texttt{RunController.cpp} \hfill
+\textbf{ファイル:} \texttt{src/drivers/SDLogger.h}, \texttt{SDLogger.cpp} \hfill
 \textbf{継承:} \texttt{IModule} \hfill
-\phasebadge{Logic Phase}
+\phasebadge{Output フェーズ（メインループ実行）}
 
 \vspace{2mm}\hrule\vspace{2mm}
 
 \apisection{概要}
 
-参考プロジェクト \texttt{mcr\_shiozawa\_cclass\_2.38m-s/main.cpp} の \texttt{intTimer()} 内
-\texttt{switch(pattern)} 状態遷移を移植したもの。
-オリジナルでは「エンコーダ累積パルス」で距離管理していたが、
-本実装では初心者が読みやすいようにすべて「経過時間 (ms)」で管理する。
-各状態に入るたびに \texttt{stateMs\_} が 0 クリアされ、1ms 割り込みごとに 1 ずつ加算される。
+走行中のデータを RAM 上のリングバッファに蓄積し、
+走行終了後に CSV ファイルとして SD カードへ一括書き出す。
+書き込み先は \texttt{/data0000.csv} $\sim$ \texttt{/data9999.csv} で、
+連番は \texttt{renban.txt} で管理する。
+
+\begin{cautionbox}[ISR ではなくメインループから呼ぶ]
+SD カードのバス処理と FatFs にはタイミング制約があるため、
+本モジュールは \texttt{s\_outputModules[]} 配列には登録せず、
+メインループから毎周期 \texttt{g\_sdlogger.updateOutput(g\_sys)} を呼ぶ。
+\end{cautionbox}
 
 \apisection{機能一覧}
 
 \begin{itemize}[nosep]
-  \item \texttt{Pattern} 番号による状態遷移（参考プロジェクトと同じ番号体系）
-  \item スタートバー検出 → 通過 → 通常トレース → クランク/レーンチェンジ
-  \item 各状態の遷移条件は経過時間（ms）で判定（距離不要）
-  \item LineDetector の検出フラグを参照してクランク/ハーフラインを判別
-  \item Motor / Servo / Onboard を直接制御
-  \item 走行終了時に \texttt{isFinished()} で外部に通知（main 側でログ保存をトリガ）
+  \item 走行中のログ自動記録（パターン番号による記録開始/終了の自動判定）
+  \item 4000 エントリ（約 2.7MB）のログバッファ
+  \item 各エントリに画像1行分（160 画素）の生データを同梱
+  \item CSV 形式でのバッチ書き出しと連番ファイル管理
 \end{itemize}
 
-\apisection{状態遷移（Pattern）}
-
-\begin{longtable}{l l l}
-\toprule
-\textbf{番号} & \textbf{Pattern 名} & \textbf{役割} \\
-\midrule
-\endfirsthead
-\toprule
-\textbf{番号} & \textbf{Pattern 名} & \textbf{役割} \\
-\midrule
-\endhead
-0   & WAIT\_SW             & スイッチ入力待ち \\
-1   & APPROACH\_BAR        & スタートバーへ前進 \\
-2   & WAIT\_AT\_BAR        & バー手前で停止 \\
-3   & ACCEL\_AFTER\_BAR    & バー上昇後の加速 \\
-4   & CHECK\_BAR\_OPEN     & バー開放確認 \\
-10  & WAIT\_BAR\_OPEN      & バー開放待ち \\
-11  & TRACE\_NORMAL        & 通常トレース \\
-21--23 & CROSSLINE\_*      & クロスライン検出→読み飛ばし→クランク選択 \\
-30--31 & LEFT\_CRANK\_*    & 左クランク \\
-40--41 & RIGHT\_CRANK\_*   & 右クランク \\
-51--57 & RIGHT\_HALF\_* / RIGHT\_LANE\_* & 右ハーフライン→レーンチェンジ \\
-61--67 & LEFT\_HALF\_* / LEFT\_LANE\_*   & 左ハーフライン→レーンチェンジ \\
-101 & FINISH               & 走行終了（ログ保存待ち） \\
-\bottomrule
-\end{longtable}
-
-\apisection{タイマー定数}
+\apisection{設定 (SDLoggerConfig)}
 
 \begin{tabularx}{\textwidth}{l l X}
 \toprule
-\textbf{定数名} & \textbf{値 [ms]} & \textbf{説明} \\
+\textbf{メンバ} & \textbf{実値} & \textbf{説明} \\
 \midrule
-\texttt{T\_LINE\_SKIP\_MS}      & 100   & クロス/ハーフ通過時間 \\
-\texttt{T\_CRANK\_MS}           & 440   & クランク旋回時間 \\
-\texttt{T\_LANE\_TURN\_MS}      & 340   & レーンチェンジ寄せ時間 \\
-\texttt{T\_LANE\_STRAIGHT\_MS}  & 0     & レーンチェンジ直進時間 \\
-\texttt{T\_LANE\_COUNTER\_MS}   & 250   & レーンチェンジ戻し時間 \\
-\texttt{T\_COURSE\_TIMEOUT\_MS} & 60000 & コース1周想定タイムアウト \\
-\texttt{T\_BAR\_WAIT\_PRE\_MS}  & 500   & バー前進開始までの待機 \\
-\texttt{T\_BAR\_WAIT\_POST\_MS} & 1000  & バー手前停止後の待機 \\
-\texttt{T\_AFTER\_BAR\_GO\_MS}  & 100   & バー後加速の継続時間 \\
+\texttt{maxEntries}       & 4000 & バッファのエントリ数上限（配列上限は \texttt{SDLOG\_MAX\_ENTRIES}） \\
+\texttt{imageWidth}       & 160  & 画像1行記録時の幅 \\
+\texttt{recordImageRow}   & 45   & 画像を記録する行番号。偏差の記録行も兼ねる \\
+\texttt{patternMinForLog} & 11   & この番号以上のパターンで記録を開始（\texttt{RP\_TRACE\_NORMAL}） \\
+\texttt{finishPattern}    & 101  & このパターンは記録対象外（\texttt{RP\_FINISH}） \\
 \bottomrule
 \end{tabularx}
 
-\apisection{走行パラメータ定数}
-
-\begin{tabularx}{\textwidth}{l l X}
-\toprule
-\textbf{定数名} & \textbf{値} & \textbf{説明} \\
-\midrule
-\texttt{CRANK\_HANDLE}            & 42  & クランク旋回角度 [度] \\
-\texttt{CRANK\_MOTOR\_OUT/IN}     & 100 & クランク内外輪モーター [\%] \\
-\texttt{LANE\_HANDLE}             & 23  & レーンチェンジ寄せ角度 [度] \\
-\texttt{LANE\_COUNTER\_HANDLE}    & 38  & レーンチェンジ戻し角度 [度] \\
-\texttt{LANE\_MOTOR\_IN/OUT}      & 37/55 & レーン寄せ時の内/外輪 [\%] \\
-\texttt{LANE\_STRAIGHT\_MOTOR}    & 100 & レーン直進時のモーター [\%] \\
-\texttt{LANE\_COUNTER\_MOTOR\_IN/OUT} & 20 & レーン戻し時の内/外輪 [\%] \\
-\texttt{BRAKE\_TARGET\_MOTOR}     & 43  & ブレーキ走行時の目標出力 [\%] \\
-\texttt{TRACE\_ROW}               & 45  & 通常トレース時の偏差取得行 \\
-\texttt{APPROACH\_ROW}            & 95  & スタート時の偏差取得行 \\
-\bottomrule
-\end{tabularx}
-
-\apisection{内部変数}
+\apisection{入出力データ (SDLoggerData / sys.sd)}
 
 \begin{tabularx}{\textwidth}{l l l X}
 \toprule
-\textbf{変数名} & \textbf{型} & \textbf{初期値} & \textbf{説明} \\
+\textbf{メンバ} & \textbf{型} & \textbf{方向} & \textbf{説明} \\
 \midrule
-\texttt{pattern\_}     & \texttt{Pattern}       & \texttt{WAIT\_SW} & 現在の走行パターン \\
-\texttt{stateMs\_}     & \texttt{unsigned long} & 0 & 現パターンに入ってからの経過時間 [ms] \\
-\texttt{totalMs\_}     & \texttt{unsigned long} & 0 & スタート（pattern==11）からの累積時間 [ms] \\
-\texttt{cnt1Ms\_}      & \texttt{unsigned long} & 0 & スタートバー処理用の補助タイマー [ms] \\
-\texttt{finished\_}    & \texttt{bool}          & \texttt{false} & 走行終了フラグ \\
-\texttt{handleVal\_}   & \texttt{int}           & 0 & 現在のハンドル指示値 [度] \\
-\texttt{traceOffset\_} & \texttt{int}           & 0 & ハンドル計算オフセット \\
-\texttt{leftMotor\_, rightMotor\_} & \texttt{int} & 0 & 通常時の左右モーター指示値 \\
-\texttt{leftBrake\_, rightBrake\_} & \texttt{int} & 0 & ブレーキ時の左右モーター指示値 \\
+\texttt{ready}         & \texttt{bool}      & SDLogger $\rightarrow$ 外部 & FatFs マウント成功フラグ \\
+\texttt{logCount}      & \texttt{uint32\_t} & SDLogger $\rightarrow$ 外部 & 現在の記録エントリ数 \\
+\texttt{full}          & \texttt{bool}      & SDLogger $\rightarrow$ 外部 & バッファ満杯フラグ \\
+\texttt{saveRequested} & \texttt{bool}      & 外部 $\rightarrow$ SDLogger & \texttt{true} で書き出しを要求 \\
+\texttt{saveDone}      & \texttt{bool}      & SDLogger $\rightarrow$ 外部 & 書き出し完了フラグ \\
+\bottomrule
+\end{tabularx}
+
+\apisection{ログエントリ (SDLOG\_T)}
+
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{メンバ} & \textbf{型} & \textbf{記録元} \\
+\midrule
+\texttt{cnt\_msdwritetime} & \texttt{unsigned int} & \texttt{g\_timer\_1ms}（タイムスタンプ） \\
+\texttt{pattern}    & \texttt{unsigned int} & \texttt{sys.run.pattern} \\
+\texttt{convertBCD} & \texttt{unsigned int} & \texttt{sys.line.sensorBin} \\
+\texttt{handle}     & \texttt{signed int}   & \texttt{sys.run.handleVal} \\
+\texttt{hennsa}     & \texttt{signed int}   & \texttt{sys.line.deviation[recordImageRow]} \\
+\texttt{encoder}    & \texttt{unsigned int} & \texttt{sys.enc.totalCount} \\
+\texttt{motorL / motorR} & \texttt{signed int} & \texttt{sys.mot.leftActual / rightActual} \\
+\texttt{flagL / flagK / flagR / flagS} & \texttt{signed int} &
+  \texttt{sys.line.leftLine / crossLine / rightLine / centerLine} \\
+\texttt{total}      & \texttt{signed int}   & \texttt{g\_timer\_1ms} \\
+\texttt{imageData0[160]} & \texttt{signed int} & \texttt{sys.cam.imageBufferPtr} の \texttt{recordImageRow} 行 \\
 \bottomrule
 \end{tabularx}
 
 \apisection{関数ドキュメント}
 
 \begin{funcblock}{init()}
-\texttt{void init(void) override}
+\texttt{bool init() override}
 
 \vspace{1.5mm}
-内部状態を全て初期化し、\texttt{WAIT\_SW} 状態へ遷移する。モーター停止・ハンドル中央・LED消灯を実行。
+\texttt{SDCard} を初期化して FatFs をマウントし、ログバッファをリセットする。
+成功時に \texttt{mounted\_} を \texttt{true} にする。
 \end{funcblock}
 
-\begin{funcblock}{update()}
-\texttt{void update(void) override}
+\begin{funcblock}{updateOutput(sys)}
+\texttt{void updateOutput(SystemData\& sys) override}
 
 \vspace{1.5mm}
-1ms 割り込み（OSTM0）から呼び出される周期処理。
-\texttt{stateMs\_} と \texttt{cnt1Ms\_} をインクリメントし、現在の \texttt{pattern\_} に応じて
-内部の \texttt{run*()} メソッドを呼び出す。状態遷移時には \texttt{stateMs\_} が 0 クリアされる。
+次の3つを毎周期実行する。
+
+\begin{enumerate}[nosep, leftmargin=*]
+  \item \texttt{sys.sd.ready} / \texttt{logCount} / \texttt{full} を現在値で更新
+  \item \texttt{sys.run.pattern} が \texttt{patternMinForLog} 以上かつ
+        \texttt{finishPattern} 以外なら、\texttt{SystemData} から1エントリ分を収集して \texttt{commit()}
+  \item \texttt{sys.sd.saveRequested} が立っていれば \texttt{saveToSD()} を実行し、
+        成功時に \texttt{sys.sd.saveDone} を立てる
+\end{enumerate}
 \end{funcblock}
 
-\begin{funcblock}{isFinished()}
-\texttt{bool isFinished(void) const}
+\begin{funcblock}{saveToSD()}
+\texttt{int saveToSD()}
 
 \vspace{1.5mm}
-走行終了状態（\texttt{FINISH}）に到達したかを返す。main 側がこの戻り値で
-\texttt{g\_sdlogger.saveToSD()} のトリガとして使用する。
+バッファ内の全エントリを CSV ファイルとして SD カードへ書き出す。
+\texttt{renban.txt} から連番を読み、\texttt{/dataNNNN.csv} を作成して書き込み、連番を更新する。
 
 \vspace{1.5mm}
-\textbf{戻り値:} \texttt{bool} --- \texttt{true}=終了済み、\texttt{false}=走行中
+\textbf{戻り値:} \texttt{int} --- 0=成功, 非0=エラー
 \end{funcblock}
 
-\begin{funcblock}{getPattern()}
-\texttt{int getPattern(void) const}
+\begin{funcblock}{current() / commit()}
+\texttt{SDLOG\_T\& current()} / \texttt{void commit()}
 
 \vspace{1.5mm}
-現在の走行パターン番号を整数で返す（デバッグ表示・ログ用）。
+\texttt{current()} は次に書き込むエントリへの参照を返し、
+\texttt{commit()} が記録番地を1つ進める。
+バッファが満杯の場合、\texttt{current()} は最終エントリを返して上書きを防ぐ。
 \end{funcblock}
 
-\begin{funcblock}{getHandleVal()}
-\texttt{int getHandleVal(void) const}
+\begin{funcblock}{isReady() / getLogCount() / isFull() / resetLog()}
+\texttt{bool isReady() const} / \texttt{unsigned int getLogCount() const} /
+\texttt{bool isFull() const} / \texttt{void resetLog()}
 
 \vspace{1.5mm}
-直近に \texttt{calcHandle()} で計算されたハンドル指示値を返す（ログ用）。
+マウント状態・記録数・満杯判定の取得と、バッファのリセット。
 \end{funcblock}
 
-\begin{funcblock}{forceStop()}
-\texttt{void forceStop(void)}
+\apisection{使用例}
+
+\begin{lstlisting}[caption={SDLogger の組み込み例（メインループ）},label=lst:sdlogger]
+// main 起動時（GIC 初期化の後、Camera 初期化の前）
+g_sdlogger.init();
+
+// メインループ内
+g_sdlogger.updateOutput(g_sys);   // 走行中ログの自動記録
+
+if (g_sys.run.finished && !savedToSD) {
+    savedToSD = true;
+    g_sys.mot.leftCmd  = 0;
+    g_sys.mot.rightCmd = 0;
+    g_sys.srv.angleCmd = 0;
+    g_sys.sd.saveRequested = true;
+    g_sdlogger.updateOutput(g_sys);  // 即座に保存実行
+}
+\end{lstlisting}
+
+\end{apibox}
+
+%% ── 7.11 RunLogic ──
+\subsection{RunLogic --- 走行ロジック}\label{sec:api-runlogic}
+
+\begin{apibox}{RunLogic --- 走行状態機械（Logic レイヤー）}
+
+\textbf{ファイル:} \texttt{src/logic/RunLogic.h}, \texttt{RunLogic.cpp} \hfill
+\textbf{種別:} \textbf{自由関数の集合（クラスではない）} \hfill
+\phasebadge{Logic フェーズ}
+
+\vspace{2mm}\hrule\vspace{2mm}
+
+\apisection{概要}
+
+参考プロジェクト \texttt{mcr\_shiozawa\_cclass\_2.38m-s/main.cpp} の
+\texttt{intTimer()} 内 \texttt{switch(pattern)} 状態遷移を移植したもの。
+旧設計ではこれを \texttt{RunController} というクラスにしていたが、
+EMA 化にあたり\textbf{クラスを廃して純関数 \texttt{applyDrivingPattern()} に分解}し、
+インスタンス変数はすべて \texttt{SystemData::run}（\texttt{RunData}）へ移した。
+
+\begin{itemize}[nosep]
+  \item 入力: \texttt{sys.line.*}（ライン検出結果）、\texttt{sys.ob.sw}（SW 状態）、\texttt{sys.run.*}（自身の状態）
+  \item 出力: \texttt{sys.mot.*Cmd}, \texttt{sys.srv.angleCmd}, \texttt{sys.ob.*LedCmd}, \texttt{sys.run.*}
+  \item \textbf{ハードウェアを直接呼ばない}（\texttt{g\_motor} / \texttt{g\_servo} / \texttt{g\_onboard} を参照しない）
+  \item 全パラメータは \texttt{RUN\_CONFIG} / \texttt{MOTOR\_CONFIG} から取得する
+\end{itemize}
+
+オリジナルは「エンコーダ累積パルス」で距離を管理していたが、
+本実装では読みやすさを優先してすべて「経過時間 [ms]」で管理する。
+時間管理は \texttt{ModuleTimer} (\hyperref[sec:moduletimer]{§\ref*{sec:moduletimer}}) が担う。
+
+\apisection{状態データ (RunData / sys.run)}
+
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{メンバ} & \textbf{型} & \textbf{説明} \\
+\midrule
+\texttt{pattern}       & \texttt{int}  & 現在の走行パターン番号 \\
+\texttt{prevPattern}   & \texttt{int}  & 直前のパターン（遷移検知用） \\
+\texttt{handleVal}     & \texttt{int}  & 直近のハンドル指示値 [度] \\
+\texttt{traceOffset}   & \texttt{int}  & ハンドル計算のオフセット \\
+\texttt{leftMotor} / \texttt{rightMotor} & \texttt{int} & \texttt{calcMotorVal()} の結果 \\
+\texttt{leftBrake} / \texttt{rightBrake} & \texttt{int} & \texttt{calcBrakeMotorVal()} の結果 \\
+\texttt{lastHandle101} & \texttt{int}  & FINISH 時に維持するハンドル値 \\
+\texttt{finished}      & \texttt{bool} & 走行終了フラグ。メインループが SD 保存のトリガに使う \\
+\texttt{stateTimer}    & \texttt{ModuleTimer} & 現パターンに入ってからの経過時間（旧 \texttt{stateMs\_}） \\
+\texttt{totalTimer}    & \texttt{ModuleTimer} & 走行スタートからの経過時間（旧 \texttt{totalMs\_}） \\
+\texttt{auxTimer}      & \texttt{ModuleTimer} & 補助タイマー（バー検知等、旧 \texttt{cnt1Ms\_}） \\
+\bottomrule
+\end{tabularx}
+
+\apisection{状態遷移（RunPattern）}
+
+\begin{longtable}{l l l}
+\toprule
+\textbf{番号} & \textbf{列挙子} & \textbf{役割} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{番号} & \textbf{列挙子} & \textbf{役割} \\
+\midrule
+\endhead
+0   & \texttt{RP\_WAIT\_SW}             & スイッチ入力待ち \\
+1   & \texttt{RP\_APPROACH\_BAR}        & スタートバーへ前進 \\
+2   & \texttt{RP\_WAIT\_AT\_BAR}        & バー手前で停止 \\
+3   & \texttt{RP\_ACCEL\_AFTER\_BAR}    & バー上昇後の加速 \\
+4   & \texttt{RP\_CHECK\_BAR\_OPEN}     & バー開放確認 \\
+10  & \texttt{RP\_WAIT\_BAR\_OPEN}      & バー開放待ち \\
+11  & \texttt{RP\_TRACE\_NORMAL}        & 通常トレース \\
+21  & \texttt{RP\_CROSSLINE\_DETECTED}  & クロスライン検出 \\
+22  & \texttt{RP\_CROSSLINE\_SKIP}      & クロスラインの読み飛ばし \\
+23  & \texttt{RP\_CROSSLINE\_AFTER}     & クロスライン後のトレース・クランク検出 \\
+30  & \texttt{RP\_LEFT\_CRANK\_ENTRY}   & 左クランク開始 \\
+31  & \texttt{RP\_LEFT\_CRANK}          & 左クランク中 \\
+40  & \texttt{RP\_RIGHT\_CRANK\_ENTRY}  & 右クランク開始 \\
+41  & \texttt{RP\_RIGHT\_CRANK}         & 右クランク中 \\
+51  & \texttt{RP\_RIGHT\_HALF\_DETECTED}& 右ハーフライン検出 \\
+52  & \texttt{RP\_RIGHT\_HALF\_SKIP}    & 右ハーフラインの読み飛ばし \\
+53  & \texttt{RP\_RIGHT\_HALF\_AFTER}   & 右ハーフライン後のトレース \\
+54  & \texttt{RP\_RIGHT\_LANE\_PREPARE} & 右レーンチェンジ準備 \\
+55  & \texttt{RP\_RIGHT\_LANE\_TURN}    & 右レーンチェンジ：寄せ \\
+56  & \texttt{RP\_RIGHT\_LANE\_STRAIGHT}& 右レーンチェンジ：直進 \\
+57  & \texttt{RP\_RIGHT\_LANE\_COUNTER} & 右レーンチェンジ：戻し \\
+61  & \texttt{RP\_LEFT\_HALF\_DETECTED} & 左ハーフライン検出 \\
+62  & \texttt{RP\_LEFT\_HALF\_SKIP}     & 左ハーフラインの読み飛ばし \\
+63  & \texttt{RP\_LEFT\_HALF\_AFTER}    & 左ハーフライン後のトレース \\
+64  & \texttt{RP\_LEFT\_LANE\_PREPARE}  & 左レーンチェンジ準備 \\
+65  & \texttt{RP\_LEFT\_LANE\_TURN}     & 左レーンチェンジ：寄せ \\
+66  & \texttt{RP\_LEFT\_LANE\_STRAIGHT} & 左レーンチェンジ：直進 \\
+67  & \texttt{RP\_LEFT\_LANE\_COUNTER}  & 左レーンチェンジ：戻し \\
+101 & \texttt{RP\_FINISH}               & 走行終了（ログ保存待ち） \\
+\bottomrule
+\end{longtable}
+
+\begin{notebox}[パターン番号は他モジュールからも参照される]
+\texttt{LineDetector} は \texttt{pattern == 11} / \texttt{1} / \texttt{2} で
+検出パラメータを切り替え、\texttt{SDLogger} は
+\texttt{patternMinForLog = 11} 以上で記録を開始し \texttt{finishPattern = 101} を除外する。
+番号を変更する場合は \texttt{ProjectConfig.h} 側の対応値も合わせること。
+\end{notebox}
+
+\apisection{関数ドキュメント}
+
+\begin{funcblock}{runLogicInit(sys)}
+\texttt{void runLogicInit(SystemData\& sys)}
 
 \vspace{1.5mm}
-緊急停止用：モーター停止・ハンドル中央・赤LED点灯を行い、\texttt{FINISH} 状態へ遷移する。
+起動時に1回だけ呼ぶ初期化。\texttt{sys.run.*} をすべて初期値へ戻し、
+\texttt{pattern} を \texttt{RP\_WAIT\_SW} に設定して3本の \texttt{ModuleTimer} を起動する。
+あわせて初期出力指示（\texttt{sys.mot.*Cmd}, \texttt{sys.srv.angleCmd},
+\texttt{sys.ob.*LedCmd}）をすべて 0 にクリアする。
 \end{funcblock}
 
-\apisection{距離 → タイマー置換の対応表}
+\begin{funcblock}{applyDrivingPattern(sys)}
+\texttt{void applyDrivingPattern(SystemData\& sys)}
 
-参考プロジェクト（エンコーダ距離）→ 本実装（経過時間 ms）の対応：
+\vspace{1.5mm}
+Logic フェーズで毎周期呼ぶ本体。処理の順序は次のとおり。
+
+\begin{enumerate}[nosep, leftmargin=*]
+  \item \texttt{sys.ob.userLedCmd} を中央2点センサ（\texttt{sensorBin \& 0x18}）の反応で更新
+  \item \texttt{calcHandle(sys)} でハンドル指示値を算出
+  \item \texttt{calcMotorVal(sys)} で通常走行時のモータ値を算出
+  \item \texttt{switch (sys.run.pattern)} で29個の \texttt{runXxx()} 関数へ分岐
+        （未定義の番号は \texttt{RP\_WAIT\_SW} へ戻す）
+  \item \texttt{sys.run.prevPattern} を更新
+\end{enumerate}
+\end{funcblock}
+
+\apisection{ハンドル指示値の計算}
+
+\texttt{calcHandle()}（\texttt{RunLogic.cpp} 内の static 関数）は
+PID ではなく\textbf{比例ゲインの3段切替}でハンドル角を決める。
+本プロジェクトで最も頻繁に調整するロジックである。
+
+\vspace{2mm}
+$\mathit{dev} = \mathtt{sys.line.deviation[traceRow]}$、
+$\mathit{corrected} = \mathit{dev} + \mathtt{sys.run.traceOffset}$ として:
+
+\begin{tabularx}{\textwidth}{l X}
+\toprule
+\textbf{条件} & \textbf{ハンドル指示値} \\
+\midrule
+\texttt{pattern < RP\_TRACE\_NORMAL} & 更新しない（停止系のため直前値を維持） \\
+\texttt{pattern != RP\_TRACE\_NORMAL} & $\mathit{corrected} \times \mathtt{handleGainNonNormal}$ \\
+$|\mathit{dev}| \leq \mathtt{handleStraightAbsThreshold}$ & 0（直線とみなす） \\
+$|\mathit{dev}| \leq \mathtt{handleGentleAbsThreshold}$   & $\mathit{corrected} \times \mathtt{handleGainGentle}$（緩カーブ） \\
+上記以外 & $\mathit{corrected} \times \mathtt{handleGainSharp}$（急カーブ） \\
+\bottomrule
+\end{tabularx}
+
+\vspace{2mm}
+通常走行時のモータ出力は \texttt{calcMotorVal()} が左右とも
+\texttt{MOTOR\_CONFIG.maxPower} に設定する。
+ブレーキ時は \texttt{calcBrakeMotorVal()} が \texttt{RUN\_CONFIG.brakeTargetMotor} を用いる。
+
+\apisection{距離 $\rightarrow$ タイマー置換の対応表}
+
+参考プロジェクト（エンコーダ距離）$\rightarrow$ 本実装（経過時間 ms）の対応:
 
 \begin{tabularx}{\textwidth}{l l X}
 \toprule
 \textbf{参考プロジェクト} & \textbf{本実装} & \textbf{備考} \\
 \midrule
-\texttt{encoder.clear()}                        & \texttt{stateMs\_ = 0} & 状態遷移時に自動クリア \\
-\texttt{encoder.getTotalCount() >= N}            & \texttt{stateMs\_ >= N} & 1pulse $\approx$ 1ms 換算 \\
-\texttt{encoder.getCourseCount() >= ONEM*58}     & \texttt{totalMs\_ >= 60000} & 60秒で終了 \\
-\texttt{encoder.getCnt() <= lowSpeedLimit}       & （削除）              & 速度判定はカット \\
+\texttt{encoder.clear()} & \texttt{sys.run.stateTimer.setTime()} & \texttt{changePattern()} が状態遷移時に自動実行 \\
+\texttt{encoder.getTotalCount() >= N} & \texttt{sys.run.stateTimer.isExpired(N)} & 1 pulse $\approx$ 1ms 換算 \\
+\texttt{encoder.getCourseCount() >= ONEM*58} & \texttt{sys.run.totalTimer.isExpired(tCourseTimeoutMs)} & 既定 120 秒 \\
+\texttt{encoder.getCnt() <= lowSpeedLimit} & （削除） & 速度判定はカット \\
 \bottomrule
 \end{tabularx}
 
 \apisection{使用例}
 
-\begin{lstlisting}[caption={RunController の組み込み例},label=lst:runcontroller]
-// main 起動時
-g_runController.init();
+\begin{lstlisting}[caption={RunLogic の組み込み例},label=lst:runlogic]
+// main 起動時（全ドライバの init() 完了後、initOSTM0() の前）
+runLogicInit(g_sys);
 
-// OSTM0 1ms 割り込みコールバック内
-extern "C" void ostm0_interrupt_callback(void) {
-    g_camera.update();
-    g_motor.update();
-    g_servo.update();
-    g_runController.update();   // 状態遷移を1ms毎に進める
-    g_onboard.update();         // GPIO ラッチ反映
+// OSTM0 1ms 割り込みコールバック内 — Logic フェーズ
+if (!s_debugMode) {
+    applyDrivingPattern(g_sys);   // 状態遷移を 1ms 毎に進める
 }
 
-// メインループ
-while (1) {
-    if (g_camera.isFrameReady()) {
-        g_camera.clearFrameReady();
-        g_lineDetector.update(); // ライン検出はフレーム完了時のみ実行
-    }
-    if (g_runController.isFinished()) {
-        g_sdlogger.saveToSD();   // 走行終了時にログ書き出し
-        break;
-    }
+// メインループ — 走行終了の検知
+if (g_sys.run.finished && !savedToSD) {
+    savedToSD = true;
+    g_sys.sd.saveRequested = true;
+    g_sdlogger.updateOutput(g_sys);
 }
 \end{lstlisting}
 
+\begin{notebox}[旧 RunController からの移行対応]
+旧仕様書に記載されていた API は次のように置き換わっている。
+
+\begin{tabularx}{\textwidth}{l X}
+\toprule
+\textbf{旧 API} & \textbf{現在の参照方法} \\
+\midrule
+\texttt{g\_runController.init()}      & \texttt{runLogicInit(g\_sys)} \\
+\texttt{g\_runController.update()}    & \texttt{applyDrivingPattern(g\_sys)} \\
+\texttt{isFinished()}                 & \texttt{g\_sys.run.finished} を直読 \\
+\texttt{getPattern()}                 & \texttt{g\_sys.run.pattern} を直読 \\
+\texttt{getHandleVal()}               & \texttt{g\_sys.run.handleVal} を直読 \\
+\texttt{forceStop()}                  & 該当なし。\texttt{g\_sys.run.pattern = RP\_FINISH} 等で代替 \\
+\bottomrule
+\end{tabularx}
+\end{notebox}
+
 \end{apibox}
+
 
 
 %% ============================================================
@@ -1651,72 +2468,873 @@ while (1) {
 %% ============================================================
 \section{実行モデル詳細}\label{sec:execution}
 
-\subsection{割り込みハンドラ}
+\subsection{起動シーケンス}\label{sec:bootseq}
 
-割り込みハンドラ関数内で各モジュールの \texttt{update()} を呼び出す。
-\texttt{Pattern} 処理はクラス化せず、ハンドラ内にベタ書き（または関数化）する。
+\texttt{main()} の初期化順序には\textbf{守らないとハングする制約}が複数ある。
+順序を変更する場合は下表の理由を必ず確認すること。
 
-\begin{lstlisting}[caption={割り込みハンドラ実装例},label=lst:handler]
-// グローバルインスタンス
-static Onboard onboard;
-static Motor motor;
-static Servo servo;
+\begin{longtable}{c l p{78mm}}
+\toprule
+\textbf{\#} & \textbf{処理} & \textbf{順序の理由} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{\#} & \textbf{処理} & \textbf{順序の理由} \\
+\midrule
+\endhead
+1  & \texttt{runGlobalConstructors()} & \textbf{最初に実行必須}。\texttt{start.S} が
+     \texttt{\_\_libc\_init\_array()} を呼ばないため、これを飛ばすと全モジュールの
+     \texttt{\_config} が BSS のゼロのままになる (\hyperref[sec:ctors]{§\ref*{sec:ctors}}) \\
+2  & \texttt{SystemInit()}      & FPU / MMU / L1 キャッシュを有効化する。
+     この関数の中ではシリアル出力を行わないこと \\
+3  & \texttt{g\_onboard.init()} & 起動モード判定に \texttt{sw()} を使うため、
+     シリアルより先に GPIO を立ち上げる \\
+4  & \texttt{g\_serial.init()}  & 以降の初期化ログを出力するため早期に初期化する \\
+5  & 起動モード判定             & \texttt{g\_onboard.sw()} の結果で
+     デバッグモード / 走行モードを決める。カメラ初期化前なので結果をシリアルで確認できる \\
+6  & \texttt{initGIC()}         & \textbf{Camera より前に実行必須}。
+     VDC5 割り込みの登録が GIC に依存する (\hyperref[sec:gic]{§\ref*{sec:gic}}) \\
+7  & \texttt{g\_sdlogger.init()}& GIC の後・Camera の前。SPI 通信自体に割り込みは不要だが、
+     カメラより先に済ませて起動時間を短縮する \\
+8  & \texttt{g\_camera.init()}  & VDC5 / DVDEC を初期化しキャプチャを開始する \\
+9  & \texttt{g\_motor.init()}   & MTU2 ch3/4 のスタンバイ解除と PWM 設定 \\
+10 & \texttt{g\_servo.init()}   & MTU2 ch0 のスタンバイ解除と PWM 設定 \\
+11 & \texttt{g\_lineDetector.init()} & 偏差配列とフラグのクリア \\
+12 & \texttt{runLogicInit(g\_sys)}   & \texttt{sys.run.*} と初期出力指示のクリア \\
+13 & \texttt{initOSTM0()}       & \textbf{必ず最後}。下の注意ボックスを参照 \\
+14 & 動作モード別ループへ分岐   & \texttt{runDebugLoop()} または \texttt{runMainLoop()} \\
+\bottomrule
+\end{longtable}
 
-void interrupt_handler() {
-    // --- Input Phase ---
-    // encoder.read();
-    // camera.read();
+\begin{cautionbox}[initOSTM0() は必ず最後に呼ぶ]
+1ms 割り込みが動き出すと、ISR の Output フェーズが\textbf{毎 ms
+\texttt{Motor} と \texttt{Servo} を叩く}。
+\texttt{g\_motor.init()} / \texttt{g\_servo.init()} より前に OSTM0 を起動すると、
+MTU2 がスタンバイ状態のまま PWM レジスタへの書き込みが発生し、
+サーボ挙動の異常やバス例外によるハングを招く。
 
-    // --- Logic Phase (Pattern) ---
-    int sw = onboard.sw();
-    if (sw) {
-        motor.setPower(0.2f, 0.2f);  // PWM 20%
-        servo.setAngle(10.0f);       // 10度
-        onboard.setLed(0, 1);        // Red ON
-        onboard.setLed(1, 1);        // Green ON
-        onboard.setLed(2, 1);        // Blue ON
-    } else {
-        motor.setPower(0.0f, 0.0f);
-        servo.setAngle(0.0f);
-        onboard.setLed(0, 1);        // Red ON
-        onboard.setLed(1, 0);        // Green OFF
-        onboard.setLed(2, 0);        // Blue OFF
-    }
+この制約は EMA 化によって「Logic だけでなく Output フェーズも常時実行される」
+構造に変わったことで新たに生じたものである。
+\end{cautionbox}
 
-    // --- Output Phase ---
-    motor.update();
-    servo.update();
-    onboard.update();
-    // serial.update();
-    // sd.update();
+\begin{cautionbox}[GIC は Camera より前に初期化する]
+逆順にすると、カメラ初期化中に登録された VDC5 のレベルトリガ割り込みが
+GIC 無効のため発火せずに蓄積し、後から \texttt{CPSIE i} を実行した瞬間に
+一斉発火して\textbf{割り込みストーム}になる。
+詳細は \hyperref[sec:gic]{§\ref*{sec:gic}} を参照。
+\end{cautionbox}
+
+\subsection{3フェーズ割り込みハンドラ}\label{sec:isr}
+
+\texttt{generate/inthandler.c} の \texttt{INT\_Excep\_OSTMI0()} から
+\texttt{ostm0\_interrupt\_callback()} が呼ばれる。
+この関数が実質的なシステムの心臓部である。
+
+\begin{lstlisting}[caption={1ms 割り込みコールバック (mcr\_camera\_2026base.cpp)},label=lst:isr]
+void ostm0_interrupt_callback(void)
+{
+  g_timer_1ms++;    // ModuleTimer の時刻源
+  g_cnt_printf++;   // シリアル表示の間隔カウンタ
+
+  // ============ Input フェーズ ============
+  // ハードウェア -> SystemData
+  for (int i = 0; i < N_IN; ++i) {
+    if (s_inputModules[i]->enabled) s_inputModules[i]->updateInput(g_sys);
+  }
+
+  // ============ Logic フェーズ ============
+  // SystemData -> SystemData
+  if (!s_debugMode) {
+    applyDrivingPattern(g_sys);
+  } else {
+    // デバッグモードでも USER_LED は中央2点センサ反応で点灯させる
+    g_sys.ob.userLedCmd = (g_sys.line.sensorBin & 0x18) ? 1 : 0;
+  }
+
+  // ============ Output フェーズ ============
+  // SystemData -> ハードウェア
+  for (int i = 0; i < N_OUT; ++i) {
+    if (s_outputModules[i]->enabled) s_outputModules[i]->updateOutput(g_sys);
+  }
 }
 \end{lstlisting}
 
-\subsection{ラッチ方式ドライバの動作原理}
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{配列} & \textbf{登録モジュール} & \textbf{備考} \\
+\midrule
+\texttt{s\_inputModules[]}  & \texttt{g\_onboard}, \texttt{g\_camera} &
+  \texttt{g\_encoder} は現状未登録。\texttt{g\_lineDetector} は処理が重いためメインループ側 \\
+\texttt{s\_outputModules[]} & \texttt{g\_motor}, \texttt{g\_servo}, \texttt{g\_onboard} &
+  \texttt{g\_sdlogger} はバス制約のためメインループ側。\texttt{g\_serial} は即時出力のため登録不要 \\
+\bottomrule
+\end{tabularx}
+
+\begin{notebox}[Onboard は両方の配列に登録される]
+\texttt{g\_onboard} は Input（SW 読み取り）と Output（LED 反映）の両方を持つため、
+2つの配列の両方に登場する。同一インスタンスへのポインタである。
+\end{notebox}
+
+\begin{cautionbox}[1ms を超える処理が入る]
+XIP 環境では \texttt{Camera::updateInput()} の1ステップが約 8ms かかるため、
+実際の割り込み間隔は 1ms を守れず、\texttt{g\_timer\_1ms} は実時間より遅く進む
+(\hyperref[sec:xip]{§\ref*{sec:xip}})。
+フレーム処理が完了して Vfield 待ちに入る期間にメインループへ CPU 時間が返る構造で
+成立させている。時間精度が要求される処理をこの ISR に足さないこと。
+\end{cautionbox}
+
+\subsection{メインループと動作モード}\label{sec:mainloop}
+
+起動時のスイッチ状態で2つのモードに分岐する。
+判定は \texttt{main()} の早い段階（カメラ初期化前）で行うため、
+モード選択の結果をシリアルで確認できる。
+
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{起動時 SW} & \textbf{モード} & \textbf{ループ関数と動作} \\
+\midrule
+押されていない & 走行モード     & \texttt{runMainLoop()}。Logic フェーズが有効になり、
+  ライン検出・ログ記録・走行終了時の SD 保存を行う \\
+押されている   & デバッグモード & \texttt{runDebugLoop()}。Logic フェーズをスキップし、
+  カメラ画像を 0/1 のパターンでシリアルへ描画する \\
+\bottomrule
+\end{tabularx}
+
+\subsubsection{走行モード (runMainLoop)}
+
+\begin{enumerate}[nosep, leftmargin=*]
+  \item \texttt{sys.cam.frameReady} が立っていれば \texttt{false} に戻し、
+        \texttt{g\_lineDetector.updateInput(g\_sys)} を実行する
+  \item \texttt{g\_sdlogger.updateOutput(g\_sys)} を毎周期呼ぶ（走行中ログの自動記録）
+  \item \texttt{sys.run.finished} が立ったら1回だけモータ・サーボを停止させ、
+        \texttt{sys.sd.saveRequested = true} として SD へ書き出す
+  \item \texttt{g\_cnt\_printf} が \texttt{DEBUG\_PRINT\_INTERVAL\_MS}(200) に達したら
+        ステータス行（タイマー・フレーム数・パターン・ハンドル・各ラインフラグ・偏差・ログ数）を出力する
+\end{enumerate}
+
+\subsubsection{デバッグモード (runDebugLoop)}
+
+\begin{enumerate}[nosep, leftmargin=*]
+  \item フレーム完了時に \texttt{g\_lineDetector.updateInput(g\_sys)} を実行する（走行モードと同じ）
+  \item 200ms ごとに、閾値 \texttt{DEBUG\_THRESHOLD}(170) で2値化した
+        30--100 行（2行飛ばし）を ANSI エスケープ付きで描画する
+  \item 偏差が示すライン中心位置を黄色背景でハイライトする
+\end{enumerate}
+
+\begin{notebox}[シリアル出力の最適化]
+1ピクセルごとに \texttt{printf()} を呼ぶと \texttt{vsnprintf} のオーバーヘッドで
+1フレームあたり数千回の書式解析が発生し、描画が極端に遅くなる。
+現在の実装は\textbf{1行分を静的バッファ \texttt{lineBuf[]} に組み立ててから
+\texttt{print()} で一括送信}する方式に変更済みである。
+固定のヘッダ行も \texttt{print()} を使い、書式解析自体を回避している。
+\end{notebox}
+
+\subsection{出力反映のデータフロー}\label{sec:outputflow}
 
 \begin{figure}[H]
 \centering
 \begin{tikzpicture}[
   box/.style={draw=headerblue, fill=headerblue!8, rounded corners=2pt,
-              minimum width=32mm, minimum height=12mm, font=\small, align=center},
+              minimum width=30mm, minimum height=12mm, font=\small, align=center},
   data/.style={draw=accentblue, fill=accentblue!10, rounded corners=2pt,
-               minimum width=25mm, minimum height=9mm, font=\small\ttfamily, align=center},
+               minimum width=28mm, minimum height=11mm, font=\small\ttfamily, align=center},
   arr/.style={-{Stealth[length=3mm]}, thick, color=accentblue},
   lbl/.style={font=\scriptsize\color{gray}, above, midway},
 ]
 
-\node[box] (logic) {Logic Phase\\(Pattern)};
-\node[data, right=15mm of logic] (var) {\_pwmLeft\\\_pwmRight};
-\node[box, right=15mm of var] (update) {update()};
-\node[data, right=15mm of update] (hw) {MTU2\\レジスタ};
+\node[box] (logic) {Logic フェーズ\\applyDrivingPattern()};
+\node[data, right=13mm of logic] (var) {sys.mot.leftCmd\\sys.mot.rightCmd};
+\node[box, right=13mm of var] (update) {Output フェーズ\\updateOutput()};
+\node[data, right=13mm of update] (hw) {MTU2\\TGRC\_4 / TGRD\_4};
 
-\draw[arr] (logic) -- node[lbl]{setPower()} (var);
-\draw[arr] (var) -- node[lbl]{参照} (update);
-\draw[arr] (update) -- node[lbl]{書込み} (hw);
+\draw[arr] (logic) -- node[lbl]{代入} (var);
+\draw[arr] (var) -- node[lbl]{読出} (update);
+\draw[arr] (update) -- node[lbl]{書込} (hw);
 
 \end{tikzpicture}
-\caption{ラッチ方式ドライバのデータフロー}
-\label{fig:latch}
+\caption{Motor を例にした出力反映のデータフロー}
+\label{fig:outputflow}
 \end{figure}
 
+Logic フェーズはドライバのメソッドを一切呼ばず、
+\texttt{SystemData} の \texttt{*Cmd} メンバに\textbf{代入するだけ}である。
+実際のレジスタ書き込みは Output フェーズの \texttt{updateOutput()} でのみ発生する。
+この分離により、Logic の途中経過が物理出力へ漏れることがなくなり、
+Logic フェーズだけを PC 上でテストできる。
+
+%% ============================================================
+%% 9. パラメータ調整ガイド
+%% ============================================================
+\section{パラメータ調整ガイド}\label{sec:params}
+
+本章は \texttt{src/core/ProjectConfig.h} の実値を一覧化したものである。
+\textbf{走行調整は原則このファイルだけを編集する。}
+
+\begin{cautionbox}[値の正本は ProjectConfig.h]
+\texttt{RunLogic.h} や各ドライバヘッダの構造体宣言にはコメントで数値が併記されており、
+現在は \texttt{ProjectConfig.h} の実値と一致している。
+ただしこれは\textbf{あくまで参考であり、正本は常に \texttt{ProjectConfig.h} 側}である。
+
+過去に片方だけを更新して \texttt{RunLogicConfig} の 31 項目中 23 項目が食い違った実績があるため、
+\texttt{ProjectConfig.h} の値を変更したときは\textbf{ヘッダ側のコメントも必ず同時に更新する}こと。
+\end{cautionbox}
+
+\begin{notebox}[C++17 の inline const を使用]
+\texttt{ProjectConfig.h} は \texttt{inline const} でインスタンスを定義しているため、
+\textbf{C++17 以上でのコンパイルが必要}である。
+e2 studio のコンパイラ指定が古い場合は、
+\texttt{extern const} 宣言 + \texttt{ProjectConfig.cpp} での実体定義に切り替えること。
+\end{notebox}
+
+\subsection{RUN\_CONFIG --- 走行ロジック}\label{sec:params-run}
+
+\subsubsection{状態タイマー定数 [ms]}
+
+\begin{tabularx}{\textwidth}{l r X}
+\toprule
+\textbf{メンバ} & \textbf{実値} & \textbf{説明} \\
+\midrule
+\texttt{tLineSkipMs}         & 100    & クロス/ハーフラインの通過（読み飛ばし）時間 \\
+\texttt{tCrankMs}            & 250    & クランク旋回時間 \\
+\texttt{tLaneTurnMs}         & 250    & レーンチェンジ：寄せ時間 \\
+\texttt{tLaneStraightMs}     & 0      & レーンチェンジ：直進時間 \\
+\texttt{tLaneCounterMs}      & 250    & レーンチェンジ：戻し時間 \\
+\texttt{tCourseTimeoutMs}    & 120000 & コース1周想定のタイムアウト（120秒） \\
+\texttt{tBarWaitPreMs}       & 100    & \texttt{pattern 1} で前進開始までの待機 \\
+\texttt{tBarWaitPostMs}      & 100    & \texttt{pattern 2} で次へ進むまでの待機 \\
+\texttt{tAfterBarGoMs}       & 100    & \texttt{pattern 3} でバー後に加速する時間 \\
+\texttt{tHalfAfterTimeoutMs} & 100    & ハーフライン後のタイムアウト \\
+\texttt{tTraceLineEnableMs}  & 100    & 通常トレースでライン検出を有効化する経過時間 \\
+\texttt{tBarApproachWaitMs}  & 100    & \texttt{pattern 2} でハンドル制御を行うアシスト時間 \\
+\bottomrule
+\end{tabularx}
+
+\subsubsection{走行パラメータ}
+
+\begin{tabularx}{\textwidth}{l r X}
+\toprule
+\textbf{メンバ} & \textbf{実値} & \textbf{説明} \\
+\midrule
+\texttt{crankHandle}         & 30 & クランク旋回角度 [度] \\
+\texttt{crankMotorOut}       & 70 & クランク外輪のモータ出力 [\%] \\
+\texttt{crankMotorIn}        & 70 & クランク内輪のモータ出力 [\%] \\
+\texttt{laneHandle}          & 25 & レーンチェンジ寄せ角度 [度] \\
+\texttt{laneCounterHandle}   & 25 & レーンチェンジ戻し角度 [度] \\
+\texttt{laneMotorIn}         & 60 & レーンチェンジ内輪 [\%] \\
+\texttt{laneMotorOut}        & 60 & レーンチェンジ外輪 [\%] \\
+\texttt{laneStraightMotor}   & 60 & レーンチェンジ直進時のモータ出力 [\%] \\
+\texttt{laneCounterMotorIn}  & 60 & レーンチェンジ戻し内輪 [\%] \\
+\texttt{laneCounterMotorOut} & 60 & レーンチェンジ戻し外輪 [\%] \\
+\texttt{brakeTargetMotor}    & 60 & ブレーキ走行時の目標モータ出力 [\%] \\
+\texttt{approachMotorPower}  & 60 & スタートバーへ前進する際のモータ出力 [\%] \\
+\bottomrule
+\end{tabularx}
+
+\subsubsection{検出行}
+
+\begin{tabularx}{\textwidth}{l r X}
+\toprule
+\textbf{メンバ} & \textbf{実値} & \textbf{説明} \\
+\midrule
+\texttt{traceRow}    & 48 & 通常トレース時に偏差を取得する行 \\
+\texttt{approachRow} & 95 & スタート時に偏差を取得する行 \\
+\bottomrule
+\end{tabularx}
+
+\subsubsection{ハンドル計算ゲイン（最頻調整対象）}
+
+\begin{tabularx}{\textwidth}{l r X}
+\toprule
+\textbf{メンバ} & \textbf{実値} & \textbf{説明} \\
+\midrule
+\texttt{handleStraightAbsThreshold} & 0    & $|\mathit{dev}|$ がこの値以下なら直線扱い（ハンドル 0） \\
+\texttt{handleGentleAbsThreshold}   & 7    & $|\mathit{dev}|$ がこの値以下なら緩カーブ扱い \\
+\texttt{handleGainGentle}           & 0.24 & 緩カーブのゲイン \\
+\texttt{handleGainSharp}            & 0.24 & 急カーブのゲイン \\
+\texttt{handleGainNonNormal}        & 0.24 & \texttt{pattern != RP\_TRACE\_NORMAL} 時のゲイン \\
+\bottomrule
+\end{tabularx}
+
+\begin{notebox}[調整の入口はここ]
+\texttt{ProjectConfig.h} のコメントも「特に頻繁に調整するもの」として
+\texttt{handleGain*} 系、\texttt{crank*} / \texttt{lane*} 系、
+\texttt{LINE\_DETECTOR\_CONFIG.devBrightnessRatio} と各 \texttt{pattern*} を挙げている。
+現状は3つのゲインが同値 (0.24) だが、
+直線・緩カーブ・急カーブで個別に調整できる構造になっている。
+\end{notebox}
+
+\subsection{MOTOR\_CONFIG / SERVO\_CONFIG --- アクチュエータ}\label{sec:params-act}
+
+\begin{tabularx}{\textwidth}{l l r X}
+\toprule
+\textbf{Config} & \textbf{メンバ} & \textbf{実値} & \textbf{説明} \\
+\midrule
+\texttt{MOTOR\_CONFIG} & \texttt{pwmCycle}       & 33332 & PWM 周期カウント (1ms @ P0$\phi$/1) \\
+                       & \texttt{maxPower}       & 70    & \textbf{出力上限 [\%]。通常走行速度を直接決める} \\
+                       & \texttt{leftPwmPinFmt}  & 4     & P4\_4 (TIOC4A) \\
+                       & \texttt{rightPwmPinFmt} & 5     & P4\_5 (TIOC4B) \\
+                       & \texttt{leftDirPinFmt}  & 6     & P4\_6 \\
+                       & \texttt{rightDirPinFmt} & 7     & P4\_7 \\
+\midrule
+\texttt{SERVO\_CONFIG} & \texttt{pwmCycle}   & 33332 & PWM 周期カウント \\
+                       & \texttt{center}     & 3090  & 中心位置のパルス幅カウント（約 1.5ms） \\
+                       & \texttt{handleStep} & 23    & 1度あたりのカウント値 \\
+                       & \texttt{maxAngle}   & 40    & 舵角の絶対値上限 [度] \\
+                       & \texttt{pwmPinFmt}  & 0     & P4\_0 (TIOC0A) \\
+\bottomrule
+\end{tabularx}
+
+\subsection{LINE\_DETECTOR\_CONFIG --- ライン検出}\label{sec:params-line}
+
+\subsubsection{基本設定と偏差計算パラメータ}
+
+\begin{tabularx}{\textwidth}{l r X}
+\toprule
+\textbf{メンバ} & \textbf{実値} & \textbf{説明} \\
+\midrule
+\texttt{detectRowDefault}      & 57    & 検出行の既定値 \\
+\texttt{detectHeightDefault}   & 3     & 検出高さの既定値 \\
+\texttt{devBrightnessRatio}    & 0.87  & 偏差計算に使う最大輝度比（\textbf{頻出の調整対象}） \\
+\texttt{devMinasDiffTh}        & $-8$  & 偏差の負側の差分閾値 \\
+\texttt{devPlusDiffTh}         & 8     & 偏差の正側の差分閾値 \\
+\texttt{devOutlierThY}         & 5     & 外れ値判定に使う $y$ 方向の閾値 \\
+\texttt{devLeftDefaultX}       & 70    & 左側の既定 $x$ 座標 \\
+\texttt{devRightDefaultX}      & 90    & 右側の既定 $x$ 座標 \\
+\texttt{devBottomCenterOffset} & 10    & 最下行の中心オフセット \\
+\bottomrule
+\end{tabularx}
+
+\subsubsection{パターン別パラメータ}
+
+\begin{tabularx}{\textwidth}{l r r r X}
+\toprule
+\textbf{メンバ} & \textbf{Normal} & \textbf{Start} & \textbf{Other} & \textbf{説明} \\
+\midrule
+\texttt{crosslineWidth}      & 70   & 60   & $-1$  & $-1$ は実行時に \texttt{detectRow\_ + 20} を算出 \\
+\texttt{detectHeight}        & 3    & 10   & 3     & 検出に使う行の厚み \\
+\texttt{crossCountThreshold} & $-1$ & 59   & $-10$ & 負値は \texttt{crosslineWidth} との加算値 \\
+\texttt{brightnessRatio}     & 0.69 & 0.0  & 0.68  & 最大輝度に対する相対閾値 \\
+\texttt{brightnessAbs}       & 0    & 90   & 0     & $>0$ なら絶対閾値を優先 \\
+\texttt{centerWidth}         & 45   & 100  & 45    & センターライン判定幅 \\
+\bottomrule
+\end{tabularx}
+
+\vspace{2mm}
+適用条件は Normal が \texttt{pattern == 11}、Start が \texttt{pattern == 1} または \texttt{2}、
+Other がそれ以外である。
+
+\subsubsection{センターライン検出・8点センサ}
+
+\begin{tabularx}{\textwidth}{l r X}
+\toprule
+\textbf{メンバ} & \textbf{実値} & \textbf{説明} \\
+\midrule
+\texttt{centerRowNum}         & 47  & センターライン判定に使う行数 \\
+\texttt{centerCountThreshold} & 10  & センターライン判定の画素数閾値 \\
+\texttt{centerBrightnessAbs}  & 170 & センターライン判定の絶対輝度閾値 \\
+\texttt{sensorBinRow}         & 60  & 8点センサを取得する行 \\
+\texttt{sensorBinThreshold}   & 180 & 8点センサの閾値 \\
+\texttt{sensorBinDiff}        & 8   & 8点センサの差分閾値 \\
+\bottomrule
+\end{tabularx}
+
+\subsection{その他の Config}\label{sec:params-misc}
+
+\begin{longtable}{l l r p{62mm}}
+\toprule
+\textbf{Config} & \textbf{メンバ} & \textbf{実値} & \textbf{説明} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Config} & \textbf{メンバ} & \textbf{実値} & \textbf{説明} \\
+\midrule
+\endhead
+\texttt{CAMERA\_CONFIG}   & \texttt{pixelWidth}       & 160    & 水平ピクセル数 \\
+                          & \texttt{pixelHeight}      & 120    & 垂直ピクセル数 \\
+                          & \texttt{thresholdDefault} & 170    & 8点センサのデフォルト閾値 \\
+                          & \texttt{thresholdRow}     & 60     & 8点センサ取得行 \\
+                          & \texttt{thresholdDiff}    & 8      & 8点センサ閾値の差分 \\
+\midrule
+\texttt{ONBOARD\_CONFIG}  & \texttt{swPinFmt}         & 0      & P6\_0 \\
+                          & \texttt{ledUserPinFmt}    & 12     & P6\_12 \\
+                          & \texttt{ledRedPinFmt}     & 13     & P6\_13 \\
+                          & \texttt{ledGreenPinFmt}   & 14     & P6\_14 \\
+                          & \texttt{ledBluePinFmt}    & 15     & P6\_15 \\
+\midrule
+\texttt{ENCODER\_CONFIG}  & \texttt{filterN}          & 4      & 移動平均の段数 \\
+                          & \texttt{rcAlpha}          & 0.5    & RC フィルタ係数 \\
+                          & \texttt{aPinFmt}          & 0      & P1\_0 (TCLKA) \\
+                          & \texttt{bPinFmt}          & 10     & P1\_10 (TCLKB) \\
+\midrule
+\texttt{SERIAL\_CONFIG}   & \texttt{baud}             & 230400 & ボーレート [bps] \\
+                          & \texttt{txPinFmt}         & 3      & P6\_3 (TxD2) \\
+                          & \texttt{rxPinFmt}         & 2      & P6\_2 (RxD2) \\
+                          & \texttt{bufferSize}       & 512    & \texttt{vsnprintf} 用バッファ \\
+\midrule
+\texttt{SDCARD\_CONFIG}   & \texttt{csPinFmt}         & 4      & P8\_4 (CS) \\
+                          & \texttt{cdPinFmt}         & 8      & P7\_8 (CD) \\
+                          & \texttt{mosiPinFmt}       & 5      & P8\_5 \\
+                          & \texttt{misoPinFmt}       & 6      & P8\_6 \\
+                          & \texttt{sckPinFmt}        & 3      & P8\_3 \\
+\midrule
+\texttt{SDLOGGER\_CONFIG} & \texttt{maxEntries}       & 4000   & ログバッファのエントリ数 \\
+                          & \texttt{imageWidth}       & 160    & 画像1行記録時の幅 \\
+                          & \texttt{recordImageRow}   & 45     & 画像・偏差を記録する行 \\
+                          & \texttt{patternMinForLog} & 11     & 記録開始パターン (\texttt{RP\_TRACE\_NORMAL}) \\
+                          & \texttt{finishPattern}    & 101    & 記録対象外パターン (\texttt{RP\_FINISH}) \\
+\bottomrule
+\end{longtable}
+
+\begin{notebox}[SDCardConfig だけ include 経路が違う]
+\texttt{SDCard} には \texttt{\{Module\}Data} が存在しないため、
+\texttt{SystemData.h} は \texttt{SDCard.h} を include しない。
+そのため \texttt{ProjectConfig.h} が \texttt{SDCard.h} を個別に include して
+\texttt{SDCardConfig} 型を取得している。
+\end{notebox}
+
+%% ============================================================
+%% 10. ベアメタル固有の実装知見
+%% ============================================================
+\section{ベアメタル固有の実装知見}\label{sec:baremetal}
+
+本章は mbed OS が肩代わりしていた処理を自前で用意するにあたって判明した、
+このプロジェクト固有の技術的な前提をまとめる。
+いずれも\textbf{知らずに触ると起動しなくなる}類のものである。
+
+\subsection{XIP 実行と命令フェッチ制約}\label{sec:xip}
+
+本プロジェクトは SPI フラッシュ（\texttt{0x1800xxxx}）上のコードを
+RAM へ展開せずに直接実行する XIP モードで動作する。
+
+SPIBSC（SPI バスコントローラ）のプリフェッチバッファは 32 バイトしかなく、
+\textbf{ループの後方分岐でバッファが無効化される}ため、
+ループの反復ごとに SPI フラッシュから命令を再フェッチすることになる。
+その結果、\texttt{Camera::imageCopy()} の内側ループ（9600 バイトのコピー）だけで
+推定 7--8ms を要し、OSTM0 の 1ms 周期を大幅に超過する。
+
+\begin{cautionbox}[割り込み内に重いループを置かない]
+1ms 割り込みの中で 1ms を超える処理を行うと、コールバック実行中に次の割り込みが保留され、
+コールバック終了と同時に再発火する。CPU が 100\% 割り込み処理に占有され、
+メインループが一切実行されなくなる。
+
+現在は \texttt{Camera} のフレーム処理を4ステップに分割し
+(\hyperref[sec:api-camera]{§\ref*{sec:api-camera}})、
+処理完了後の Vfield 待ち期間にメインループへ CPU 時間を返すことで成立させている。
+\end{cautionbox}
+
+\subsection{MMU / L1 キャッシュの有効化}\label{sec:mmu}
+
+\texttt{src/system/system\_init.c} の \texttt{SystemInit()} は
+mbed OS の \texttt{system\_RZ\_A1H.c} を移植したもので、\texttt{main()} の冒頭で呼ぶ。
+
+\begin{enumerate}[nosep, leftmargin=*]
+  \item \texttt{\_\_FPU\_Enable()} --- VFPv3 有効化（\texttt{FPEXC.EN = 1}）
+  \item \texttt{CPG.SYSCR3 = 0x0F} --- SRAM 全バンクの書き込み許可
+  \item TLB / 分岐予測配列 / 命令キャッシュの無効化とデータキャッシュの全無効化
+  \item \texttt{MMU\_CreateTranslationTable()}（\texttt{mmu\_rzA1H.c}）
+  \item \texttt{MMU\_Enable()} --- \texttt{SCTLR.M = 1}, \texttt{SCTLR.AFE = 1}
+  \item \texttt{L1C\_EnableCaches()} --- I-cache + D-cache 有効化
+  \item \texttt{L1C\_EnableBTAC()} --- 分岐ターゲットアドレスキャッシュ有効化
+\end{enumerate}
+
+mbed OS が行っていた \texttt{RZ\_A1\_InitClock()} / \texttt{RZ\_A1\_InitBus()} は
+ブートローダーが設定済みのため省略し、
+GIC の初期化は \texttt{initGIC()} で別途行う。L2 キャッシュは未使用である。
+
+\begin{cautionbox}[SystemInit() の中でシリアル出力をしないこと]
+キャッシュと MMU の切り替え中にペリフェラルへアクセスすると挙動が不定になる。
+初期化ログは \texttt{SystemInit()} が戻ってから出力する。
+\end{cautionbox}
+
+\begin{notebox}[XIP の制約はキャッシュ有効化後も残っている]
+L1 命令キャッシュが有効になれば、原理的には2回目以降のループ反復は
+キャッシュから供給されるはずである。
+しかし現在も \texttt{Camera} の4ステップ分割が必要な状態であることから、
+\hyperref[sec:xip]{§\ref*{sec:xip}} の制約は実効的に解消していないと考えられる。
+\textbf{実際の処理時間を実機で計測して見直す余地がある}。
+\end{notebox}
+
+\subsection{グローバル C++ コンストラクタの手動実行}\label{sec:ctors}
+
+\texttt{generate/start.S} は \texttt{HardwareSetup()} の後に \texttt{main()} を直接呼び、
+\textbf{\texttt{\_\_libc\_init\_array()} を呼ばない}。
+一方 GCC 13 はグローバルコンストラクタを \texttt{.init\_array} セクションへ出力するため、
+何もしなければ\textbf{グローバル ctor が一切実行されない}。
+
+対策として次の2点を実装している。
+
+\begin{enumerate}[nosep, leftmargin=*]
+  \item \texttt{generate/linker\_script.ld} に \texttt{.init\_array} の収集と
+        \texttt{\_\_init\_array\_start} / \texttt{\_\_init\_array\_end} ラベルの定義を追加
+  \item \texttt{main()} の冒頭で \texttt{runGlobalConstructors()} を呼び、
+        両ラベル間のポインタを手動で反復実行
+\end{enumerate}
+
+\begin{lstlisting}[caption={グローバルコンストラクタの手動実行},label=lst:ctors]
+extern "C" {
+  typedef void (*ctor_fn)(void);
+  extern ctor_fn __init_array_start[];
+  extern ctor_fn __init_array_end[];
+}
+
+static void runGlobalConstructors(void)
+{
+  for (ctor_fn *p = __init_array_start; p < __init_array_end; ++p) {
+    (*p)();
+  }
+}
+\end{lstlisting}
+
+\begin{cautionbox}[EMA 化で初めて顕在化した不具合]
+EMA 化以前は各ドライバが \texttt{static const} しか使っておらず、
+ctor の中身が空でも問題にならなかったため症状が出なかった。
+Config 注入で \texttt{\_config} メンバが増えたことにより、
+「ctor が走らない $\rightarrow$ \texttt{\_config} が BSS ゼロのまま」となり、
+\textbf{Servo の PWM 出力が 0（ペリフェラルのロック）}、
+\textbf{LineDetector の全閾値が 0（検出の全崩壊）}といった致命的な不具合になった。
+
+新しいグローバルインスタンスを追加し、内部状態を ctor 初期化リストに置いた時点で
+この仕組みに依存することになる点を忘れないこと。
+\end{cautionbox}
+
+\subsection{ベアメタル向けダミーシンボル}\label{sec:dummysym}
+
+グローバル ctor を有効化すると GCC が以下のシンボルを参照するようになるが、
+ベアメタル環境（newlib stubs 不使用・dynamic loader 無し）ではいずれも意味を持たない。
+リンクを通すためダミーで定義している。
+
+\begin{tabularx}{\textwidth}{l X}
+\toprule
+\textbf{シンボル} & \textbf{扱い} \\
+\midrule
+\texttt{\_\_dso\_handle} & \texttt{\_\_cxa\_atexit()} 用の DSO ハンドル。
+  単一実行像のため任意の固定値でよい \\
+\texttt{\_fini}          & \texttt{\_\_libc\_fini\_array()} が呼ぶ関数。
+  本プロジェクトは \texttt{exit} に到達しないため空実装 \\
+\texttt{\_\_cxa\_atexit} & 静的デストラクタの登録。常に成功扱い（0 を返す）で何もしない \\
+\bottomrule
+\end{tabularx}
+
+\subsection{GIC 割り込みディスパッチと VBAR}\label{sec:gic}
+
+\subsubsection{IRQ ディスパッチャの実装}
+
+\texttt{generate/inthandler.c} の \texttt{INT\_Excep\_IRQ()} は生成時点では空関数であり、
+そのままでは割り込みが発生してもハンドラが実行されず、
+GIC 側の割り込み要求もクリアされない。
+Cortex-A9 向けの正しいディスパッチロジックを手動で追加している。
+
+\begin{enumerate}[nosep, leftmargin=*]
+  \item \texttt{INTC.ICCIAR} を読んで割り込み要因 ID を取得する
+  \item 動的 IRQ ハンドラテーブル \texttt{g\_irq\_handlers[256]} から該当ハンドラを呼ぶ
+  \item \texttt{INTC.ICCEOIR} へ書き込んで EOI（End of Interrupt）を通知する
+\end{enumerate}
+
+\subsubsection{VBAR の初期化}
+
+Cortex-A9 は「自前の割り込みベクタテーブルがどこにあるか」を
+VBAR（Vector Base Address Register）で知る。
+未設定だと割り込み発生時にデフォルトの \texttt{0x00000000} 付近（BootROM 等）へ飛んでフリーズする。
+\texttt{generate/start.S} に次の1命令を追加して \texttt{vector\_table} のアドレスを登録している。
+
+\begin{center}
+\texttt{mcr p15, 0, r0, c12, c0, 0}
+\end{center}
+
+\subsubsection{IRQ モードのスタックポインタ}
+
+Cortex-A9 は割り込み時に自動で IRQ モードへ遷移するが、
+IRQ モード用の SP が初期化されていないと、
+C 言語のハンドラがローカル変数を使った瞬間にクラッシュする。
+\texttt{start.S} で 4KB の IRQ 専用スタックを確保している。
+
+\subsubsection{GIC グローバル有効化の順序}
+
+\texttt{initGIC()} は GIC ディストリビュータ（\texttt{ICDDCR}）、
+CPU インターフェース（\texttt{ICCICR}）、割り込み優先度マスク（\texttt{ICCPMR}）を有効化し、
+\texttt{CPSIE i} で CPU の IRQ を許可する。
+これを\textbf{カメラ初期化より前}に実行しなければならない。
+
+\begin{cautionbox}[順序を誤ると割り込みストームでハングする]
+カメラ初期化中に VDC5 割り込み（VSYNC / VFIELD, GIC ID 75--97）が
+レベルトリガとして GIC に登録されるが、GIC が未有効だと発火しない。
+このとき \texttt{WaitVsync(1)} / \texttt{WaitVfield(2)} は割り込みではなく
+タイムアウトで抜けている。
+
+その後に GIC を有効化して \texttt{CPSIE i} を実行した瞬間、
+蓄積されたレベルトリガ割り込みが一斉に発火する。
+VDC5 割り込み（優先度 0x28）は OSTM0（優先度 0x80）より高優先度のため、
+OSTM0 を常に横取りし続け、CPU が割り込み処理から抜けられなくなる。
+
+mbed OS ではブートコードが GIC / IRQ を先に有効化しているため、この問題は起きない。
+\end{cautionbox}
+
+\subsection{OSTM0 の設定手順}\label{sec:ostm}
+
+\texttt{initOSTM0()} は 1ms インターバルタイマーを設定する。
+順序と設定値の両方に落とし穴がある。
+
+\begin{tabularx}{\textwidth}{l X}
+\toprule
+\textbf{手順} & \textbf{内容と注意点} \\
+\midrule
+スタンバイ解除 & \texttt{CPG.STBCR5} の bit1 をクリアする \\
+タイマー停止   & \texttt{OSTMnTT = 0x01}。
+  \textbf{\texttt{OSTMnTE} が 0 になるまで待つこと}。
+  完全に停止していない状態で \texttt{OSTMnCMP} を書き換えても\textbf{値が無視される} \\
+周期設定       & \texttt{OSTMnCMP = 33333}（P0$\phi$ = 33.33MHz で 1ms） \\
+モード設定     & \texttt{OSTMnCTL = 0x01}。
+  \textbf{\texttt{MD0 = 1} が「コンペアマッチごとに割り込み」}。
+  \texttt{0x00}（\texttt{MD0 = 0}）は「カウント開始時のみ」の単発動作になる \\
+GIC 設定       & \texttt{ICDICER4} / \texttt{ICDICPR4} / \texttt{ICDISER4} で OSTM0 を有効化。
+  \texttt{ICDICFR8} で\textbf{エッジトリガ}に設定する（GIC の既定はレベルトリガだが
+  OSTM0 はパルス状のエッジ割り込みを発行する） \\
+優先度 / ターゲット & \texttt{ICDIPR33} に 0x80、\texttt{ICDIPTR33} に 0x01 \\
+カウント開始   & \texttt{OSTMnTS = 0x01} \\
+\bottomrule
+\end{tabularx}
+
+\subsection{SCIF2 ボーレートのクロックソース}\label{sec:scif}
+
+SCIF のボーレートジェネレータが使うのは P0$\phi$（33.33MHz）ではなく
+\textbf{P1$\phi$（66.67MHz）}である。
+これを取り違えると実効ボーレートが約2倍ずれて文字化けする。
+
+\begin{align*}
+  B &= \frac{P1\phi}{8 \times (\mathtt{SCBRR} + 1)}
+     = \frac{66666666}{8 \times 36} = 231481 \approx 230400\ \mathrm{bps} \quad (\text{誤差}\ 0.47\%)
+\end{align*}
+
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{レジスタ} & \textbf{設定値} & \textbf{意味} \\
+\midrule
+\texttt{SCSMR} & 0x0000 & 8bit データ / ストップ1 / パリティなし \\
+\texttt{SCEMR} & 0x0081 & \texttt{BGDM = 1}(bit7), \texttt{ABCS = 1}(bit0) $\rightarrow$ 除算比 8 \\
+\texttt{SCBRR} & 35     & mbed の \texttt{DL = (P1CLK + 4*baud) / (8*baud) - 1} と同一 \\
+\texttt{SCSCR} & 0x0030 & \texttt{TE = 1}, \texttt{RE = 1}（送受信有効化） \\
+\bottomrule
+\end{tabularx}
+
+\begin{cautionbox}[STBCR4 は8ビットレジスタ]
+SCIF2 のモジュールストップ解除は \texttt{STBCR4} の \textbf{bit 5} である。
+かつて \texttt{\textasciitilde(1 << 14)} と書いていた時期があり、
+\texttt{uint8\_t} への代入で \texttt{0xFF} に切り詰められた結果、
+モジュールストップが解除されないまま SCIF2 のレジスタにアクセスして
+バスエラー / データアボートで全動作が停止していた。
+mbed の \texttt{MBRZA1H.h} が \texttt{CPG\_STBCR4\_BIT\_MSTP45 = 0x20} と定義しているとおり、
+\texttt{\textasciitilde(1 << 5)} が正しい。
+\end{cautionbox}
+
+\begin{notebox}[ステータスレジスタは W0C 方式でクリアする]
+\texttt{SCFSR} は直接代入（\texttt{= 0x0000}）ではなく、
+\texttt{\&= \textasciitilde0x00F3} のように「1 を読んで 0 を書く」方式でクリアすること。
+\end{notebox}
+
+\subsection{VDC5 / DVDEC の初期化}\label{sec:vdc5}
+
+\subsubsection{DisplayBase API の採用}
+
+当初は VDC5 / DVDEC をレジスタ直叩きで初期化していたが、
+設定値がほぼ 0 のままでカメラが正しく初期化されなかった。
+実績のある \texttt{mbed-gr-libs} の \texttt{gr\_peach\_vdc5.c} を取り込み、
+高レベル API（\texttt{Graphics\_init}, \texttt{Graphics\_Video\_init},
+\texttt{Video\_Write\_Setting}）を呼ぶ方式へ全面的に置き換えている。
+これに伴い \texttt{pinmap.h} / \texttt{mbed\_assert.h} 等の
+mbed OS 依存ダミーヘッダを \texttt{src/drivers/video/} に追加している。
+
+\subsubsection{LVDS PLL エラー (error = 6) の回避}
+
+LCD を使わずカメラ専用で使う構成では、
+\texttt{R\_VDC5\_Initialize} がエラーコード 6（\texttt{VDC5\_ERR\_PARAM\_EXCEED\_RANGE}）を返し、
+\texttt{Graphics\_init} が失敗する問題があった。
+
+\textbf{原因:} \texttt{lcd\_type} が \texttt{PARALLEL\_RGB}（非 LVDS）でも
+\texttt{panel\_icksel} が \texttt{VDC5\_PANEL\_ICKSEL\_LVDS} のまま残り、
+さらに \texttt{lvds\_pll\_calc()} が計算した PLL パラメータ（\texttt{double} 型の \texttt{nfd} 等）を
+\texttt{uint16\_t} に変換する際、ベアメタル環境での浮動小数点演算結果が禁止範囲に入り、
+LVDS PLL フィードバック分周値（NFD）の範囲チェックに引っかかっていた。
+
+\textbf{対策:} LCD 未使用時は \texttt{panel\_icksel = VDC5\_PANEL\_ICKSEL\_PERI}
+（P1 ペリフェラルクロック）を使用し、\texttt{init.lvds = NULL} として
+LVDS PLL の初期化自体をスキップする。
+カメラの NTSC キャプチャに LVDS PLL は不要で、P1 クロックで十分動作する。
+
+\subsection{generate/ の手動修正箇所}\label{sec:generate}
+
+\texttt{generate/} は e2 studio の自動生成ディレクトリだが、
+以下は手動で修正している。
+\textbf{コード生成を再実行するとこれらの修正が上書きされる}ため注意すること。
+
+\begin{tabularx}{\textwidth}{l X}
+\toprule
+\textbf{ファイル} & \textbf{手動修正の内容} \\
+\midrule
+\texttt{inthandler.c} & 動的 IRQ ハンドラテーブル \texttt{g\_irq\_handlers[256]}（VDC5 割り込み用）の追加。
+  \texttt{INT\_Excep\_IRQ()} に ICCIAR 読み取り $\rightarrow$ ハンドラ呼び出し $\rightarrow$
+  ICCEOIR 書き込みを実装。
+  \texttt{INT\_Excep\_OSTMI0()} から \texttt{ostm0\_interrupt\_callback()} を呼ぶ処理を追加 \\
+\texttt{interrupt\_handlers.h} & 個別ペリフェラル割り込みハンドラから
+  \texttt{\_\_attribute\_\_((interrupt))} を削除し \texttt{\_\_attribute\_\_((used))} のみにする
+  （下記の注意ボックスを参照）。上位の基本例外 IRQ / FIQ / SWI は変更しない \\
+\texttt{linker\_script.ld} & \texttt{.init\_array} の収集と
+  \texttt{\_\_init\_array\_start} / \texttt{\_\_init\_array\_end} ラベルの定義を追加 \\
+\texttt{start.S} & VBAR の設定と IRQ モード用スタック（4KB）の確保を追加 \\
+\bottomrule
+\end{tabularx}
+
+\begin{cautionbox}[\_\_attribute\_\_((interrupt)) による二重リターン]
+ARM Cortex-A のコンパイラは \texttt{\_\_attribute\_\_((interrupt))} を付けた関数を、
+通常の \texttt{bx lr} ではなく割り込み専用の戻り命令 \texttt{subs pc, lr, \#4} でコンパイルする。
+
+本プロジェクトでは\textbf{最上位の IRQ ハンドラがすでにこの特殊な戻り処理を行っており}、
+\texttt{INT\_Excep\_OSTMI0()} 等の個別ハンドラは単なる C 関数として呼ばれる。
+それにもかかわらず属性が付いていたため、
+普通の C 関数として呼ばれたのに割り込み用の戻り命令を実行してしまい、
+PC が不正なアドレスへ飛んでクラッシュしていた。
+\end{cautionbox}
+
+\subsection{DevContainer によるドキュメントビルド}\label{sec:devcontainer}
+
+\texttt{doc/main.tex} のコンパイル環境は \texttt{.devcontainer/} に定義してある。
+VS Code で本プロジェクトを開き「Dev Containers: Reopen in Container」を実行すれば、
+どの環境でも同一条件でビルドできる。
+ビルドチェーンは \texttt{doc/.latexmkrc} に定義した uplatex + dvipdfmx である。
+
+%% ============================================================
+%% 付録A. 不具合と対策の記録
+%% ============================================================
+\appendix
+\section{不具合と対策の記録}\label{sec:troubleshooting}
+
+旧仕様書 \texttt{mcr\_camera\_2026base\_SPEC.md} に記録されていた修正履歴を、
+症状から原因へ辿れる形に再構成したものである。
+同種の症状に遭遇したときの参照先として残す。
+
+\subsection{起動・割り込み系}
+
+\begin{longtable}{p{40mm} p{55mm} p{55mm}}
+\toprule
+\textbf{症状} & \textbf{原因} & \textbf{対策} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{症状} & \textbf{原因} & \textbf{対策} \\
+\midrule
+\endhead
+LED も点滅せず割り込みが一切動かない &
+  \texttt{INT\_Excep\_IRQ()} が空実装で、GIC の割り込み要求もクリアされない &
+  ICCIAR 読み取り $\rightarrow$ ハンドラ呼び出し $\rightarrow$ ICCEOIR 書き込みを実装
+  (\hyperref[sec:gic]{§\ref*{sec:gic}}) \\
+割り込み発生時にフリーズする &
+  VBAR が未設定で、CPU がデフォルトの \texttt{0x00000000} 付近へ飛ぶ &
+  \texttt{start.S} で \texttt{mcr p15, 0, r0, c12, c0, 0} により VBAR を設定 \\
+ハンドラ内でローカル変数を使うとクラッシュ &
+  IRQ モードのスタックポインタが未初期化 &
+  \texttt{start.S} で 4KB の IRQ 専用スタックを確保 \\
+ハンドラから戻る瞬間にクラッシュ &
+  個別ハンドラに \texttt{\_\_attribute\_\_((interrupt))} が付いており、
+  通常の C 関数として呼ばれたのに割り込み用の戻り命令を実行 &
+  個別ハンドラの属性を \texttt{\_\_attribute\_\_((used))} のみに変更
+  (\hyperref[sec:generate]{§\ref*{sec:generate}}) \\
+割り込み周期が設定値の 10 倍速い &
+  \texttt{OSTMnTE} が 0 になる前に \texttt{OSTMnCMP} を書き換え、値が無視されていた &
+  \texttt{OSTMnTT} で停止要求後、\texttt{OSTMnTE == 0} をポーリングしてから書き込む
+  (\hyperref[sec:ostm]{§\ref*{sec:ostm}}) \\
+割り込みが1回しか発生しない &
+  \texttt{OSTMnCTL = 0x00}（\texttt{MD0 = 0}）はカウント開始時のみの単発動作 &
+  \texttt{OSTMnCTL = 0x01}（\texttt{MD0 = 1}）に修正 \\
+GIC がエッジ割り込みを取りこぼす &
+  GIC の既定はレベルトリガだが OSTM0 はパルス状のエッジ割り込みを発行する &
+  \texttt{ICDICFR8} で OSTM0 (IRQ134) をエッジトリガに設定 \\
+「カメラ初期化完了」の後に完全フリーズ &
+  蓄積された VDC5 レベルトリガ割り込みが \texttt{CPSIE i} で一斉発火し、
+  優先度 0x28 の VDC5 が優先度 0x80 の OSTM0 を横取りし続ける &
+  GIC のグローバル有効化を \texttt{initGIC()} に分離し、
+  カメラ初期化より前に実行 (\hyperref[sec:gic]{§\ref*{sec:gic}}) \\
+サーボ出力が 0 / ライン検出が全崩壊 &
+  \texttt{start.S} が \texttt{\_\_libc\_init\_array()} を呼ばず、
+  グローバル ctor が実行されないため \texttt{\_config} が BSS ゼロのまま &
+  \texttt{main()} 冒頭で \texttt{runGlobalConstructors()} を実行
+  (\hyperref[sec:ctors]{§\ref*{sec:ctors}}) \\
+\bottomrule
+\end{longtable}
+
+\subsection{シリアル通信系}
+
+\begin{longtable}{p{40mm} p{55mm} p{55mm}}
+\toprule
+\textbf{症状} & \textbf{原因} & \textbf{対策} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{症状} & \textbf{原因} & \textbf{対策} \\
+\midrule
+\endhead
+書き込み後に LED 点滅を含む全動作が停止 &
+  \texttt{STBCR4} は 8bit レジスタなのに \texttt{\textasciitilde(1 << 14)} を代入し、
+  \texttt{0xFF} に切り詰められてモジュールストップが解除されないままアクセス &
+  \texttt{\textasciitilde(1 << 5)} に修正。
+  \texttt{SCFSR} のクリアも W0C 方式に変更 (\hyperref[sec:scif]{§\ref*{sec:scif}}) \\
+TeraTerm に何も表示されない &
+  P3\_0 / P3\_2 は SCIF2 の代替ピンとしては正しいが、
+  DAPLink 基板には物理接続されていない &
+  P6\_3 (TxD2) / P6\_2 (RxD2) の Alt7 に変更 \\
+230400bps 設定で文字化けする &
+  \texttt{SCEMR = 0x0080}(\texttt{ABCS = 0}) + \texttt{BRR = 8} で
+  実効 \texttt{P1}$\phi/(16 \times 9) = 462963$bps となり約2倍ずれていた &
+  \texttt{SCEMR = 0x0081}, \texttt{SCBRR = 35} に修正
+  (\hyperref[sec:scif]{§\ref*{sec:scif}}) \\
+シリアル出力が非常に遅い &
+  1ピクセルごとの \texttt{printf} 呼び出し（1フレーム 5600 回の \texttt{vsnprintf}） &
+  行単位で静的バッファに組み立て \texttt{print()} で一括出力、
+  ボーレートを 230400 に統一 \\
+\bottomrule
+\end{longtable}
+
+\subsection{カメラ系}
+
+\begin{longtable}{p{40mm} p{55mm} p{55mm}}
+\toprule
+\textbf{症状} & \textbf{原因} & \textbf{対策} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{症状} & \textbf{原因} & \textbf{対策} \\
+\midrule
+\endhead
+\texttt{Graphics\_init} が error = 6 を返す &
+  非 LVDS 構成でも \texttt{panel\_icksel} が LVDS のまま残り、
+  LVDS PLL の NFD 範囲チェックに引っかかる &
+  \texttt{panel\_icksel = VDC5\_PANEL\_ICKSEL\_PERI} かつ \texttt{init.lvds = NULL}
+  (\hyperref[sec:vdc5]{§\ref*{sec:vdc5}}) \\
+カメラが正しく初期化されない &
+  レジスタ直叩き実装の初期化値がほぼ 0 のままだった &
+  \texttt{mbed-gr-libs} の \texttt{DisplayBase} API に全面的に置き換え \\
+カメラ出力がぐちゃぐちゃ &
+  \texttt{imageCopy} が VDC5 の未書き込みバッファを読んでいた &
+  VDC5 の書き込み先バッファを直接読むように変更 \\
+同じ画像が表示され続ける &
+  フレーム処理中の Vfield 変化で \texttt{frameStep\_} が 0 にリセットされ続け、
+  \texttt{extractBrightness} に到達しない &
+  処理中（ステップ 0--3）は Vfield 変化を無視し、
+  完了後にのみ次の Vfield を待つ (\hyperref[sec:api-camera]{§\ref*{sec:api-camera}}) \\
+画像が乱れる &
+  4ステップの合計が Vfield 間隔（16.7ms）を超え、
+  \texttt{imageCopy} と \texttt{extractBrightness} が異なるフィールド値を使う &
+  ステップ0で \texttt{capturedField\_} にキャプチャし、
+  4ステップ全体で同じ値を使用 \\
+フレーム更新が不安定 / 停止する &
+  カメラ更新をメインループで行うと、
+  シリアル出力中（約 250ms）にフレーム更新が止まる &
+  \texttt{g\_camera.updateInput()} を 1ms 割り込み内へ戻し、
+  処理完了後の Vfield 待ち期間にメインループへ CPU を返す構造にする \\
+「タイマー開始」の後に何も出力されない &
+  XIP 環境で \texttt{imageCopy} が 7--8ms かかり、
+  CPU が 100\% 割り込み処理に占有される &
+  フレーム処理を4ステップに分割 (\hyperref[sec:xip]{§\ref*{sec:xip}}) \\
+\bottomrule
+\end{longtable}
+
 \end{document}
+
