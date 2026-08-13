@@ -2670,12 +2670,13 @@ Logic フェーズだけを PC 上でテストできる。
 本章は \texttt{src/core/ProjectConfig.h} の実値を一覧化したものである。
 \textbf{走行調整は原則このファイルだけを編集する。}
 
-\begin{cautionbox}[ヘッダのコメント値は信用しないこと]
-\texttt{RunLogic.h} や各ドライバヘッダの構造体宣言に付いているコメントの数値
-（例: \texttt{unsigned long tCrankMs; // 440}）は、
-参考プロジェクトから移植した当時の値がそのまま残っているものが多く、
-\textbf{現在の実値とは一致しない}。
-実値の正本は常に \texttt{ProjectConfig.h} 側である。
+\begin{cautionbox}[値の正本は ProjectConfig.h]
+\texttt{RunLogic.h} や各ドライバヘッダの構造体宣言にはコメントで数値が併記されており、
+現在は \texttt{ProjectConfig.h} の実値と一致している。
+ただしこれは\textbf{あくまで参考であり、正本は常に \texttt{ProjectConfig.h} 側}である。
+
+過去に片方だけを更新して \texttt{RunLogicConfig} の 31 項目中 23 項目が食い違った実績があるため、
+\texttt{ProjectConfig.h} の値を変更したときは\textbf{ヘッダ側のコメントも必ず同時に更新する}こと。
 \end{cautionbox}
 
 \begin{notebox}[C++17 の inline const を使用]
