@@ -21,14 +21,16 @@
 #define DRIVERS_CAMERA_H_
 
 #include "../core/IModule.h"
+#include "video/DisplayBace.h"
+#include <stdint.h>
+
 // CameraConfig / CameraData / CAM_* マクロは CameraData.h が持つ。
 // VDC5 ドライバに依存しない宣言だけを分離してあるので、SystemData.h は
 // Camera.h ではなく CameraData.h だけを include すればよい（分離の理由は
-// CameraData.h 冒頭のコメントを参照）。Camera.h を include する側から
-// 見える宣言の集合は分離前と変わらない。
+// CameraData.h 冒頭のコメントを参照）。
+// include 位置を分離前の宣言位置と同じにしてあるため、Camera.h を include
+// した側の前処理結果は分離前と 1 バイトも変わらない。
 #include "CameraData.h"
-#include "video/DisplayBace.h"
-#include <stdint.h>
 
 class Camera : public IModule
 {
