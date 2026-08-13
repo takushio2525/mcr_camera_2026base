@@ -1,17 +1,40 @@
 # mcr_camera_2026base
 
-GR-PEACH (RZ/A1H) をベースとしたマイクロマウス／ロボットカメラーカー向け制御用ベースプロジェクト。
-割り込み駆動のアーキテクチャを採用し、クラスベースの `init`/`update` パターンによるモダンな組み込み開発基盤を提供します。
+GR-PEACH (RZ/A1H) をベースとした**マイコンカーラリー (MCR) カメラクラス**向け制御用ベースプロジェクト。
+mbed OS を使わず `iodefine.h` でレジスタを直接操作するベアメタル環境で、1ms タイマー割り込みによる
+3 フェーズ実行モデル（Input → Logic → Output）を提供します。全モジュールは共通インターフェース
+`IModule`（`init` / `updateInput` / `updateOutput`）を実装し、モジュール間のデータ受け渡しは
+共有構造体 `SystemData` に集約しています。
 
 ## 環境構築
 
 ### 開発環境（ファームウェアビルド）
 
 - **IDE:** Renesas e2 studio
-- **コンパイラ:** GCC for Renesas ARM
+- **コンパイラ:** GNU Arm Embedded Toolchain（`arm-none-eabi-gcc` / `arm-none-eabi-g++` **13.3.1**）
 - **ターゲット:** GR-PEACH (RZ/A1H, ARM Cortex-A9)
 
-e2 studio でプロジェクトを開き、HardwareDebug 構成でビルドしてください。
+e2 studio でプロジェクトを開き、**HardwareDebug** 構成でビルドしてください。
+
+#### ビルド検証環境
+
+ビルドが通ることを確認済みの組み合わせです。バージョン差でビルドが通らなくなることがあるため、
+別環境で再構築する場合はまずこの組み合わせを再現してください。
+
+| 項目 | 確認済みの値 |
+|------|--------------|
+| IDE | Renesas e2 studio（**バージョン確認中** — 判明したら追記） |
+| ビルド構成 | `HardwareDebug` |
+| ツールチェイン | Arm GNU Toolchain `arm-none-eabi` 13.3 rel1 |
+| コンパイラ | `arm-none-eabi-gcc` / `arm-none-eabi-g++` 13.3.1 |
+| `.cproject` 登録値 | `toolchain.id = gcc-arm-embedded` / `toolchain.version = 13.3.1.arm-13-24` |
+| CPU / 命令セット | Cortex-A9 / ARM (`-mcpu=cortex-a9 -marm`) |
+| FPU / Float ABI | VFPv3-D16 / hard (`-mfpu=vfpv3-d16 -mfloat-abi=hard`) |
+| エンディアン | リトルエンディアン (`-mlittle-endian`) |
+| 最適化 | なし (`-O0`)、デバッグ情報 DWARF 4 (`-g -gdwarf-4`) |
+
+> 上記の値は `.cproject` と、git 履歴に残る `HardwareDebug/` のビルド生成物から実測したものです。
+> ターゲット設定の詳細は `doc/main.tex` の「§6.1 ビルド検証環境」を参照してください。
 
 ### ドキュメントビルド環境（LaTeX）
 
@@ -26,4 +49,14 @@ e2 studio でプロジェクトを開き、HardwareDebug 構成でビルドし�
 
 ## ドキュメント
 
-詳細な仕様・設計情報・修正履歴は `doc/main.tex`（PDF: `doc/main.pdf`）を参照してください。
+詳細な仕様・設計情報は `doc/main.tex`（PDF: `doc/main.pdf`）を参照してください。
+以下を含みます。
+
+- システムアーキテクチャ（3 フェーズモデル、`SystemData`、`ModuleTimer`）
+- 全モジュールの API 仕様
+- パラメータ調整ガイド（`src/core/ProjectConfig.h` の実値一覧）
+- ベアメタル固有の実装知見（XIP 制約、GIC 初期化順序、グローバル ctor の手動実行 等）
+- 付録: 不具合と対策の記録（症状 → 原因 → 対策の対応表）
+
+> 旧仕様書 `mcr_camera_2026base_SPEC.md` は内容を `doc/main.tex` へ統合したうえで廃止しました。
+> 修正履歴は付録「不具合と対策の記録」に再構成してあります。
