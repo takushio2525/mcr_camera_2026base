@@ -74,12 +74,20 @@ extern "C" {
 
 // OSTM0 タイマー割り込み (1ms周期)
 // GR-PEACH (RZ/A1H) の周辺クロック P0Φ は 33.33MHz
-// 1ms = 33333 カウント
+// 1ms = 33333 カウント (33.33e6 / 1000)
+// 注: 走行パラメータは ProjectConfig.h に集約する方針だが、この値はハード
+//     クロックから一意に決まる定数なので main 側に残してある。
 #define OSTM0_CMP_1MS 33333
 
 // デバッグ表示用: 閾値設定
+// 170 = 画素輝度 (0-255) の二値化しきい値。デバッグモードの 0/1 表示専用で、
+// 走行制御には使われない。
+// 注: 同じ 170 が CAMERA_CONFIG.thresholdDefault (ProjectConfig.h:42) と
+//     LINE_DETECTOR_CONFIG.centerBrightnessAbs (:73) にも書かれており、
+//     用途の違う 3 箇所に同値が独立して存在する（連動しない）。
 #define DEBUG_THRESHOLD 170         // 画像二値化の閾値
-#define DEBUG_PRINT_INTERVAL_MS 200 // シリアル出力間隔(ms)
+#define DEBUG_PRINT_INTERVAL_MS 200 // シリアル出力間隔(ms)。g_cnt_printf は
+                                    // 1ms 割り込みで ++ されるので値がそのまま ms
 
 // グローバルタイマーカウンタ
 volatile unsigned long g_timer_1ms = 0;
@@ -270,6 +278,11 @@ void ostm0_interrupt_callback(void)
   else
   {
     // デバッグモードでも USER_LED は中央2点センサ反応で点灯させる
+    // 0x18 = 0b0001_1000 = bit4|bit3。Camera::thresholdConvert() の割り当てで
+    // bit7 が最左 (x=31)、bit0 が最右 (x=128) なので、bit4/bit3 は x=71/x=88
+    // ＝画像中央 (x=80) を挟む 2 点にあたる。
+    // LineDetector.h の MASK 定数群に該当する値が無いためリテラルのまま。
+    // RunLogic.cpp の applyDrivingPattern() と同じ式が意図的に重複している。
     g_sys.ob.userLedCmd = (g_sys.line.sensorBin & 0x18) ? 1 : 0;
   }
 

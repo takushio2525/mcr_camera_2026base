@@ -155,6 +155,9 @@ bool Camera::init()
   display_.Video_Start(DisplayBase::VIDEO_INPUT_CHANNEL_0);
 
   // Vsync 12回分待ち（割り込み駆動: XIP速度に依存しない）
+  // timeout はハングアップ防止のフェイルセーフ。単位は「時間」ではなく
+  // 空ループの回転数なので、実時間は実行速度（XIP / キャッシュ状態）で変わる。
+  // 桁の決め方に根拠はなく、Vsync が来ない異常時に抜けられれば十分という値。
   for (volatile int timeout = 0; s_vsyncCount > 0 && timeout < 50000000;
        timeout++)
   {
@@ -168,6 +171,8 @@ bool Camera::init()
   // 参考プロジェクトと同じ: Vsync/Vfield待ちでVDC5の安定を確認
   // WaitVsync(1) 相当: Vsyncが1回発生するまで待つ
   s_vsyncCount = 1;
+  // timeout は上と同じくフェイルセーフの空ループ上限（待つ Vsync が
+  // 12 回→1 回なので桁も 1 つ小さい。厳密な根拠は無い）。
   for (volatile int timeout = 0; s_vsyncCount > 0 && timeout < 5000000;
        timeout++)
   {
@@ -178,6 +183,7 @@ bool Camera::init()
   // s_vfieldCount は単調増加カウンタなので開始値からの差分で判定する
   {
     volatile int32_t vfield_start = s_vfieldCount;
+    // timeout は上と同じくフェイルセーフの空ループ上限（根拠となる実測値は無い）。
     for (volatile int timeout = 0;
          (s_vfieldCount - vfield_start) < 2 && timeout < 10000000;
          timeout++)
@@ -502,7 +508,12 @@ unsigned char Camera::thresholdConvert(int gyou, int threshold,
 {
   int d[8];
 
-  // センサ配置に対応する8点のX座標（参考プロジェクト準拠）
+  // センサ配置に対応する8点のX座標（参考プロジェクト準拠、単位は画素）
+  // 画像中心 x=80 からのオフセットは
+  //   左: -49, -37, -26, -9 / 右: +8, +25, +36, +48
+  // でほぼ左右対称、外側ほど間隔が広い。
+  // ビット割り当ては d[7] = 最左 (x=31) 〜 d[0] = 最右 (x=128)。
+  // 実際の物理センサ位置との対応関係は不明（値は参考プロジェクトからの移植）。
   d[7] = getPixel(31, gyou);
   d[6] = getPixel(43, gyou);
   d[5] = getPixel(54, gyou);
@@ -551,6 +562,9 @@ unsigned char Camera::thresholdConvert(int gyou, int threshold,
     if (hasDiff)
     {
       // (最大値 - 最小値) * 0.7 + 最小値
+      // 係数 0.7 は参考プロジェクトの shikiichi_henkan 由来。整数演算のため
+      // *7/10 と書いている。Config 化されていないので、変えるならここを直接
+      // 編集する（LINE_DETECTOR_CONFIG 側の各種 brightnessRatio とは別物）。
       shikiVal = (maxVal - minVal) * 7 / 10 + minVal;
     }
     else

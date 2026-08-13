@@ -7,6 +7,9 @@
  *
  *  サーボ出力: TIOC0A (P4_0)
  *  PWM周期: 16ms (P0φ/16)
+ *    ※ 16ms は pwmCycle=33332 ÷ (P0φ/16 = 2.083MHz) から出る設計値だが、
+ *       Servo::init() は _config.pwmCycle をどのレジスタにも書いていない。
+ *       実際の周期は未検証（Servo::init() の TODO(要実機確認) を参照）。
  *  中心位置: ServoConfig.center カウント (約1.5ms)
  *  ステップ: ServoConfig.handleStep カウント/度
  *
@@ -25,7 +28,7 @@
 // ====================================================================
 struct ServoConfig
 {
-  int pwmCycle;       // 33332
+  int pwmCycle;       // 33332 — Servo.cpp から参照されていない（未配線）
   int center;         // 3090 (1.5ms 相当)
   int handleStep;     // 23   (カウント / 度)
   int maxAngle;       // 40   (度)

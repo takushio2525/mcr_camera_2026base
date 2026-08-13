@@ -594,6 +594,10 @@ static void runFinish(SystemData& sys)
 void applyDrivingPattern(SystemData& sys)
 {
     // USER_LED は中央2点センサ反応で点灯
+    // 0x18 = 0b0001_1000 = bit4|bit3。Camera::thresholdConvert() の割り当てで
+    // bit7 が最左 (x=31)、bit0 が最右 (x=128) なので、bit4/bit3 は x=71/x=88
+    // ＝画像中央 (x=80) を挟む 2 点にあたる。
+    // LineDetector.h の MASK 定数群に該当する値が無いためリテラルのまま。
     sys.ob.userLedCmd = (sys.line.sensorBin & 0x18) ? 1 : 0;
 
     // 通常時のハンドル/モーター値を毎周期計算しておく
