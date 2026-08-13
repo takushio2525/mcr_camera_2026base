@@ -3,6 +3,11 @@ project(mcr_motor_tests CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 
+# CTest 有効化。これが無いと gtest_discover_tests() が生成した
+# テスト定義を CTestTestfile.cmake が取り込まず、ctest が
+# "No tests were found!!!" になる。
+enable_testing()
+
 # ============================================================
 # Google Test (FetchContent 自動ダウンロード)
 # ============================================================
