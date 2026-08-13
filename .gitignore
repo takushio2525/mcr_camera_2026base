@@ -33,3 +33,12 @@ HardwareDebug/
 
 # カスタム設定等
 *.pdf
+
+# macOS が生成するメタデータ
+.DS_Store
+
+# PDF は成果物として追跡する（README.md が案内先にしている）
+!doc/main.pdf
+
+# ローカル専用の Claude 設定
+.claude/settings.local.json
