@@ -100,9 +100,10 @@ void Serial::updateOutput(SystemData& sys)
 void Serial::putChar(char c)
 {
   // SCIF2 の送信FIFOに空きがあるまで待つ
-  // SCFDR は上位バイト(bit15-8)=送信FIFO 格納数 T、
-  //          下位バイト(bit7-0) =受信FIFO 格納数 R の 2 段構成。
-  // ここは送信側を見るので >> 8 で上位バイトを取り出す（FIFO 段数は 16）。
+  // SCFDR は送信FIFO と 受信FIFO の格納数を 1 レジスタに詰めたもので、
+  // **送信側が上位（>> 8 で取り出せる側）、受信側が下位** という並び。
+  // 旧コメントは「SCFDR下位5bit = 送信FIFO」としていたが下位は受信側なので誤り。
+  // 実装の >> 8 の方が正しい。FIFO 段数は送受信とも 16。
   // FIFOに空きがあれば待たずに即座に書き込み
   while ((SCIF2.SCFDR >> 8) >= 16)
   {

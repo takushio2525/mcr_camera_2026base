@@ -275,7 +275,7 @@ void LineDetector::calcDeviation()
         // 左エッジ外れ値チェック
         // 一行下で選ばれたエッジから differenceThresholdY (=5px) を超えて
         // 離れていたら外れ値とみなし、一行下の値をそのまま引き継ぐ。
-        // 付帯条件 y < 100 により、画像下端側 20 行 (y=100〜118) では
+        // 付帯条件 y < 100 により、画像下端側 19 行 (y=100〜118) では
         // この補正を行わない。**100 の根拠は追えない（根拠不明）**。
         // 参考プロジェクト由来の経験値と思われる。
         if (abs(leftExceedingXPositions[y][leftCenterCount[y]]
