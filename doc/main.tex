@@ -50,9 +50,9 @@
 \pagestyle{fancy}
 \fancyhf{}
 \fancyhead[L]{\small\color{headerblue}\textbf{mcr\_camera\_2026base} プログラム設計仕様書}
-\fancyhead[R]{\small\color{headerblue}Rev.\,1.1}
+\fancyhead[R]{\small\color{headerblue}Rev.\,2.0}
 \fancyfoot[C]{\small\thepage\,/\,\pageref{LastPage}}
-\fancyfoot[R]{\small\color{gray}2026-02-19}
+\fancyfoot[R]{\small\color{gray}2026-08-13}
 \renewcommand{\headrulewidth}{0.8pt}
 \renewcommand{\footrulewidth}{0.4pt}
 
@@ -172,8 +172,8 @@
 \newcommand{\doctitle}{mcr\_camera\_2026base\\プログラム設計仕様書}
 \newcommand{\docsubtitle}{GR-PEACH (RZ/A1H) マイコンカーラリー カメラクラス開発}
 \newcommand{\docauthor}{Shiozawa}
-\newcommand{\docversion}{1.1}
-\newcommand{\docdate}{2026年5月3日}
+\newcommand{\docversion}{2.0}
+\newcommand{\docdate}{2026年8月13日}
 
 %% ============================================================
 \begin{document}
@@ -214,7 +214,7 @@
   halign=center,
 ]
 \small
-本文書は \texttt{mcr\_camera\_2026base} プロジェクトのプログラム設計仕様書ですうううううううううう。uuuuuuuuuuuu\\
+本文書は \texttt{mcr\_camera\_2026base} プロジェクトのプログラム設計仕様書です。\\
 ベアメタル環境における割り込み駆動アーキテクチャの詳細設計を記述します。
 \end{tcolorbox}
 
@@ -248,6 +248,13 @@
 1.12 & 2026-02-26 & Shiozawa & LaTeXコンパイル用DevContainer環境の統合 \\
 1.13 & 2026-03-06 & Shiozawa & SPEC.mdの内容をTeXに統合・README.md新規作成 \\
 1.14 & 2026-05-03 & Shiozawa & RunController クラス（メイン走行制御）追加。エンコーダ距離制御をタイマー（ms単位）に置換。 \\
+2.0  & 2026-08-13 & Shiozawa & \textbf{実装準拠への全面改訂。}EMA (Embedded-Module-Architecture) 化を反映し、
+  \texttt{IModule} を \texttt{updateInput}/\texttt{updateOutput} 版に更新。
+  \texttt{SystemData} / \texttt{ProjectConfig} / \texttt{ModuleTimer} を新規記述。
+  実在しない Trace 章を LineDetector 章へ、RunController 章を RunLogic 章へ差し替え。
+  LineDetector / SDLogger / 起動シーケンス / パラメータ調整ガイドを追加。
+  \texttt{mcr\_camera\_2026base\_SPEC.md} の技術知見を「ベアメタル固有の実装知見」章と
+  付録「不具合と対策の記録」へ移植し、同ファイルを廃止。 \\
 \bottomrule
 \end{tabularx}
 
@@ -266,7 +273,13 @@ GR-PEACH (RZ/A1H) を使用した、マイコンカーラリー (MCR) カメラ�
 \begin{notebox}[設計思想]
 \begin{itemize}[nosep]
   \item mbed OS を使用せず、ルネサス標準の \texttt{iodefine.h} を用いたベアメタル（レジスタ直接操作）環境で構築する
-  \item 既存のスパゲッティコードを廃し、クラスベースの \texttt{init}/\texttt{update} パターンを採用したモダンなアーキテクチャを目指す
+  \item 既存のスパゲッティコードを廃し、EMA (Embedded-Module-Architecture) 準拠のモジュール分割を採用する。
+        全モジュールは共通インターフェース \texttt{IModule} を実装し、
+        \texttt{init()} / \texttt{updateInput()} / \texttt{updateOutput()} の3点で統一的に扱う
+  \item モジュール間のデータ受け渡しは共有構造体 \texttt{SystemData} に一本化し、
+        モジュールが他モジュールのメソッドを直接呼ぶことを禁止する
+  \item 調整対象の定数は \texttt{src/core/ProjectConfig.h} に集約し、
+        「走行調整のためにドライバのソースを触る」状況をなくす
 \end{itemize}
 \end{notebox}
 
@@ -278,9 +291,19 @@ GR-PEACH (RZ/A1H) を使用した、マイコンカーラリー (MCR) カメラ�
 \midrule
 MCR       & マイコンカーラリーの略称 \\
 GR-PEACH  & ルネサス RZ/A1H 搭載の開発ボード \\
-MTU2      & マルチファンクション・タイマ・ユニット2。PWM出力に使用 \\
-ラッチ方式 & セッターで値を内部変数に保持し、\texttt{update()} 呼び出し時にのみハードウェアへ反映する方式 \\
+MTU2      & マルチファンクション・タイマ・ユニット2。PWM出力・位相計数に使用 \\
+VDC5      & ビデオディスプレイコントローラ5。DVDEC と組み合わせて NTSC 映像を取り込む \\
+EMA       & Embedded-Module-Architecture。\texttt{IModule} / \texttt{SystemData} /
+            \texttt{\{Module\}Config} の3点セットでモジュールを構成する設計方針 \\
 IModule   & 全モジュール共通の基底インターフェース (\hyperref[sec:api-imodule]{§\ref*{sec:api-imodule}}) \\
+SystemData & 全モジュールの入出力データを集約する共有構造体 (\hyperref[sec:systemdata]{§\ref*{sec:systemdata}}) \\
+Config    & モジュールごとの設定構造体。実値は \texttt{ProjectConfig.h} で一括定義する
+            (\hyperref[sec:params]{§\ref*{sec:params}}) \\
+ModuleTimer & 1ms カウンタ \texttt{g\_timer\_1ms} を時刻源とするノンブロッキングタイマー
+            (\hyperref[sec:moduletimer]{§\ref*{sec:moduletimer}}) \\
+ラッチ方式 & 出力値をいったん内部バッファに保持し、出力フェーズでのみハードウェアへ一括反映する方式 \\
+XIP       & eXecute In Place。SPI フラッシュ上のコードを RAM へ展開せず直接実行する方式
+            (\hyperref[sec:xip]{§\ref*{sec:xip}}) \\
 \bottomrule
 \end{tabularx}
 
@@ -313,8 +336,10 @@ IModule   & 全モジュール共通の基底インターフェース (\hyperref
 %% ============================================================
 \section{システムアーキテクチャ}\label{sec:architecture}
 
-システムはタイマー割り込みによる定期実行（1ループ/1ms を想定）で完全に同期して動作する。
-処理は3つのフェーズに分離される。
+システムは OSTM0 による 1ms 周期のタイマー割り込みで同期して動作する。
+割り込みハンドラ \texttt{ostm0\_interrupt\_callback()} が
+Input $\rightarrow$ Logic $\rightarrow$ Output の3フェーズを毎周期実行し、
+メインループはフレーム完了待ち・ライン検出・ログ処理・デバッグ表示を担当する。
 
 \subsection{実行フロー図}\label{sec:flow}
 
@@ -324,69 +349,227 @@ IModule   & 全モジュール共通の基底インターフェース (\hyperref
   node distance=6mm and 10mm,
   phase/.style={
     draw=accentblue, fill=accentblue!10,
-    rounded corners=3pt, minimum width=55mm, minimum height=10mm,
+    rounded corners=3pt, minimum width=52mm, minimum height=10mm,
     font=\bfseries\small, align=center,
   },
   module/.style={
     draw=headerblue, fill=headerblue!8,
-    rounded corners=2pt, minimum width=40mm, minimum height=8mm,
+    rounded corners=2pt, minimum width=52mm, minimum height=8mm,
+    font=\small\ttfamily, align=center,
+  },
+  hub/.style={
+    draw=okgreen, fill=okgreen!8,
+    rounded corners=2pt, minimum width=22mm, minimum height=44mm,
     font=\small\ttfamily, align=center,
   },
   arr/.style={-{Stealth[length=3mm]}, thick, color=accentblue},
+  arrg/.style={-{Stealth[length=3mm]}, thick, color=okgreen!80!black},
 ]
 
 % フェーズ
-\node[phase] (input) {Input Phase};
-\node[phase, below=15mm of input] (logic) {Logic Phase (Pattern)};
-\node[phase, below=15mm of logic] (output) {Output Phase};
+\node[phase] (input) {Input フェーズ};
+\node[phase, below=17mm of input] (logic) {Logic フェーズ};
+\node[phase, below=17mm of logic] (output) {Output フェーズ};
 
 % Input モジュール
-\node[module, right=12mm of input, yshift=4mm]  (enc) {Encoder.update()};
-\node[module, right=12mm of input, yshift=-4mm] (cam) {Camera.update()};
+\node[module, right=32mm of input, yshift=5mm]  (onbi) {g\_onboard.updateInput()};
+\node[module, right=32mm of input, yshift=-5mm] (cam)  {g\_camera.updateInput()};
 
 % Logic
-\node[module, right=12mm of logic] (pat) {判断 → set...()};
+\node[module, right=32mm of logic] (pat) {applyDrivingPattern()};
 
 % Output モジュール
-\node[module, right=12mm of output, yshift=9mm]  (mot) {Motor.update()};
-\node[module, right=12mm of output, yshift=0mm]  (srv) {Servo.update()};
-\node[module, right=12mm of output, yshift=-9mm] (onb) {Onboard.update()};
+\node[module, right=32mm of output, yshift=10mm] (mot) {g\_motor.updateOutput()};
+\node[module, right=32mm of output, yshift=0mm]  (srv) {g\_servo.updateOutput()};
+\node[module, right=32mm of output, yshift=-10mm](onbo) {g\_onboard.updateOutput()};
 
-% 矢印
+% SystemData ハブ
+\node[hub, left=14mm of logic] (sys) {g\_sys\\(SystemData)};
+
+% 矢印（フェーズの進行）
 \draw[arr] (input) -- (logic);
 \draw[arr] (logic) -- (output);
 
-\draw[arr] (input.east) ++(0,4mm) -- (enc.west);
-\draw[arr] (input.east) ++(0,-4mm) -- (cam.west);
-
+\draw[arr] (input.east) ++(0,5mm) -- (onbi.west);
+\draw[arr] (input.east) ++(0,-5mm) -- (cam.west);
 \draw[arr] (logic.east) -- (pat.west);
-
-\draw[arr] (output.east) ++(0,9mm) -- (mot.west);
+\draw[arr] (output.east) ++(0,10mm) -- (mot.west);
 \draw[arr] (output.east) -- (srv.west);
-\draw[arr] (output.east) ++(0,-9mm) -- (onb.west);
+\draw[arr] (output.east) ++(0,-10mm) -- (onbo.west);
+
+% SystemData との読み書き
+\draw[arrg] (input.west)  -| node[font=\scriptsize\color{gray}, above, pos=0.25]{書込} (sys.north);
+\draw[arrg] (sys.east)    -- node[font=\scriptsize\color{gray}, above]{読書} (logic.west);
+\draw[arrg] (sys.south)   |- node[font=\scriptsize\color{gray}, below, pos=0.75]{読出} (output.west);
 
 \end{tikzpicture}
-\caption{割り込みハンドラ実行フロー}
+\caption{1ms 割り込みハンドラの3フェーズ実行フロー}
 \label{fig:flow}
 \end{figure}
 
-\subsection{3フェーズモデル}
+Input / Output の各フェーズは \texttt{IModule*} の配列 (\texttt{s\_inputModules[]} /
+\texttt{s\_outputModules[]}) をループして呼び出す。
+モジュールの \texttt{enabled} が \texttt{false} の間はスキップされるため、
+初期化に失敗したモジュールを配列から外さずに無効化できる。
+
+\begin{lstlisting}[caption={Input / Output フェーズの配列駆動 (mcr\_camera\_2026base.cpp)},label=lst:phasearray]
+static IModule* s_inputModules[] = {
+    &g_onboard,   // Input : SW 状態を sys.ob.sw へ
+    &g_camera,    // Input : 1ms ごとのフレーム段階処理
+};
+static IModule* s_outputModules[] = {
+    &g_motor,     // Output : sys.mot.*Cmd  -> PWM
+    &g_servo,     // Output : sys.srv.angleCmd -> PWM
+    &g_onboard,   // Output : sys.ob.*LedCmd  -> GPIO
+};
+
+for (int i = 0; i < N_IN; ++i) {
+    if (s_inputModules[i]->enabled) s_inputModules[i]->updateInput(g_sys);
+}
+\end{lstlisting}
+
+\subsection{3フェーズモデル}\label{sec:threephase}
 
 \begin{tabularx}{\textwidth}{c l X}
 \toprule
 \textbf{順序} & \textbf{フェーズ} & \textbf{内容} \\
 \midrule
-1 & Input Phase  & センサ値の読み取り（Encoder, Camera） \\
-2 & Logic Phase  & 判断ロジック実行、各ドライバの \texttt{set...()} を呼び出し（\textbf{この時点では出力しない}） \\
-3 & Output Phase & 全ドライバの \texttt{update()} を呼び出し、ハードウェアへ反映 \\
+1 & Input  & ハードウェア $\rightarrow$ \texttt{SystemData}。各モジュールの
+             \texttt{updateInput(sys)} がセンサ値を \texttt{sys.*} へ書き込む \\
+2 & Logic  & \texttt{SystemData} $\rightarrow$ \texttt{SystemData}。
+             \texttt{applyDrivingPattern(sys)} が状態機械を進め、
+             出力指示を \texttt{sys.mot.*Cmd} / \texttt{sys.srv.angleCmd} /
+             \texttt{sys.ob.*LedCmd} へ\textbf{代入する}（\textbf{ドライバは呼ばない}） \\
+3 & Output & \texttt{SystemData} $\rightarrow$ ハードウェア。各モジュールの
+             \texttt{updateOutput(sys)} が \texttt{*Cmd} を読み、レジスタへ反映する \\
 \bottomrule
 \end{tabularx}
 
-\begin{notebox}[ラッチ方式の利点]
-Logic Phase でセットした値は即座にハードウェアへ反映されない。
-Output Phase で一括反映することで、割り込み内での出力タイミングを統一し、
-グリッチや不整合を防止する。
+\begin{notebox}[3フェーズ分離の利点]
+Logic フェーズはハードウェアに一切触れない純粋な計算になるため、
+\texttt{SystemData} を差し替えるだけで PC 上の単体テストに載せられる。
+また出力タイミングが Output フェーズに集約されるので、
+1ms 内で出力が二度書きされたり、Logic の途中経過が物理出力に漏れることがない。
 \end{notebox}
+
+\begin{cautionbox}[全モジュールがラッチ方式ではない]
+Output フェーズ内での反映方法はモジュールによって異なる。
+\texttt{Onboard} は4個の LED 状態を内部バッファ \texttt{ledState\_[]} にまとめてから
+GPIO へ一括書き込みする真のラッチ方式だが、
+\texttt{Motor} / \texttt{Servo} は \texttt{updateOutput()} 内で MTU2 レジスタへ直接書き込む。
+いずれも「Output フェーズでのみ書く」点は共通であり、
+Logic フェーズの途中経過が出力に漏れない性質は保たれている。
+\end{cautionbox}
+
+\subsection{共有データ構造 SystemData}\label{sec:systemdata}
+
+\texttt{SystemData}（\texttt{src/core/SystemData.h}）は全モジュールの入出力データを
+1つに集約した構造体である。実体はグローバル変数 \texttt{g\_sys}
+（\texttt{mcr\_camera\_2026base.cpp} で定義）1個のみで、
+3フェーズの全呼び出しがこの参照を受け取る。
+
+\begin{lstlisting}[caption={SystemData の定義},label=lst:systemdata]
+struct SystemData {
+    CameraData       cam;   // Camera       が所有
+    LineDetectorData line;  // LineDetector が所有
+    MotorData        mot;   // Motor        が所有
+    ServoData        srv;   // Servo        が所有
+    OnboardData      ob;    // Onboard      が所有
+    EncoderData      enc;   // Encoder      が所有
+    SerialData       ser;   // Serial       が所有
+    SDLoggerData     sd;    // SDLogger     が所有
+    RunData          run;   // RunLogic     が所有
+};
+extern SystemData g_sys;
+\end{lstlisting}
+
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{メンバ} & \textbf{型} & \textbf{主な内容} \\
+\midrule
+\texttt{cam}  & \texttt{CameraData}       & \texttt{frameReady}, \texttt{frameCount}, \texttt{field}, \texttt{imageBufferPtr} \\
+\texttt{line} & \texttt{LineDetectorData} & \texttt{deviation[120]}, \texttt{crossLine}, \texttt{leftLine}, \texttt{rightLine}, \texttt{centerLine}, \texttt{sensorBin} \\
+\texttt{mot}  & \texttt{MotorData}        & \texttt{leftCmd}, \texttt{rightCmd}, \texttt{leftActual}, \texttt{rightActual} \\
+\texttt{srv}  & \texttt{ServoData}        & \texttt{angleCmd}, \texttt{angleActual} \\
+\texttt{ob}   & \texttt{OnboardData}      & \texttt{sw}, \texttt{ledRedCmd}, \texttt{ledGreenCmd}, \texttt{ledBlueCmd}, \texttt{userLedCmd} \\
+\texttt{enc}  & \texttt{EncoderData}      & \texttt{totalCount}, \texttt{magaCount}, \texttt{cnt}, \texttt{avgCnt}, \texttt{filteredCnt} \\
+\texttt{ser}  & \texttt{SerialData}       & \texttt{txCount} \\
+\texttt{sd}   & \texttt{SDLoggerData}     & \texttt{ready}, \texttt{logCount}, \texttt{full}, \texttt{saveRequested}, \texttt{saveDone} \\
+\texttt{run}  & \texttt{RunData}          & \texttt{pattern}, \texttt{handleVal}, \texttt{finished}, 3本の \texttt{ModuleTimer} \\
+\bottomrule
+\end{tabularx}
+
+\begin{notebox}[データの所有権]
+\texttt{\{Module\}Data} 構造体の宣言は各モジュールのヘッダ側に置き、
+\texttt{SystemData.h} はそれを include して集約するだけである。
+各モジュールは原則として\textbf{自身の Data だけ}を読み書きし、
+他モジュールのデータを横断参照してよいのは Logic フェーズの関数だけ、というルールで運用する。
+\end{notebox}
+
+\begin{cautionbox}[画素バッファは SystemData に置かない]
+160$\times$120 の輝度バッファ（約 19KB）と YCbCr422 中間バッファ（約 38KB）は
+\texttt{Camera} クラス内に実体を持ち、\texttt{SystemData} からは
+\texttt{cam.imageBufferPtr} 経由で参照する。
+巨大な配列を \texttt{SystemData} に持たせるとメモリ効率とコピーコストが悪化するため。
+\end{cautionbox}
+
+\subsection{ModuleTimer --- ノンブロッキング時間計測}\label{sec:moduletimer}
+
+ベアメタル環境には Arduino の \texttt{millis()} に相当する API がないため、
+OSTM0 の 1ms 割り込みでインクリメントされるグローバルカウンタ
+\texttt{volatile unsigned long g\_timer\_1ms} を時刻源とする軽量クラスを用意している
+（\texttt{src/core/ModuleTimer.h}）。
+
+\begin{tabularx}{\textwidth}{l X}
+\toprule
+\textbf{メソッド} & \textbf{機能} \\
+\midrule
+\texttt{void setTime()}                    & 現在時刻を起点としてタイマーを開始する \\
+\texttt{unsigned long getNowTime() const}  & \texttt{setTime()} からの経過時間 [ms]。未起動なら 0 \\
+\texttt{bool isExpired(unsigned long ms) const} & 指定時間以上経過したか。未起動なら \texttt{false} \\
+\texttt{void reset()}                      & 停止状態に戻す \\
+\texttt{bool isRunning() const}            & 起動中かどうか \\
+\bottomrule
+\end{tabularx}
+
+\vspace{2mm}
+\texttt{RunData} はこれを3本保持し、旧実装のカウンタ変数を置き換えている
+(\hyperref[sec:api-runlogic]{§\ref*{sec:api-runlogic}})。
+
+\begin{notebox}[待ちループを書かないこと]
+\texttt{ModuleTimer} は「経過したか」を問い合わせるだけで、内部でブロックしない。
+1ms 割り込みの中で \texttt{while (!timer.isExpired(n))} のような待機を書くと
+\texttt{g\_timer\_1ms} が進まなくなり、確実にハングする。
+\end{notebox}
+
+\subsection{設定注入と ProjectConfig}\label{sec:configinject}
+
+各モジュールは \texttt{\{Module\}Config} 構造体を\textbf{コンストラクタ引数で受け取り}、
+内部に \texttt{\_config} としてコピーして保持する。
+実値の定義は \texttt{src/core/ProjectConfig.h} の1ファイルに集約されており、
+走行パラメータの調整でドライバのソースを編集する必要はない。
+
+\begin{lstlisting}[caption={Config 注入によるインスタンス生成 (mcr\_camera\_2026base.cpp)},label=lst:configinject]
+Serial       g_serial      (SERIAL_CONFIG);
+Onboard      g_onboard     (ONBOARD_CONFIG);
+Motor        g_motor       (MOTOR_CONFIG);
+Servo        g_servo       (SERVO_CONFIG);
+Encoder      g_encoder     (ENCODER_CONFIG);   // 現状 init/呼出は未接続
+Camera       g_camera      (CAMERA_CONFIG);
+LineDetector g_lineDetector(LINE_DETECTOR_CONFIG);
+SDCard       g_sdcard      (SDCARD_CONFIG);
+SDLogger     g_sdlogger    (SDLOGGER_CONFIG);
+\end{lstlisting}
+
+実際の設定値は \hyperref[sec:params]{§\ref*{sec:params}}「パラメータ調整ガイド」にまとめる。
+
+\begin{cautionbox}[Config はグローバル ctor に依存する]
+\texttt{\_config} メンバはコンストラクタ初期化で埋まる。
+本プロジェクトの \texttt{start.S} は \texttt{\_\_libc\_init\_array()} を呼ばないため、
+\texttt{main()} 冒頭の \texttt{runGlobalConstructors()} を経由しないと
+\texttt{\_config} が BSS のゼロのままになり、サーボ出力が 0 になる等の致命的な不具合になる。
+詳細は \hyperref[sec:ctors]{§\ref*{sec:ctors}} を参照。
+\end{cautionbox}
 
 %% ============================================================
 %% 5. ファイル構成
@@ -399,26 +582,39 @@ Output Phase で一括反映することで、割り込み内での出力タイ�
 \ttfamily\small
 \begin{tabbing}
 \hspace{4mm}\=\hspace{4mm}\=\hspace{4mm}\=\hspace{4mm}\=\kill
-mcr\_camera\_test1/ \\
+mcr\_camera\_2026base/ \\
 \> src/ \\
-\>\> mcr\_camera\_test1.cpp \quad\textrm{\color{gray}← メイン・割り込みハンドラ} \\
+\>\> mcr\_camera\_2026base.cpp \quad\textrm{\color{gray}← メイン・GIC/OSTM0 初期化・割り込みハンドラ} \\
 \>\> core/ \\
 \>\>\> IModule.h \quad\textrm{\color{gray}← 基底インターフェース} \\
+\>\>\> SystemData.h \quad\textrm{\color{gray}← 全モジュール共有データ} \\
+\>\>\> ProjectConfig.h \quad\textrm{\color{gray}← 全パラメータの実値定義} \\
+\>\>\> ModuleTimer.h \quad\textrm{\color{gray}← ノンブロッキングタイマー} \\
+\>\> logic/ \\
+\>\>\> RunLogic.h / RunLogic.cpp \quad\textrm{\color{gray}← 走行状態機械（純関数）} \\
 \>\> drivers/ \\
-\>\>\> Camera.h / Camera.cpp \quad\textrm{\color{gray}← カメラ制御} \\
+\>\>\> Camera.h / Camera.cpp \quad\textrm{\color{gray}← NTSC キャプチャ (VDC5+DVDEC)} \\
+\>\>\> LineDetector.h / .cpp \quad\textrm{\color{gray}← ライン検出・偏差算出} \\
 \>\>\> Encoder.h / Encoder.cpp \quad\textrm{\color{gray}← エンコーダ制御} \\
 \>\>\> Motor.h / Motor.cpp \quad\textrm{\color{gray}← モータ制御} \\
-\>\>\> Onboard.h / Onboard.cpp \quad\textrm{\color{gray}← LED・スイッチ制御} \\
-\>\>\> SDCard.h / SDCard.cpp \quad\textrm{\color{gray}← SDカード制御} \\
-\>\>\> Serial.h / Serial.cpp \quad\textrm{\color{gray}← シリアル通信} \\
 \>\>\> Servo.h / Servo.cpp \quad\textrm{\color{gray}← サーボ制御} \\
-\>\> modules/ \\
-\>\>\> Trace.h / Trace.cpp \quad\textrm{\color{gray}← ライントレースロジック} \\
-\>\> utils/ \quad\textrm{\color{gray}← ユーティリティ (予定)} \\
-\> generate/ \\
-\>\> iodefine.h \quad\textrm{\color{gray}← レジスタ定義 (自動生成)} \\
+\>\>\> Onboard.h / Onboard.cpp \quad\textrm{\color{gray}← LED・スイッチ制御} \\
+\>\>\> Serial.h / Serial.cpp \quad\textrm{\color{gray}← シリアル通信} \\
+\>\>\> SDCard.h / SDCard.cpp \quad\textrm{\color{gray}← SD カード SPI ブロックドライバ} \\
+\>\>\> SDLogger.h / SDLogger.cpp \quad\textrm{\color{gray}← ログバッファ + CSV 書き出し} \\
+\>\>\> fatfs/ \quad\textrm{\color{gray}← ChaN's FatFs R0.11a + diskio ブリッジ} \\
+\>\>\> video/ \quad\textrm{\color{gray}← VDC5/DVDEC ドライバ群 (DisplayBase API)} \\
+\>\> system/ \\
+\>\>\> system\_init.c \quad\textrm{\color{gray}← FPU/MMU/L1 キャッシュ有効化} \\
+\>\>\> mmu\_rzA1H.c \quad\textrm{\color{gray}← MMU 翻訳テーブル生成} \\
+\> generate/ \quad\textrm{\color{gray}← e2 studio 自動生成（一部手動修正あり）} \\
+\>\> iodefine.h \quad\textrm{\color{gray}← レジスタ定義} \\
+\>\> inthandler.c \quad\textrm{\color{gray}← 割り込みディスパッチ ★手動修正} \\
+\>\> start.S / linker\_script.ld \quad\textrm{\color{gray}← 起動コード・リンカスクリプト ★手動修正} \\
+\> tests/ \quad\textrm{\color{gray}← PC 上の単体テスト (CMake + レジスタモック)} \\
 \> doc/ \\
-\>\> main.tex \quad\textrm{\color{gray}← 本仕様書} \\
+\>\> main.tex / main.pdf \quad\textrm{\color{gray}← 本仕様書} \\
+\> .devcontainer/ \quad\textrm{\color{gray}← LaTeX ビルド用 DevContainer} \\
 \end{tabbing}
 \end{tcolorbox}
 
@@ -428,32 +624,48 @@ mcr\_camera\_test1/ \\
 \toprule
 \textbf{ディレクトリ} & \textbf{役割} \\
 \midrule
-\texttt{src/core/}    & システム基盤（\texttt{IModule} インターフェース） \\
-\texttt{src/modules/} & ロジックモジュール（\texttt{Trace} 等 --- 未実装） \\
-\texttt{src/drivers/} & ハードウェアドライバ（Motor, Servo, Encoder, Camera, Serial, SDCard, Onboard） \\
-\texttt{src/utils/}   & ユーティリティ関数 \\
-\texttt{generate/}    & e2 studio 自動生成ファイル（\texttt{iodefine.h} 等） \\
-\texttt{doc/}         & ドキュメント \\
+\texttt{src/core/}    & システム基盤（\texttt{IModule}, \texttt{SystemData}, \texttt{ProjectConfig}, \texttt{ModuleTimer}） \\
+\texttt{src/logic/}   & Logic フェーズの走行ロジック（\texttt{RunLogic}）。ハードウェアに触れない \\
+\texttt{src/drivers/} & ハードウェアドライバ（Camera, LineDetector, Motor, Servo, Encoder, Onboard, Serial, SDCard, SDLogger） \\
+\texttt{src/drivers/fatfs/} & ChaN's FatFs R0.11a と \texttt{SDCard} へのブリッジ（\texttt{diskio.cpp}） \\
+\texttt{src/drivers/video/} & \texttt{mbed-gr-libs} 由来の VDC5/DVDEC ドライバ群と \texttt{DisplayBase} API \\
+\texttt{src/system/}  & FPU / MMU / L1 キャッシュ初期化（mbed OS の \texttt{SystemInit()} 移植） \\
+\texttt{generate/}    & e2 studio 自動生成ファイル（\hyperref[sec:generate]{§\ref*{sec:generate}} の手動修正あり） \\
+\texttt{tests/}       & PC 上で動かす単体テスト（レジスタをモック化して Motor/Servo/Encoder を検証） \\
+\texttt{doc/}         & 本仕様書（\texttt{main.tex} / \texttt{main.pdf}） \\
+\texttt{.devcontainer/} & LaTeX ドキュメントビルド用のコンテナ環境定義 \\
 \bottomrule
 \end{tabularx}
 
 \subsection{全ファイル一覧}
 
-\begin{longtable}{l p{95mm}}
+\begin{longtable}{l p{92mm}}
 \toprule
 \textbf{ファイル} & \textbf{役割} \\
 \midrule
 \endhead
-\texttt{src/mcr\_camera\_2026base.cpp}    & メインエントリ・割り込みハンドラ・Pattern ロジック \\
-\texttt{src/core/IModule.h}            & 全モジュール共通の基底インターフェース \\
-\texttt{src/drivers/Motor.h/.cpp}      & モータPWM制御 (MTU2 ch3/4) \\
-\texttt{src/drivers/Servo.h/.cpp}      & サーボPWM制御 (MTU2 ch0) \\
-\texttt{src/drivers/Encoder.h/.cpp}    & ロータリーエンコーダ読取 (MTU2 位相計数) \\
-\texttt{src/drivers/Camera.h/.cpp}     & カメラ画像取得・ライン検出 (CEU/DMA) \\
-\texttt{src/drivers/Serial.h/.cpp}     & シリアル通信 (SCIF) \\
-\texttt{src/drivers/SDCard.h/.cpp}     & SDカードログ書込み (SPI) \\
-\texttt{src/drivers/Onboard.h/.cpp}    & オンボードLED・スイッチ制御 (GPIO) \\
-\texttt{src/modules/Trace.h/.cpp}      & ライントレース・PID制御ロジック \\
+\texttt{src/mcr\_camera\_2026base.cpp} & メインエントリ・GIC/OSTM0 初期化・3フェーズ割り込みハンドラ・2つの動作モードループ \\
+\texttt{src/core/IModule.h}         & 全モジュール共通の基底インターフェース \\
+\texttt{src/core/SystemData.h}      & 全モジュールの Data を集約した共有構造体 \\
+\texttt{src/core/ProjectConfig.h}   & 全 \texttt{*\_CONFIG} インスタンスの実値定義（調整の入口） \\
+\texttt{src/core/ModuleTimer.h}     & \texttt{g\_timer\_1ms} を時刻源とするノンブロッキングタイマー \\
+\texttt{src/logic/RunLogic.h/.cpp}  & 走行状態機械（\texttt{applyDrivingPattern()}）・\texttt{RunPattern} 定義 \\
+\texttt{src/drivers/Camera.h/.cpp}  & NTSC 160$\times$120 キャプチャ（VDC5 ch0 + DVDEC0） \\
+\texttt{src/drivers/LineDetector.h/.cpp} & 偏差算出・クロス/ハーフ/センターライン検出・8点センサ生成 \\
+\texttt{src/drivers/Motor.h/.cpp}   & モータ PWM 制御 (MTU2 ch3/4 リセット同期PWM) \\
+\texttt{src/drivers/Servo.h/.cpp}   & サーボ PWM 制御 (MTU2 ch0 PWMモード1) \\
+\texttt{src/drivers/Encoder.h/.cpp} & ロータリーエンコーダ読取 (MTU2 ch1 位相計数モード2) \\
+\texttt{src/drivers/Onboard.h/.cpp} & オンボード LED・スイッチ制御 (GPIO ポート6) \\
+\texttt{src/drivers/Serial.h/.cpp}  & デバッグシリアル通信 (SCIF2, 230400bps) \\
+\texttt{src/drivers/SDCard.h/.cpp}  & SD カード SPI ブロックドライバ (RSPI2)。FatFs の下位層 \\
+\texttt{src/drivers/SDLogger.h/.cpp}& 走行ログのバッファリングと CSV 書き出し \\
+\texttt{src/drivers/fatfs/ff.c}     & FatFs R0.11a 本体 \\
+\texttt{src/drivers/fatfs/diskio.cpp} & FatFs $\rightarrow$ \texttt{SDCard} のディスク I/O ブリッジ \\
+\texttt{src/drivers/video/}         & VDC5/DVDEC ドライバ群と \texttt{DisplayBase} API (40 ファイル超) \\
+\texttt{src/system/system\_init.c}  & FPU / MMU / L1 キャッシュ有効化 \\
+\texttt{generate/inthandler.c}      & IRQ ディスパッチャと OSTM0 コールバック呼び出し（手動修正） \\
+\texttt{generate/linker\_script.ld} & \texttt{.init\_array} 収集を追加したリンカスクリプト（手動修正） \\
+\texttt{generate/start.S}           & 起動コード（VBAR 設定・IRQ スタック確保を追加、手動修正） \\
 \bottomrule
 \end{longtable}
 
@@ -463,15 +675,17 @@ mcr\_camera\_test1/ \\
 \toprule
 \textbf{機能} & \textbf{メインファイル} & \textbf{関連ファイル} \\
 \midrule
-割り込みハンドラ & \texttt{mcr\_camera\_2026base.cpp} & 全ドライバ・モジュール \\
+3フェーズ割り込み & \texttt{mcr\_camera\_2026base.cpp} & IModule.h, SystemData.h, inthandler.c \\
+走行状態機械     & \texttt{RunLogic.cpp}    & SystemData.h, ProjectConfig.h, ModuleTimer.h \\
+ライン検出       & \texttt{LineDetector.cpp}& Camera.h, SystemData.h, ProjectConfig.h \\
+カメラ入力       & \texttt{Camera.cpp}      & video/DisplayBace.h, video/gr\_peach\_vdc5.c \\
 モータ制御       & \texttt{Motor.cpp}       & IModule.h, iodefine.h \\
 サーボ制御       & \texttt{Servo.cpp}       & IModule.h, iodefine.h \\
 エンコーダ       & \texttt{Encoder.cpp}     & IModule.h, iodefine.h \\
-カメラ           & \texttt{Camera.cpp}      & IModule.h, iodefine.h \\
-シリアル通信     & \texttt{Serial.cpp}      & IModule.h, iodefine.h \\
-SDカード         & \texttt{SDCard.cpp}      & IModule.h, iodefine.h \\
 LED・スイッチ    & \texttt{Onboard.cpp}     & IModule.h, iodefine.h \\
-ライントレース   & \texttt{Trace.cpp}       & IModule.h, Camera.h, Encoder.h \\
+シリアル通信     & \texttt{Serial.cpp}      & IModule.h, iodefine.h \\
+走行ログ         & \texttt{SDLogger.cpp}    & SDCard.cpp, fatfs/ff.c, fatfs/diskio.cpp \\
+起動時初期化     & \texttt{system\_init.c}  & mmu\_rzA1H.c, start.S \\
 \bottomrule
 \end{tabularx}
 
@@ -485,10 +699,18 @@ LED・スイッチ    & \texttt{Onboard.cpp}     & IModule.h, iodefine.h \\
 \textbf{項目} & \textbf{内容} \\
 \midrule
 ターゲットボード & GR-PEACH (ルネサス RZ/A1H, ARM Cortex-A9) \\
-開発環境         & Renesas e2 studio \\
-言語             & C++ (ベアメタル、mbed OS 不使用) \\
-コンパイラ       & GCC ARM (e2 studio 標準) \\
-レジスタ定義     & \texttt{iodefine.h} (e2 studio 自動生成) \\
+開発環境         & Renesas e2 studio（ビルド構成 \texttt{HardwareDebug}） \\
+言語             & C++（ベアメタル、mbed OS 不使用）。\texttt{ProjectConfig.h} が
+                   \texttt{inline const} を使うため \textbf{C++17 以上}が必要 \\
+コンパイラ       & GCC for Renesas ARM (\texttt{arm-none-eabi-gcc/g++} 13.3.1) \\
+浮動小数点       & VFPv3-D16, hard ABI, リトルエンディアン \\
+実行方式         & XIP（SPI フラッシュ直接実行）+ MMU / L1 キャッシュ有効
+                   (\hyperref[sec:xip]{§\ref*{sec:xip}}) \\
+レジスタ定義     & \texttt{iodefine.h}（e2 studio 自動生成） \\
+割り込み         & GIC (Generic Interrupt Controller) + OSTM0 による 1ms インターバル \\
+映像ドライバ     & \texttt{mbed-gr-libs} 由来の VDC5/DVDEC ドライバ + \texttt{DisplayBase} API \\
+ファイルシステム & ChaN's FatFs R0.11a（\texttt{diskio.cpp} 経由で \texttt{SDCard} に接続） \\
+ドキュメント     & \LaTeX (uplatex + dvipdfmx, \texttt{latexmk})。DevContainer で環境統一 \\
 \bottomrule
 \end{tabularx}
 
