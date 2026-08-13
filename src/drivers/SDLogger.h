@@ -10,8 +10,19 @@
  *           - sys.sd.saveRequested == true なら saveToSD() を実行
  *           - sys.sd.ready/logCount/full/saveDone を毎周期更新
  *
- *  本モジュールは ISR ではなく **メインループから** 呼び出すこと
- *  (SD バス処理 + FatFs はタイミング制約があるため)。
+ *  本モジュールは ISR ではなく **メインループから** 呼び出すこと。
+ *  理由は 2 つ:
+ *    1. SD バス処理 + FatFs にタイミング制約があること
+ *    2. saveToSD() が最大 4000 エントリ × 160 画素の CSV を書き出すため
+ *       秒オーダーで戻ってこないこと。ISR 内で回すと 1ms 周期が完全に破綻する
+ *
+ *  排他について:
+ *    updateOutput() が読む sys.run / sys.line / sys.mot は 1ms ISR が毎周期
+ *    書き換えている。割り込み禁止は張っていないので、1 エントリの中で
+ *    フィールドごとに 1ms ずれた値が混ざりうる（例: handle は t、motorL は
+ *    t+1ms の値）。ログ用途では許容範囲として排他を省略している。
+ *    saveToSD() の実行中も ISR は走り続けるため、走行制御は動いたまま。
+ *    保存は走行終了後 (sys.run.finished) に行う前提であることに注意。
  *
  *  ファイル形式: /data0000.csv, /data0001.csv, ... (renban.txt で連番管理)
  */
@@ -30,7 +41,11 @@ struct SDLoggerConfig
 {
   int maxEntries;       // 4000 (バッファサイズ)
   int imageWidth;       // 160  (画像 1 行記録時の幅)
-  int recordImageRow;   // 45   (画像 1 行記録時の行番号 = TRACE_ROW)
+  // 45  (画像 1 行記録時の行番号。e.hennsa もこの行の偏差を記録する)
+  // 注意: かつては RUN_CONFIG.traceRow と同値だったが、現在は traceRow=48 で
+  //       **一致していない**。走行制御が見ている行とログに残る偏差の行が
+  //       別になっているので、ログ解析時は取り違えないこと。
+  int recordImageRow;
   int patternMinForLog; // 11   (TRACE_NORMAL 以上で記録開始)
   int finishPattern;    // 101  (FINISH パターン番号 — 記録対象外)
 };

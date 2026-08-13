@@ -23,6 +23,16 @@ Motor::Motor(const MotorConfig& cfg) : _config(cfg), left_(0), right_(0) {}
 bool Motor::init()
 {
   // ---- P4_4, P4_5: MTU2 代替機能 (PWM出力) ----
+  //
+  // ビットマスクの読み方（GPIO レジスタはポート内のピン番号 = ビット番号）:
+  //   0x0030 = bit5|bit4        → P4_5, P4_4 を立てる
+  //   0xffcf = ~0x0030          → P4_5, P4_4 だけを落とす（他ピンは保持）
+  //   0x00c0 = bit7|bit6        → P4_7, P4_6（下段の方向ピン）
+  //
+  // ピンの代替機能は (PFCAE, PFCE, PFC) の 3 ビットの組み合わせで選ぶ。
+  // ここは (0, 1, 0)。Servo.cpp の P4_0 は (0, 0, 1) で、同じく
+  // 「第2代替機能」とコメントされているが組み合わせは異なる。
+  // どちらの呼称が正しいかは RZ/A1H ハードウェアマニュアルで要確認。
   GPIOPBDC4  = 0x0000;   // 双方向モード無効
   GPIOPFCAE4 &= 0xffcf;  // P4_4, P4_5: 代替機能選択 (bit4,5 クリア)
   GPIOPFCE4  |= 0x0030;  // P4_4, P4_5: 代替機能選択 (bit4,5 セット)
@@ -37,10 +47,16 @@ bool Motor::init()
   GPIOP4     &= ~0x00c0; // P4_6, P4_7: 初期値=0 (前進)
 
   // ---- MTU2 スタンバイ解除 (STBCR3 bit3 = MTU2) ----
+  // 0xf7 = ~0x08。Encoder::init() は同じ操作を `&= ~0x08` と書いている
+  // （表記が違うだけで意味は同じ）。
   CPGSTBCR3  &= 0xf7;
 
   // ---- MTU2 チャンネル3/4: リセット同期PWMモード ----
   MTU2TCR_3  = 0x20;            // TCNT クリア(TGRA), P0φ/1
+  // タイマ出力制御レジスタ1。ビットフィールド定義は
+  // generate/iodefines/mtu2_iodefine.h に無く、本ファイル冒頭に記載の
+  // 参考プロジェクト init_MTU2_PWM_Motor() から移植した値。
+  // 各ビットの意味は RZ/A1H ハードウェアマニュアルの MTU2 TOCR1 を参照。
   MTU2TOCR1  = 0x04;
   MTU2TOCR2  = 0x40;            // N: L→H / P: H→L
   MTU2TMDR_3 = 0x38;            // バッファON + リセット同期PWMモード

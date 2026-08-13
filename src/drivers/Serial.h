@@ -30,7 +30,10 @@ struct SerialConfig
 // ====================================================================
 struct SerialData
 {
-  uint32_t txCount;     // 送信文字累計（任意・debug 用）
+  // 送信文字累計（任意・debug 用）
+  // 現状どこからも更新されない。putChar() は SystemData を経由せず
+  // 直接 SCIF2 を叩き、updateOutput() は空実装のため。
+  uint32_t txCount;
 };
 
 class Serial : public IModule

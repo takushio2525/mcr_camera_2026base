@@ -16,7 +16,9 @@ GR-PEACH (RZ/A1H, ARM Cortex-A9) をターゲットとしたベアメタルC/C++
 - **ツールチェイン**: GCC for Renesas ARM (`arm-none-eabi-gcc/g++` 13.3.1)
 - **ターゲット**: Cortex-A9, VFPv3-D16 (hard ABI), Little-endian
 - **ビルド構成**: HardwareDebug
-- **実行方式**: XIP（SPIフラッシュ直接実行、MMU/L1キャッシュ無効）
+- **実行方式**: XIP（SPIフラッシュ直接実行）。**MMU と L1 キャッシュは有効**
+  （`main()` が `SystemInit()` を呼び、`src/system/system_init.c` で
+  `MMU_CreateTranslationTable()` → `MMU_Enable()` → `L1C_EnableCaches()` を実行）
 
 e2 studio の GUI からビルド・確認を行う。**Claude はビルドコマンドを実行しない。**
 コードを作成・編集したらユーザーが e2 studio でビルドして確認する。
@@ -32,40 +34,65 @@ e2 studio の GUI からビルド。コマンドラインビルドは非対応�
 OSTM0 による **1ms 周期割り込み駆動**。メインループはフレーム完了待ち+表示のみ。
 
 ```
-[1ms割り込み]
-  ├─ g_camera.update()    // ステップ分割フレーム処理（各ステップ ~8ms）
-  ├─ (将来: Motor/Servo/Encoder の update)
-  └─ g_onboard.update()   // GPIO ラッチ反映
+[1ms割り込み] ostm0_interrupt_callback()
+  ├─ Input  : g_onboard.updateInput()  // SW → sys.ob.sw
+  │           g_camera.updateInput()   // ステップ分割フレーム処理
+  ├─ Logic  : applyDrivingPattern()    // 走行モードのみ（デバッグモードは LED だけ）
+  └─ Output : g_motor.updateOutput()   // sys.mot.*Cmd → PWM
+              g_servo.updateOutput()   // sys.srv.angleCmd → PWM
+              g_onboard.updateOutput() // GPIO ラッチ反映
 
 [メインループ]
-  └─ フレーム完了待ち → シリアル表示
+  ├─ sys.cam.frameReady で g_lineDetector.updateInput()
+  ├─ g_sdlogger.updateOutput()  // 走行中ログ記録 + 保存要求処理
+  └─ シリアル表示
 ```
+
+`Encoder` はインスタンスだけ生成されており、`init()` も 3 フェーズ配列への登録も
+まだ行っていない（`src/drivers/Encoder.h` 冒頭の注記を参照）。
+`Serial` / `SDCard` は `IModule` を継承しているがどちらの配列にも載せていない。
 
 ### IModule パターン
 
-全ドライバは `IModule`（`src/core/IModule.h`）を継承し、`init()` / `update()` を実装する。
-- `init()`: ハードウェア初期化（main から1回だけ呼ぶ）
-- `update()`: 周期処理（1ms 割り込みから呼ばれる）
+全ドライバは `IModule`（`src/core/IModule.h`）を継承する。
+- `init()`: ハードウェア初期化（main から1回だけ呼ぶ）。成功 = true
+- `updateInput(SystemData&)`: 入力フェーズ（ハードウェア → SystemData）
+- `updateOutput(SystemData&)`: 出力フェーズ（SystemData → ハードウェア）
+- `deinit()`: 終了処理（デフォルト空実装。現状オーバーライドも呼出もない）
+
+入力専用モジュールは `updateInput` のみ、出力専用は `updateOutput` のみを
+override する（未 override 側はデフォルトの空実装が使われる）。
 
 ### 初期化順序（厳守）
 
 ```
+runGlobalConstructors() → SystemInit() →
 g_onboard.init() → g_serial.init() → initGIC() → g_sdlogger.init() →
 g_camera.init() → g_motor.init() → g_servo.init() → g_lineDetector.init() →
 runLogicInit(g_sys) → initOSTM0()
 ```
 
+**`runGlobalConstructors()` は必ず最初に呼ぶこと。** 後述のとおり
+`start.S` が `__libc_init_array()` を呼ばないため、これより前に
+グローバルインスタンスを触ると `_config` が BSS ゼロのままになる。
+
 **GIC は必ず Camera より前に初期化すること。** Camera の VDC5 割り込み登録が GIC に依存するため。
 **SDLogger は GIC の後、Camera の前に初期化すること。** SPI通信に割り込みは不要だが、カメラより先に初期化して起動時間を短縮する。
 **`initOSTM0()` は必ず最後に呼ぶこと。** EMA 化により ISR の Output フェーズが Motor/Servo を毎ms 叩く。OSTM0 を Motor/Servo init より前に起動すると、MTU2 がスタンバイ状態のまま PWM レジスタへ書き込みが入り、サーボ挙動異常やバス例外でハングする。
 
-### 3フェーズ設計（将来の走行制御向け）
+### 3フェーズ設計
 
 ```
-Input  : Camera, Encoder 等のセンサ読み取り
-Logic  : ライン検出、PID 演算等
-Output : Motor, Servo 等のアクチュエータ出力
+Input  : Camera, Onboard(SW) 等のセンサ読み取り        → SystemData へ書く
+Logic  : src/logic/RunLogic.cpp の純関数群（29状態の走行状態機械）
+Output : Motor, Servo, Onboard(LED) 等のアクチュエータ出力 → SystemData から読む
 ```
+
+`SystemData`（`src/core/SystemData.h`）が全モジュールの Data を集約するハブ。
+各モジュールは原則「自身の Data 構造体だけ」を読み書きし、他モジュールの
+データを参照するのは Logic フェーズの関数のみ、というのが基本ルール。
+ただし `LineDetector` は性能上の理由で `g_camera.getPixel()` を直接呼んでおり、
+これは意図的な例外（`src/drivers/Camera.h` の注記を参照）。
 
 ---
 
@@ -73,9 +100,19 @@ Output : Motor, Servo 等のアクチュエータ出力
 
 ```
 src/
-├── mcr_camera_2026base.cpp   # main(), GIC/OSTM0 初期化, 割り込みコールバック
+├── mcr_camera_2026base.cpp   # main(), GIC/OSTM0 初期化, 割り込みコールバック,
+│                             # 全グローバルインスタンスの実体定義
 ├── core/
-│   └── IModule.h             # ドライバ基底インターフェース
+│   ├── IModule.h             # ドライバ基底インターフェース
+│   ├── SystemData.h          # 全モジュールの Data を集約するハブ
+│   ├── ModuleTimer.h         # g_timer_1ms ベースのノンブロッキング ms 計測
+│   └── ProjectConfig.h       # 全 *_CONFIG の実値を一括定義（調整はここ）
+├── logic/
+│   └── RunLogic.h / .cpp     # 走行状態機械（SystemData ベースの純関数群）
+├── system/
+│   ├── system_init.c         # SystemInit(): FPU/MMU/L1キャッシュ有効化
+│   ├── mmu_rzA1H.c           # MMU 翻訳テーブル生成
+│   └── cmsis_*.h, core_ca.h  # CMSIS（ベンダ提供）
 └── drivers/
     ├── Camera.h / Camera.cpp       # NTSC 160x120 キャプチャ（VDC5+DVDEC）
     ├── Encoder.h / Encoder.cpp     # MTU2 位相計数エンコーダ
@@ -107,9 +144,12 @@ doc/                            # LaTeX 仕様書
 ## コーディング規約
 
 - **コメント**: 日本語
-- **モジュール追加**: `IModule` を継承し `init()` / `update()` を実装
+- **モジュール追加**: `IModule` を継承し `init()` と、必要な側の
+  `updateInput()` / `updateOutput()` を実装。`{Module}Config` と `{Module}Data` は
+  モジュールヘッダ側で宣言し、Config の実値は `ProjectConfig.h`、Data は
+  `SystemData` に集約する
 - **グローバルインスタンス**: `g_xxx` 命名（例: `g_camera`, `g_serial`, `g_onboard`）
-- **GPIO制御**: ラッチ方式 — `setXxx()` で値をバッファし、`update()` で一括反映
+- **GPIO制御**: ラッチ方式 — `setXxx()` で値をバッファし、`updateOutput()` で一括反映
 - **新ドライバの配置**: `src/drivers/` に `.h` / `.cpp` ペアで作成
 - **ヘッダガード**: `#ifndef DRIVERS_XXX_H_` 形式
 
@@ -127,7 +167,12 @@ doc/                            # LaTeX 仕様書
 ### XIP 制約
 
 SPIフラッシュからの直接実行のため、メモリコピー (`imageCopy`) に **~8ms** かかる。
-Camera の `update()` はステップ分割（4ステップ × 1ms割り込み）で対応済み。
+Camera の `updateInput()` はステップ分割（4ステップ × 1ms割り込み）で対応済み。
+
+**注意**: この「~8ms」は MMU / L1 キャッシュを有効化する前
+（コミット `3216ec4` より前）の測定値。現在はキャッシュが効くため実際には
+短縮されている可能性が高いが、**再測していないため今も成立するかは不明**。
+ステップ分割の要否を判断するときは実機で測り直すこと。
 
 ### generate/ の手動修正箇所
 

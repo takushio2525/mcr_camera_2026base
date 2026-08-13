@@ -74,12 +74,20 @@ extern "C" {
 
 // OSTM0 タイマー割り込み (1ms周期)
 // GR-PEACH (RZ/A1H) の周辺クロック P0Φ は 33.33MHz
-// 1ms = 33333 カウント
+// 1ms = 33333 カウント (33.33e6 / 1000)
+// 注: 走行パラメータは ProjectConfig.h に集約する方針だが、この値はハード
+//     クロックから一意に決まる定数なので main 側に残してある。
 #define OSTM0_CMP_1MS 33333
 
 // デバッグ表示用: 閾値設定
+// 170 = 画素輝度 (0-255) の二値化しきい値。デバッグモードの 0/1 表示専用で、
+// 走行制御には使われない。
+// 注: 同じ 170 が CAMERA_CONFIG.thresholdDefault (ProjectConfig.h:42) と
+//     LINE_DETECTOR_CONFIG.centerBrightnessAbs (:73) にも書かれており、
+//     用途の違う 3 箇所に同値が独立して存在する（連動しない）。
 #define DEBUG_THRESHOLD 170         // 画像二値化の閾値
-#define DEBUG_PRINT_INTERVAL_MS 200 // シリアル出力間隔(ms)
+#define DEBUG_PRINT_INTERVAL_MS 200 // シリアル出力間隔(ms)。g_cnt_printf は
+                                    // 1ms 割り込みで ++ されるので値がそのまま ms
 
 // グローバルタイマーカウンタ
 volatile unsigned long g_timer_1ms = 0;
@@ -134,15 +142,22 @@ static const int N_OUT = sizeof(s_outputModules) / sizeof(IModule*);
 extern "C" void ostm0_interrupt_callback(void);
 
 // GIC (Generic Interrupt Controller) のグローバル有効化
+//
+// RZ/A1H の GIC はディストリビュータ (INTC.ICD*) と CPU インターフェース
+// (INTC.ICC*) の2段構成。ディストリビュータが割り込み源ごとの許可/優先度/
+// 配信先 CPU を管理し、CPU インターフェースが CPU への IRQ 通知を行う。
+// 両方を有効にしないと個別 IRQ を許可しても CPU には届かない。
 static void initGIC(void)
 {
-  // GICディストリビュータ有効化
+  // GICディストリビュータ有効化 (ICDDCR bit0 = Enable)
   INTC.ICDDCR = 0x01;
 
-  // GIC CPUインターフェース有効化
+  // GIC CPUインターフェース有効化 (ICCICR bit0 = Enable)
   INTC.ICCICR = 0x01;
 
   // 割り込み優先度マスク: 全割り込みを許可
+  // GIC は優先度の数値が小さいほど高優先。ICCPMR に最大値 0xFF を入れると
+  // 全優先度が通る（= マスクしない）。個別 IRQ の優先度は ICDIPRn で設定する。
   INTC.ICCPMR = 0xFF;
 
   // CPUレベルのIRQを有効化（CPSR Iビットクリア）
@@ -165,26 +180,64 @@ static void initOSTM0(void)
   OSTM0.OSTMnCMP = OSTM0_CMP_1MS;
 
   // OSTMnCTL: インターバルタイマーモード + 周期割り込み
+  //   bit1 = 動作モード選択（インターバルタイマー / フリーランコンペア）
+  //   bit0 = カウント開始時の割り込み出力設定
+  // 0x01 がインターバルタイマー動作。iodefine.h 側にビットフィールド定義が
+  // 無いため、各ビットの正確な定義は RZ/A1H ハードウェアマニュアルの
+  // OSTMnCTL を参照すること。
   OSTM0.OSTMnCTL = 0x01;
 
+  // ------------------------------------------------------------------
   // GIC設定: OSTM0割り込みを有効化
+  //
+  // OSTM0 の割り込み ID は **134**。
+  //   根拠: generate/vects.c の RelocatableVectors テーブルで OSTMI0 の
+  //         エントリがオフセット 0x218。1 エントリ 4 バイトなので
+  //         0x218 / 4 = 134。
+  //
+  // 以下のレジスタ添字とビット位置はすべてこの ID から機械的に決まる。
+  // ID を変えたら同じ式で計算し直すこと。
+  //
+  //   ICDISERn / ICDICERn / ICDICPRn : 1 IRQ = 1 bit → 32 IRQ / レジスタ
+  //       添字  = ID / 32 = 134 / 32 = 4
+  //       ビット = ID % 32 = 134 % 32 = 6        → (1 << 6)
+  //
+  //   ICDICFRn : 1 IRQ = 2 bit → 16 IRQ / レジスタ
+  //       添字  = ID / 16 = 134 / 16 = 8
+  //       シフト = (ID % 16) * 2 = 6 * 2 = 12    → (3 << 12) が該当 2 bit
+  //
+  //   ICDIPRn / ICDIPTRn : 1 IRQ = 8 bit → 4 IRQ / レジスタ
+  //       添字  = ID / 4 = 134 / 4 = 33
+  //       シフト = (ID % 4) * 8 = 2 * 8 = 16     → (0xFF << 16) が該当 1 byte
+  // ------------------------------------------------------------------
+
+  // ICDICER4: 設定変更中の誤発火を避けるため、いったん割り込み禁止
   INTC.ICDICER4 = (1 << 6);
+  // ICDICPR4: 残っている保留フラグをクリア
   INTC.ICDICPR4 = (1 << 6);
+  // ICDISER4: 割り込み許可
   INTC.ICDISER4 |= (1 << 6);
 
-  // エッジトリガ設定 (ICDICFR8)
+  // エッジトリガ設定 (ICDICFR8 の bit13-12)
+  // 2 bit フィールドの上位ビットが 1 でエッジトリガ、0 でレベルセンシティブ。
+  // → 0b10 = 2 を書いてエッジトリガにする。
   uint32_t icf = INTC.ICDICFR8;
   icf &= ~(3 << 12);
   icf |= (2 << 12);
   INTC.ICDICFR8 = icf;
 
-  // 割り込み優先度設定 (ICDIPR)
+  // 割り込み優先度設定 (ICDIPR33 のバイト2 = bit23-16)
+  // 0x80 は中位の優先度。GIC は数値が小さいほど高優先度で、
+  // 上の ICCPMR = 0xFF より小さいのでマスクされずに通る。
+  // なお下位数ビットは実装されない場合があり、実効の粒度はハード依存。
   uint32_t ipr = INTC.ICDIPR33;
   ipr &= ~(0xFF << 16);
   ipr |= (0x80 << 16);
   INTC.ICDIPR33 = ipr;
 
-  // 割り込みプロセッサターゲット設定 (ICDIPTR)
+  // 割り込みプロセッサターゲット設定 (ICDIPTR33 のバイト2 = bit23-16)
+  // 1 bit が CPU 1 個に対応。0x01 = CPU0 のみに配信する
+  // （RZ/A1H は Cortex-A9 シングルコアなので CPU0 固定でよい）。
   uint32_t iptr = INTC.ICDIPTR33;
   iptr &= ~(0xFF << 16);
   iptr |= (0x01 << 16);
@@ -197,9 +250,29 @@ static void initOSTM0(void)
 // OSTM0割り込みコールバック
 // inthandler.c の INT_Excep_OSTMI0() から呼ばれる
 //
+// 到達経路:
+//   IRQ → INT_Excep_IRQ() が ICCIAR から割り込み ID を読む
+//     → g_irq_handlers[ID] が登録済みならそれを呼ぶ（VDC5 用の動的登録）
+//     → 未登録なら RelocatableVectors[ID] にフォールバック
+//   OSTM0 は g_irq_handlers に登録していないので **後者**の経路を通り、
+//   RelocatableVectors[134] = INT_Excep_OSTMI0() 経由でここに来る。
+//
 // 参考プロジェクト(2.38m-s)の intTimer() に相当する。
-// XIP環境では imageCopy 等が1msを超えるが、フレーム処理完了後の
-// Vfield 待ち期間にメインループへ CPU 時間が返る。
+//
+// 周期と実時間のズレについて:
+//   本関数は 1ms 周期で起動する想定だが、Camera::updateInput() の 1 ステップ
+//   （imageCopy / extractBrightness）は 1ms を超える。処理が長引いている間に
+//   来た OSTM0 割り込みは、GIC 側で保留されても **保留は 1 回分にまとめられる**
+//   ため、超過分の tick はそのまま失われる。つまり g_timer_1ms は実時間より
+//   遅れる方向にズレる（進みすぎることはない）。
+//   走行ロジックのタイマーはすべて g_timer_1ms 基準なので、実時間との差は
+//   ステップ処理の重さに比例する。厳密な実時間が要るなら別途 OSTM1 等で
+//   フリーランカウンタを持つ必要がある。
+//
+//   なお本関数自体の再入は起きない。IRQ ハンドラ実行中は CPSR の I ビットで
+//   IRQ がマスクされ、INT_Excep_IRQ() を抜けるまで次の IRQ は入らない。
+//   4 ステップ完了後は Vfield 待ちで即リターンするので、その間に
+//   メインループへ CPU 時間が返る。
 void ostm0_interrupt_callback(void)
 {
   g_timer_1ms++;
@@ -225,6 +298,11 @@ void ostm0_interrupt_callback(void)
   else
   {
     // デバッグモードでも USER_LED は中央2点センサ反応で点灯させる
+    // 0x18 = 0b0001_1000 = bit4|bit3。Camera::thresholdConvert() の割り当てで
+    // bit7 が最左 (x=31)、bit0 が最右 (x=128) なので、bit4/bit3 は x=71/x=88
+    // ＝画像中央 (x=80) を挟む 2 点にあたる。
+    // LineDetector.h の MASK 定数群に該当する値が無いためリテラルのまま。
+    // RunLogic.cpp の applyDrivingPattern() と同じ式が意図的に重複している。
     g_sys.ob.userLedCmd = (g_sys.line.sensorBin & 0x18) ? 1 : 0;
   }
 
@@ -260,6 +338,8 @@ static void runMainLoop(void)
     }
 
     // SDLogger を毎周期呼ぶ (内部で走行中ログ自動記録 + saveRequested 処理)
+    // ISR ではなくここから呼ぶ。SD/FatFs のタイミング制約に加え、保存時の
+    // saveToSD() が秒オーダーでブロックするため（詳細は SDLogger.h 冒頭）。
     g_sdlogger.updateOutput(g_sys);
 
     // 走行終了時に1回だけSD保存リクエスト
@@ -271,6 +351,13 @@ static void runMainLoop(void)
       g_sys.mot.rightCmd = 0;
       g_sys.srv.angleCmd = 0;
       g_sys.sd.saveRequested = true;
+      // 即座に保存実行。ここは最大 4000 エントリ × 160 画素の CSV 書き出しで
+      // 秒オーダーかかり、その間メインループは止まる。
+      // 一方 1ms 割り込みは走り続けるので、Camera のフレーム処理と
+      // Motor/Servo への出力は継続する。
+      // 直前の出力ゼロクリアは保存中に走り続けないための保険だが、ISR の
+      // Logic フェーズ (runFinish) が毎周期 sys.mot / sys.srv を上書きするため、
+      // 実際に停止を決めているのは runFinish 側である。
       g_sdlogger.updateOutput(g_sys);  // 即座に保存実行
       g_serial.printf("*** ログ保存完了 ***\n");
     }

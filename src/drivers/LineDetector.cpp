@@ -39,6 +39,11 @@ LineDetector::LineDetector(const LineDetectorConfig& cfg)
 // init()
 // ベアメタル環境ではグローバルコンストラクタが呼ばれない可能性への対策として
 // メンバ変数を明示的に初期化する
+//
+// 注: この前提はコミット 40eca9b で変わった。現在は main() 冒頭の
+//     runGlobalConstructors() が .init_array を手動反復するのでコンストラクタは
+//     実行される。よって本関数はコンストラクタと同じ処理を重複実行している
+//     （害はないが、消すなら runGlobalConstructors() が動くことが前提）。
 // ====================================================================
 bool LineDetector::init()
 {
@@ -102,6 +107,10 @@ int LineDetector::getDeviation(int row) const
 // ====================================================================
 const LineDetectorPatternParams& LineDetector::selectPatternParams() const
 {
+    // 数値は RunLogic.h の RunPattern と対応する:
+    //   11 = RP_TRACE_NORMAL / 1 = RP_APPROACH_BAR / 2 = RP_WAIT_AT_BAR
+    // enum を include すると LineDetector が Logic レイヤーに依存するため、
+    // ここでは数値のままにしてある（RunPattern を変えたら要追随）。
     if (pattern_ == 11) return _config.patternNormal;
     if (pattern_ == 1 || pattern_ == 2) return _config.patternStart;
     return _config.patternOther;
@@ -124,6 +133,17 @@ void LineDetector::calcDeviation()
     const int   bottomCenterOffset       = _config.devBottomCenterOffset;
 
     // スタックオーバーフロー防止のため大きな配列は static ローカルで確保
+    //
+    // 合計サイズ: [HEIGHT][WIDTH] の signed int 配列が 6 本で
+    //   120 * 160 * 4 byte * 6 = 460,800 byte ≒ 450KB を BSS に静的確保する。
+    // .cproject が -Wstack-usage=100 を指定している（1 関数のスタック使用量を
+    // 100 byte 以下に抑える）ため、この規模を自動変数には置けない。
+    //
+    // 再入について:
+    //   static なので calcDeviation() は **再入不可**。ISR から呼ぶと
+    //   メインループ側の計算途中のバッファを壊す。LineDetector を
+    //   s_inputModules[] に載せず、メインループから sys.cam.frameReady
+    //   駆動でのみ呼んでいるのはこのため（LineDetector.h の注記も参照）。
     static signed int allImageData[HEIGHT][WIDTH];             // 取得した画素データ
     static signed int difference[HEIGHT][WIDTH];               // 隣接差分
 
@@ -148,6 +168,9 @@ void LineDetector::calcDeviation()
     {
         leftExceedingXPositionsCount[y]  = 0;
         rightExceedingXPositionsCount[y] = 0;
+        // 160 は X 方向に取りうる距離の上限（= WIDTH）を番兵として入れている。
+        // 以降のループで必ずこれ未満の値に更新される。WIDTH 定数と同値だが
+        // 参考プロジェクトの記述のままリテラルになっている。
         minLeftXDifference[y]            = 160;
         minRightXDifference[y]           = 160;
         leftCenterCount[y]               = 0;
@@ -250,6 +273,11 @@ void LineDetector::calcDeviation()
         }
 
         // 左エッジ外れ値チェック
+        // 一行下で選ばれたエッジから differenceThresholdY (=5px) を超えて
+        // 離れていたら外れ値とみなし、一行下の値をそのまま引き継ぐ。
+        // 付帯条件 y < 100 により、画像下端側 19 行 (y=100〜118) では
+        // この補正を行わない。**100 の根拠は追えない（根拠不明）**。
+        // 参考プロジェクト由来の経験値と思われる。
         if (abs(leftExceedingXPositions[y][leftCenterCount[y]]
                 - leftExceedingXPositions[y + 1][leftCenterCount[y + 1]])
             > differenceThresholdY
@@ -273,7 +301,7 @@ void LineDetector::calcDeviation()
             }
         }
 
-        // 右エッジ外れ値チェック
+        // 右エッジ外れ値チェック（左エッジ側と同じ判定。y < 100 の根拠も同様に不明）
         if (abs(rightExceedingXPositions[y][rightCenterCount[y]]
                 - rightExceedingXPositions[y + 1][rightCenterCount[y + 1]])
             > differenceThresholdY
@@ -321,6 +349,10 @@ void LineDetector::calcLineFlags()
     const LineDetectorPatternParams& params = selectPatternParams();
 
     // crosslineWidth 解釈: <0 → detectRow_ + 20 (固定オフセット)
+    // 単位は画素。detectRow_ が下（値が大きい方）にあるほど、画面上でライン
+    // 幅が広く写るのでクロス判定幅も広げる、という意図の近似式。
+    // 既定値では 57 + 20 = 77 px になる。
+    // **オフセット 20 の根拠は追えない（根拠不明）**。参考プロジェクト由来。
     int crosslineWidth = (params.crosslineWidth < 0) ? (detectRow_ + 20)
                                                      : params.crosslineWidth;
 

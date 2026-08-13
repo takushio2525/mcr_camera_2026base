@@ -25,7 +25,7 @@
 struct MotorConfig
 {
   int pwmCycle;       // 33332 (1ms / P0φ/1)
-  int maxPower;       // 100   (出力 % 上限)
+  int maxPower;       // 70    (出力 % 上限。実値は ProjectConfig.h:82)
   int leftPwmPinFmt;  // ピン番号は形式的（実際の MTU2 + ピン設定はドライバ内）
   int rightPwmPinFmt;
   int leftDirPinFmt;
@@ -50,6 +50,11 @@ public:
   // モーターPWM周期 (1ms / P0φ/1) — 後方互換のため static const も保持
   static const int PWM_CYCLE = 33332;
   // 最大出力 (%) — 後方互換のため static const も保持
+  //
+  // 注意: この値は MOTOR_CONFIG.maxPower（実値 70）と一致していない。
+  // ファーム側のクランプ・走行ロジックはすべて _config.maxPower を使うため
+  // 実走行に影響はなく、現在この定数を参照しているのは tests/ のみ。
+  // 値を変えるときは ProjectConfig.h 側が正であることに注意。
   static const int MAX_POWER = 100;
 
   // Config を注入してインスタンス生成
