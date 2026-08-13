@@ -28,11 +28,14 @@ public:
     virtual ~IModule() {}
 
     // 初期化処理（成功 = true、失敗 = false）。
-    // 失敗時は呼び出し側で enabled = false に落とす運用を推奨。
+    // 失敗時は呼び出し側で enabled = false に落とす運用。
     //
-    // 現状この運用は未実装: main() は全ての init() の戻り値を捨てており、
-    // enabled に false を書く箇所も存在しない（下の enabled も読まれるだけ）。
-    // そのため SDLogger::init() が SD 未挿入で false を返しても隔離されない。
+    // この判定は core/ModuleInit.h の initModule() が担っており、
+    // main() は全てのモジュールをそれ経由で初期化する。
+    // 失敗したモジュールは enabled = false になり、以後 3 フェーズ実行
+    // （ISR 配列ループ / メインループの LineDetector・SDLogger 呼び出し）から
+    // 外れる。例えば SD 未挿入で SDLogger::init() が false を返した場合、
+    // 毎周期 updateOutput が空振りし続けることはなくなる。
     virtual bool init() = 0;
 
     // 入力フェーズ: ハードウェア → SystemData

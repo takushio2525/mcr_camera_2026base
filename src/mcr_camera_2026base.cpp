@@ -70,6 +70,7 @@ extern "C" {
 #include "drivers/Encoder.h"
 #include "core/SystemData.h"
 #include "core/ProjectConfig.h"
+#include "core/ModuleInit.h"
 #include "logic/RunLogic.h"
 
 // OSTM0 タイマー割り込み (1ms周期)
@@ -140,6 +141,49 @@ static IModule* s_outputModules[] = {
 static const int N_OUT = sizeof(s_outputModules) / sizeof(IModule*);
 
 extern "C" void ostm0_interrupt_callback(void);
+
+// ====================================================================
+// モジュール初期化の障害報告
+//
+// initModule()（core/ModuleInit.h）が init() の戻り値を enabled に反映する。
+// ここではその結果を人間に見える形で報告するだけ。
+//
+// 報告手段は 2 系統:
+//   1. シリアル出力 — 恒久的な記録。どのモジュールが落ちたかが残る
+//   2. 赤 LED       — シリアル自体が死んでいる場合の最後の手掛かり。
+//      ただし OSTM0 開始後は ISR の Logic フェーズ（applyDrivingPattern /
+//      runLogicInit）が sys.ob.*LedCmd を毎周期上書きするため、この点灯は
+//      「初期化フェーズの間だけ」有効。恒久表示にするには走行ロジック側に
+//      障害表示を持たせる必要があり、本コミットの範囲外。
+// ====================================================================
+static bool s_initFailed = false;
+
+static void reportInitFailure(const char* name)
+{
+  s_initFailed = true;
+  g_serial.printf("\x1b[31m[init] %s の初期化に失敗 → enabled=false で無効化\x1b[39m\n",
+                  name);
+
+  // 赤 LED 点灯。OSTM0 未起動なので ISR は走っておらず、ここで直接 Output する。
+  // Onboard 自身が落ちている場合は打つ手がないのでスキップする。
+  if (g_onboard.enabled)
+  {
+    g_sys.ob.ledRedCmd = 1;
+    g_onboard.updateOutput(g_sys);
+  }
+}
+
+// init() を呼んで enabled に反映し、失敗なら報告する。
+// 戻り値は init() の結果（成功時のメッセージ出し分けに使う）。
+static bool initAndReport(IModule& mod, const char* name)
+{
+  const bool ok = initModule(mod);
+  if (!ok)
+  {
+    reportInitFailure(name);
+  }
+  return ok;
+}
 
 // GIC (Generic Interrupt Controller) のグローバル有効化
 //
@@ -330,20 +374,30 @@ static void runMainLoop(void)
   while (1)
   {
     // フレーム完了時の処理: ライン検出を main loop で実行
+    // LineDetector / SDLogger は ISR 配列に載っていないので、
+    // enabled の判定はここで行う（ISR 側は s_inputModules / s_outputModules の
+    // ループが同じ判定をしている）。
     if (g_sys.cam.frameReady)
     {
       s_frameCount++;
       g_sys.cam.frameReady = false;
-      g_lineDetector.updateInput(g_sys);
+      if (g_lineDetector.enabled)
+      {
+        g_lineDetector.updateInput(g_sys);
+      }
     }
 
     // SDLogger を毎周期呼ぶ (内部で走行中ログ自動記録 + saveRequested 処理)
     // ISR ではなくここから呼ぶ。SD/FatFs のタイミング制約に加え、保存時の
     // saveToSD() が秒オーダーでブロックするため（詳細は SDLogger.h 冒頭）。
-    g_sdlogger.updateOutput(g_sys);
+    if (g_sdlogger.enabled)
+    {
+      g_sdlogger.updateOutput(g_sys);
+    }
 
     // 走行終了時に1回だけSD保存リクエスト
-    if (g_sys.run.finished && !savedToSD)
+    // SDLogger が無効（SD 未挿入等）なら保存要求そのものを出さない。
+    if (g_sys.run.finished && !savedToSD && g_sdlogger.enabled)
     {
       savedToSD = true;
       g_serial.printf("\n*** 走行終了 → ログ保存中 ***\n");
@@ -397,12 +451,17 @@ static void runDebugLoop(void)
   while (1)
   {
     // フレーム更新完了をカウント
+    // Camera の init に失敗している場合 frameReady は永久に false のままで、
+    // ここは一度も通らない（以前は Camera::init() が while(1) でハングしていた）。
     if (g_sys.cam.frameReady)
     {
       s_frameCount++;
       g_sys.cam.frameReady = false;
-      // フレーム完了時にライン検出を実行
-      g_lineDetector.updateInput(g_sys);
+      // フレーム完了時にライン検出を実行（ISR 配列外なので enabled はここで見る）
+      if (g_lineDetector.enabled)
+      {
+        g_lineDetector.updateInput(g_sys);
+      }
     }
 
     // 一定間隔でシリアル出力
@@ -509,13 +568,27 @@ int main(void)
   // MMU + L1 キャッシュ有効化
   SystemInit();
 
-  // オンボードLED/SWの初期化
-  g_onboard.init();
+  // ---- Onboard / Serial は「障害を報告する手段」そのものなので特別扱い ----
+  // どちらもまだ printf が使えない段階で init するため、結果を保持しておき、
+  // シリアル初期化後にまとめて報告する。Onboard を先に init するのは、
+  // Serial が死んでいても LED で失敗を示せるようにするため。
+  const bool onboardOk = initModule(g_onboard);
+  const bool serialOk  = initModule(g_serial);
 
-  // シリアル通信初期化 (230400bps)
-  g_serial.init();
   g_serial.printf("\033[2J\033[H"); // 画面クリア & カーソルホーム
   g_serial.printf("\x1b[36m--- MCR Camera 2026 Base ---\x1b[39m\n");
+
+  // 保留していた 2 件の結果を報告する。
+  // Serial 自体が失敗している場合はこの出力自体が届かないので、
+  // reportInitFailure() の赤 LED が唯一の手掛かりになる。
+  if (!onboardOk)
+  {
+    reportInitFailure("Onboard");
+  }
+  if (!serialOk)
+  {
+    reportInitFailure("Serial");
+  }
 
   // 起動時にスイッチが押されていたらデバッグモード
   // （カメラ初期化前なのでシリアル出力で確認できる）
@@ -527,27 +600,47 @@ int main(void)
   g_serial.printf("GIC初期化完了\n");
 
   // SDLogger初期化（SDカード + FatFs）
-  g_sdlogger.init();
+  // SD 未挿入・マウント失敗で false が返る。失敗時は enabled=false になり、
+  // メインループの updateOutput() 呼び出しごとスキップされる
+  // （以前は無視していたため mounted_==false のまま毎周期空振りしていた）。
+  // 成功時のメッセージは SDLogger::init() 自身が出すのでここでは出さない。
+  initAndReport(g_sdlogger, "SDLogger");
 
   g_serial.printf("カメラ初期化中...\n");
-  g_camera.init();
-  g_serial.printf("カメラ初期化完了\n");
+  if (initAndReport(g_camera, "Camera"))
+  {
+    g_serial.printf("カメラ初期化完了\n");
+  }
 
   // モーター初期化
-  g_motor.init();
-  g_serial.printf("モーター初期化完了\n");
+  if (initAndReport(g_motor, "Motor"))
+  {
+    g_serial.printf("モーター初期化完了\n");
+  }
 
   // サーボ初期化
-  g_servo.init();
-  g_serial.printf("サーボ初期化完了\n");
+  if (initAndReport(g_servo, "Servo"))
+  {
+    g_serial.printf("サーボ初期化完了\n");
+  }
 
   // ライン検出初期化
-  g_lineDetector.init();
-  g_serial.printf("ライン検出初期化完了\n");
+  if (initAndReport(g_lineDetector, "LineDetector"))
+  {
+    g_serial.printf("ライン検出初期化完了\n");
+  }
 
   // 走行制御初期化 (Logic レイヤー)
   runLogicInit(g_sys);
   g_serial.printf("走行制御初期化完了\n");
+
+  // 初期化結果のまとめ。失敗が 1 件でもあればここに残るので、
+  // 起動ログを遡らなくても異常が分かる。
+  if (s_initFailed)
+  {
+    g_serial.printf("\x1b[31m*** 一部モジュールの初期化に失敗しました。"
+                    "該当モジュールは 3 フェーズ実行から除外されています ***\x1b[39m\n");
+  }
 
   // ★ OSTM0 (1ms 割り込み) は全ドライバ init 完了後に最後に開始する。
   //   ISR の Output フェーズが Motor/Servo を毎ms 叩くため、ここより前で
