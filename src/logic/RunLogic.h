@@ -32,47 +32,53 @@ struct SystemData;
 //   - handleGain* / handleStraightAbsThreshold / handleGentleAbsThreshold
 //   - crank* / lane* / brakeTargetMotor / approachMotorPower
 //   - 各 t*Ms タイマー定数
+//
+// 各メンバ右の数値は ProjectConfig.h:135-174 の RUN_CONFIG に入っている
+// 実値の「写し」であって定義ではない。値を変えるときは ProjectConfig.h を
+// 編集し、本ファイルのコメントも同時に更新すること
+// （過去に片方だけ更新して 32 項目中 21 項目が食い違った実績がある）。
 // ====================================================================
 struct RunLogicConfig
 {
     // --- 状態タイマー定数 [ms] ---
-    unsigned long tLineSkipMs;          // 100   クロス/ハーフ通過時間
-    unsigned long tCrankMs;             // 440   クランク旋回時間
-    unsigned long tLaneTurnMs;          // 340   レーンチェンジ：寄せ時間
-    unsigned long tLaneStraightMs;      // 0     レーンチェンジ：直進時間
-    unsigned long tLaneCounterMs;       // 250   レーンチェンジ：戻し時間
-    unsigned long tCourseTimeoutMs;     // 60000 コース1周想定時間
-    unsigned long tBarWaitPreMs;        // 500   pattern1 で前進開始までの待機
-    unsigned long tBarWaitPostMs;       // 1000  pattern2 で次に進む待機
-    unsigned long tAfterBarGoMs;        // 100   pattern3 でバー後加速する時間
-    unsigned long tHalfAfterTimeoutMs;  // 1000  ハーフライン後タイムアウト
-    unsigned long tTraceLineEnableMs;   // 700   通常トレースでライン検出を有効化する経過時間
-    unsigned long tBarApproachWaitMs;   // 100   pattern2 でハンドル制御するアシスト時間
+    unsigned long tLineSkipMs;          // 100    クロス/ハーフ通過時間
+    unsigned long tCrankMs;             // 250    クランク旋回時間
+    unsigned long tLaneTurnMs;          // 250    レーンチェンジ：寄せ時間
+    unsigned long tLaneStraightMs;      // 0      レーンチェンジ：直進時間（0 = 直進フェーズを即通過）
+    unsigned long tLaneCounterMs;       // 250    レーンチェンジ：戻し時間
+    unsigned long tCourseTimeoutMs;     // 120000 コース1周想定時間（= 2分）
+    unsigned long tBarWaitPreMs;        // 100    pattern1 で前進開始までの待機
+    unsigned long tBarWaitPostMs;       // 100    pattern2 で次に進む待機
+    unsigned long tAfterBarGoMs;        // 100    pattern3 でバー後加速する時間
+    unsigned long tHalfAfterTimeoutMs;  // 100    ハーフライン後タイムアウト
+    unsigned long tTraceLineEnableMs;   // 100    通常トレースでライン検出を有効化する経過時間
+    unsigned long tBarApproachWaitMs;   // 100    pattern2 でハンドル制御するアシスト時間
 
     // --- 走行パラメータ ---
-    int crankHandle;            // 42   クランク旋回角度 [度]
-    int crankMotorOut;          // 100  クランク外輪
-    int crankMotorIn;           // 100  クランク内輪
-    int laneHandle;             // 23   レーンチェンジ寄せ角度 [度]
-    int laneCounterHandle;      // 38   レーンチェンジ戻し角度 [度]
-    int laneMotorIn;            // 37   レーンチェンジ内輪
-    int laneMotorOut;           // 55   レーンチェンジ外輪
-    int laneStraightMotor;      // 100  レーンチェンジ直進
-    int laneCounterMotorIn;     // 20   レーンチェンジ戻し内輪
-    int laneCounterMotorOut;    // 20   レーンチェンジ戻し外輪
-    int brakeTargetMotor;       // 43   ブレーキ走行時の目標モーター出力
-    int approachMotorPower;     // 18   バー前進時のモーター出力
+    int crankHandle;            // 30   クランク旋回角度 [度]
+    int crankMotorOut;          // 70   クランク外輪 [%]
+    int crankMotorIn;           // 70   クランク内輪 [%]
+    int laneHandle;             // 25   レーンチェンジ寄せ角度 [度]
+    int laneCounterHandle;      // 25   レーンチェンジ戻し角度 [度]
+    int laneMotorIn;            // 60   レーンチェンジ内輪 [%]
+    int laneMotorOut;           // 60   レーンチェンジ外輪 [%]
+    int laneStraightMotor;      // 60   レーンチェンジ直進 [%]
+    int laneCounterMotorIn;     // 60   レーンチェンジ戻し内輪 [%]
+    int laneCounterMotorOut;    // 60   レーンチェンジ戻し外輪 [%]
+    int brakeTargetMotor;       // 60   ブレーキ走行時の目標モーター出力 [%]
+    int approachMotorPower;     // 60   バー前進時のモーター出力 [%]
 
     // --- 検出行 ---
-    int traceRow;               // 45   通常トレース時の偏差取得行
-    int approachRow;            // 95   スタート時の偏差取得行
+    // 画像は 160x120。行番号は上端 0 → 下端 119（下ほど車体に近い）。
+    int traceRow;               // 48   通常トレース時の偏差取得行
+    int approachRow;            // 95   スタート時の偏差取得行（下寄り = 直近を見る）
 
     // --- ハンドル計算ゲイン（最頻調整対象） ---
     int   handleStraightAbsThreshold;  // 0     |dev| <= ここまで直線扱い
     int   handleGentleAbsThreshold;    // 7     |dev| <= ここまで緩カーブ
-    float handleGainGentle;            // 0.37  緩カーブのゲイン
-    float handleGainSharp;             // 0.5   急カーブのゲイン
-    float handleGainNonNormal;         // 0.5   pattern!=TRACE_NORMAL のゲイン
+    float handleGainGentle;            // 0.24  緩カーブのゲイン
+    float handleGainSharp;             // 0.24  急カーブのゲイン
+    float handleGainNonNormal;         // 0.24  pattern!=TRACE_NORMAL のゲイン
 };
 
 // ====================================================================

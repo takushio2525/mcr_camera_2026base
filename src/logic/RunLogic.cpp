@@ -93,7 +93,9 @@ static void calcHandle(SystemData& sys)
     }
 }
 
-// 通常走行モーター値の計算 — 旧 calcMotorVal() (常に MAX_POWER)
+// 通常走行モーター値の計算 — 旧 calcMotorVal()
+// 左右とも一律 MOTOR_CONFIG.maxPower（実値 70 [%]）を指示する。
+// Motor::MAX_POWER (=100) ではないので注意。
 static void calcMotorVal(SystemData& sys)
 {
     sys.run.leftMotor  = MOTOR_CONFIG.maxPower;
@@ -143,7 +145,7 @@ static void runApproachBar(SystemData& sys)
 {
     outColorLed(sys, 1, 1, 0); // 黄色
 
-    // 500ms 経過で前進開始
+    // tBarWaitPreMs（実値 100ms）経過で前進開始
     if (sys.run.auxTimer.isExpired(RUN_CONFIG.tBarWaitPreMs))
     {
         outMotor(sys, RUN_CONFIG.approachMotorPower,
@@ -180,7 +182,7 @@ static void runWaitAtBar(SystemData& sys)
         outHandle(sys, 0);
     }
 
-    // 1秒経過 + クロスライン消失 → 加速フェーズへ
+    // tBarWaitPostMs（実値 100ms）経過 + クロスライン消失 → 加速フェーズへ
     if (!sys.line.crossLine
         && sys.run.auxTimer.isExpired(RUN_CONFIG.tBarWaitPostMs))
     {
@@ -238,7 +240,8 @@ static void runTraceNormal(SystemData& sys)
     outMotor(sys, sys.run.leftMotor, sys.run.rightMotor);
     outHandle(sys, sys.run.handleVal);
 
-    // ライン検出（一定時間経過後に有効化、参考プロジェクトの total>=700 相当）
+    // ライン検出（走行開始から tTraceLineEnableMs 経過後に有効化）
+    // 参考プロジェクトは total>=700 だったが、本プロジェクトの実値は 100ms。
     if (sys.run.totalTimer.isExpired(RUN_CONFIG.tTraceLineEnableMs))
     {
         if (sys.line.crossLine)
@@ -257,7 +260,7 @@ static void runTraceNormal(SystemData& sys)
         }
     }
 
-    // タイムアウト（コース1周想定）
+    // タイムアウト（コース1周想定 = tCourseTimeoutMs、実値 120000ms = 2分）
     if (sys.run.totalTimer.isExpired(RUN_CONFIG.tCourseTimeoutMs))
     {
         changePattern(sys, RP_FINISH);
