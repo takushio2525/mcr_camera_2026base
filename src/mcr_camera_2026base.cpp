@@ -134,15 +134,22 @@ static const int N_OUT = sizeof(s_outputModules) / sizeof(IModule*);
 extern "C" void ostm0_interrupt_callback(void);
 
 // GIC (Generic Interrupt Controller) のグローバル有効化
+//
+// RZ/A1H の GIC はディストリビュータ (INTC.ICD*) と CPU インターフェース
+// (INTC.ICC*) の2段構成。ディストリビュータが割り込み源ごとの許可/優先度/
+// 配信先 CPU を管理し、CPU インターフェースが CPU への IRQ 通知を行う。
+// 両方を有効にしないと個別 IRQ を許可しても CPU には届かない。
 static void initGIC(void)
 {
-  // GICディストリビュータ有効化
+  // GICディストリビュータ有効化 (ICDDCR bit0 = Enable)
   INTC.ICDDCR = 0x01;
 
-  // GIC CPUインターフェース有効化
+  // GIC CPUインターフェース有効化 (ICCICR bit0 = Enable)
   INTC.ICCICR = 0x01;
 
   // 割り込み優先度マスク: 全割り込みを許可
+  // GIC は優先度の数値が小さいほど高優先。ICCPMR に最大値 0xFF を入れると
+  // 全優先度が通る（= マスクしない）。個別 IRQ の優先度は ICDIPRn で設定する。
   INTC.ICCPMR = 0xFF;
 
   // CPUレベルのIRQを有効化（CPSR Iビットクリア）
@@ -165,26 +172,64 @@ static void initOSTM0(void)
   OSTM0.OSTMnCMP = OSTM0_CMP_1MS;
 
   // OSTMnCTL: インターバルタイマーモード + 周期割り込み
+  //   bit1 = 動作モード選択（インターバルタイマー / フリーランコンペア）
+  //   bit0 = カウント開始時の割り込み出力設定
+  // 0x01 がインターバルタイマー動作。iodefine.h 側にビットフィールド定義が
+  // 無いため、各ビットの正確な定義は RZ/A1H ハードウェアマニュアルの
+  // OSTMnCTL を参照すること。
   OSTM0.OSTMnCTL = 0x01;
 
+  // ------------------------------------------------------------------
   // GIC設定: OSTM0割り込みを有効化
+  //
+  // OSTM0 の割り込み ID は **134**。
+  //   根拠: generate/vects.c の RelocatableVectors テーブルで OSTMI0 の
+  //         エントリがオフセット 0x218。1 エントリ 4 バイトなので
+  //         0x218 / 4 = 134。
+  //
+  // 以下のレジスタ添字とビット位置はすべてこの ID から機械的に決まる。
+  // ID を変えたら同じ式で計算し直すこと。
+  //
+  //   ICDISERn / ICDICERn / ICDICPRn : 1 IRQ = 1 bit → 32 IRQ / レジスタ
+  //       添字  = ID / 32 = 134 / 32 = 4
+  //       ビット = ID % 32 = 134 % 32 = 6        → (1 << 6)
+  //
+  //   ICDICFRn : 1 IRQ = 2 bit → 16 IRQ / レジスタ
+  //       添字  = ID / 16 = 134 / 16 = 8
+  //       シフト = (ID % 16) * 2 = 6 * 2 = 12    → (3 << 12) が該当 2 bit
+  //
+  //   ICDIPRn / ICDIPTRn : 1 IRQ = 8 bit → 4 IRQ / レジスタ
+  //       添字  = ID / 4 = 134 / 4 = 33
+  //       シフト = (ID % 4) * 8 = 2 * 8 = 16     → (0xFF << 16) が該当 1 byte
+  // ------------------------------------------------------------------
+
+  // ICDICER4: 設定変更中の誤発火を避けるため、いったん割り込み禁止
   INTC.ICDICER4 = (1 << 6);
+  // ICDICPR4: 残っている保留フラグをクリア
   INTC.ICDICPR4 = (1 << 6);
+  // ICDISER4: 割り込み許可
   INTC.ICDISER4 |= (1 << 6);
 
-  // エッジトリガ設定 (ICDICFR8)
+  // エッジトリガ設定 (ICDICFR8 の bit13-12)
+  // 2 bit フィールドの上位ビットが 1 でエッジトリガ、0 でレベルセンシティブ。
+  // → 0b10 = 2 を書いてエッジトリガにする。
   uint32_t icf = INTC.ICDICFR8;
   icf &= ~(3 << 12);
   icf |= (2 << 12);
   INTC.ICDICFR8 = icf;
 
-  // 割り込み優先度設定 (ICDIPR)
+  // 割り込み優先度設定 (ICDIPR33 のバイト2 = bit23-16)
+  // 0x80 は中位の優先度。GIC は数値が小さいほど高優先度で、
+  // 上の ICCPMR = 0xFF より小さいのでマスクされずに通る。
+  // なお下位数ビットは実装されない場合があり、実効の粒度はハード依存。
   uint32_t ipr = INTC.ICDIPR33;
   ipr &= ~(0xFF << 16);
   ipr |= (0x80 << 16);
   INTC.ICDIPR33 = ipr;
 
-  // 割り込みプロセッサターゲット設定 (ICDIPTR)
+  // 割り込みプロセッサターゲット設定 (ICDIPTR33 のバイト2 = bit23-16)
+  // 1 bit が CPU 1 個に対応。0x01 = CPU0 のみに配信する
+  // （RZ/A1H は Cortex-A9 シングルコアなので CPU0 固定でよい）。
   uint32_t iptr = INTC.ICDIPTR33;
   iptr &= ~(0xFF << 16);
   iptr |= (0x01 << 16);
