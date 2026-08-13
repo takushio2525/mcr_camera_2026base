@@ -44,10 +44,13 @@ set(MOCK_SOURCES
 
 # ============================================================
 # テスト実行ファイル
+#   test_globals.cpp は main.cpp をリンクしない代わりに
+#   g_sys / g_motor / g_servo / g_encoder / g_timer_1ms を定義する
 # ============================================================
 add_executable(run_tests
   ${DRIVER_SOURCES}
   ${MOCK_SOURCES}
+  test_globals.cpp
   test_motor.cpp
   test_servo.cpp
   test_encoder.cpp
