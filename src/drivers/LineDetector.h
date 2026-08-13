@@ -16,6 +16,15 @@
  *
  *  処理が重い (HEIGHT × WIDTH ループ) ため 1ms ISR 内では呼ばず、
  *  メインループで sys.cam.frameReady = true のときのみ実行する。
+ *  加えて calcDeviation() / calcLineFlags() が約 450KB の static ローカル
+ *  配列を使うため **再入不可**。ISR とメインループの両方から呼んではいけない。
+ *
+ *  排他について:
+ *    updateInput() はメインループから呼ばれるが、書き込む sys.line.* は
+ *    1ms ISR 内の Logic フェーズ (applyDrivingPattern) が読む。割り込み禁止は
+ *    張っていないので、ISR から見ると deviation[] の途中まで更新された状態を
+ *    読む可能性がある。1 フレーム前後の値が混ざるだけで破綻しないことを前提に
+ *    許容している（フラグ類は bool / unsigned char の単一代入）。
  */
 
 #ifndef DRIVERS_LINEDETECTOR_H_

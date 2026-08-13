@@ -133,6 +133,17 @@ void LineDetector::calcDeviation()
     const int   bottomCenterOffset       = _config.devBottomCenterOffset;
 
     // スタックオーバーフロー防止のため大きな配列は static ローカルで確保
+    //
+    // 合計サイズ: [HEIGHT][WIDTH] の signed int 配列が 6 本で
+    //   120 * 160 * 4 byte * 6 = 460,800 byte ≒ 450KB を BSS に静的確保する。
+    // .cproject が -Wstack-usage=100 を指定している（1 関数のスタック使用量を
+    // 100 byte 以下に抑える）ため、この規模を自動変数には置けない。
+    //
+    // 再入について:
+    //   static なので calcDeviation() は **再入不可**。ISR から呼ぶと
+    //   メインループ側の計算途中のバッファを壊す。LineDetector を
+    //   s_inputModules[] に載せず、メインループから sys.cam.frameReady
+    //   駆動でのみ呼んでいるのはこのため（LineDetector.h の注記も参照）。
     static signed int allImageData[HEIGHT][WIDTH];             // 取得した画素データ
     static signed int difference[HEIGHT][WIDTH];               // 隣接差分
 

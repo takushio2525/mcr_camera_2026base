@@ -10,8 +10,19 @@
  *           - sys.sd.saveRequested == true なら saveToSD() を実行
  *           - sys.sd.ready/logCount/full/saveDone を毎周期更新
  *
- *  本モジュールは ISR ではなく **メインループから** 呼び出すこと
- *  (SD バス処理 + FatFs はタイミング制約があるため)。
+ *  本モジュールは ISR ではなく **メインループから** 呼び出すこと。
+ *  理由は 2 つ:
+ *    1. SD バス処理 + FatFs にタイミング制約があること
+ *    2. saveToSD() が最大 4000 エントリ × 160 画素の CSV を書き出すため
+ *       秒オーダーで戻ってこないこと。ISR 内で回すと 1ms 周期が完全に破綻する
+ *
+ *  排他について:
+ *    updateOutput() が読む sys.run / sys.line / sys.mot は 1ms ISR が毎周期
+ *    書き換えている。割り込み禁止は張っていないので、1 エントリの中で
+ *    フィールドごとに 1ms ずれた値が混ざりうる（例: handle は t、motorL は
+ *    t+1ms の値）。ログ用途では許容範囲として排他を省略している。
+ *    saveToSD() の実行中も ISR は走り続けるため、走行制御は動いたまま。
+ *    保存は走行終了後 (sys.run.finished) に行う前提であることに注意。
  *
  *  ファイル形式: /data0000.csv, /data0001.csv, ... (renban.txt で連番管理)
  */

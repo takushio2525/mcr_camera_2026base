@@ -35,6 +35,18 @@ static volatile uint8_t *s_writeBuf = s_frameBufA;
 static volatile uint8_t *s_saveBuf = s_frameBufB;
 
 // Vsync/Vfieldカウンタ
+//
+// これらと上の s_writeBuf / s_saveBuf は、次の 2 つの実行文脈から触られる:
+//   - VDC5 割り込み (vsyncCallback / vfieldCallback)
+//   - OSTM0 1ms 割り込み内の Camera::updateInput()
+// 排他手段は volatile によるコンパイラ最適化抑止だけで、クリティカル
+// セクション（割り込み禁止）は張っていない。成立している前提は以下:
+//   - いずれも 32bit アライン変数なので単一命令の load/store になり、
+//     途中の値を読むこと（tearing）は無い
+//   - s_vsyncCount は「割り込みがデクリメント、待ち側は読むだけ」
+//   - s_vfieldToggle は「割り込みが書き、updateInput は読むだけ」
+// 例外は updateInput() 側の s_vfieldCount = 0（消費）で、そこは
+// read-modify-write になる。詳細は updateInput() 内のコメントを参照。
 static volatile int32_t s_vsyncCount = 0;
 static volatile int32_t s_vfieldCount = 0;
 static volatile int32_t s_vfieldToggle = 1;
@@ -288,6 +300,12 @@ void Camera::updateInput(SystemData& sys)
   {
     if (s_vfieldCount > 0)
     {
+      // 「読んで 0 を書く」read-modify-write なので、この 2 命令の間に
+      // VDC5 の Vfield 割り込みが入ると、そこで ++ された分が 0 で
+      // 上書きされて 1 フィールド分取りこぼす。
+      // ここは「1 回以上来たか」だけを見る使い方であり、取りこぼしても
+      // 次のフィールドで開始が 1 回遅れるだけなので許容している
+      // （s_vfieldCount -= consumed のような形にはしていない）。
       s_vfieldCount = 0; // 消費
       frameStep_ = 0;
       frameReady_ = false;
@@ -328,6 +346,15 @@ void Camera::updateInput(SystemData& sys)
   }
 
   // SystemData へ最新状態を反映（毎周期）
+  //
+  // sys.cam.frameReady はメインループが false を書き、この ISR が
+  // frameReady_ で毎周期上書きする。割り込み禁止では守っていない。
+  //   - 関数冒頭の「!sys.cam.frameReady && frameReady_ → frameReady_ = false」で
+  //     メインループ側の消費を内部状態に取り込む
+  //   - ただし 4 ステップ完了後に次の Vfield が来ると、消費されたかどうかに
+  //     関わらず frameStep_ = 0 / frameReady_ = false にして次フレームを始める
+  // したがってメインループが遅れると frameReady == true の窓を取りこぼしうる。
+  // その場合はそのフレームの LineDetector 実行が 1 回飛ぶだけで破綻はしない。
   sys.cam.frameReady     = frameReady_;
   sys.cam.frameCount     = frameCount_;
   sys.cam.field          = capturedField_;

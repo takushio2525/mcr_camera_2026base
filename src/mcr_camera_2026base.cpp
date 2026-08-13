@@ -250,9 +250,29 @@ static void initOSTM0(void)
 // OSTM0割り込みコールバック
 // inthandler.c の INT_Excep_OSTMI0() から呼ばれる
 //
+// 到達経路:
+//   IRQ → INT_Excep_IRQ() が ICCIAR から割り込み ID を読む
+//     → g_irq_handlers[ID] が登録済みならそれを呼ぶ（VDC5 用の動的登録）
+//     → 未登録なら RelocatableVectors[ID] にフォールバック
+//   OSTM0 は g_irq_handlers に登録していないので **後者**の経路を通り、
+//   RelocatableVectors[134] = INT_Excep_OSTMI0() 経由でここに来る。
+//
 // 参考プロジェクト(2.38m-s)の intTimer() に相当する。
-// XIP環境では imageCopy 等が1msを超えるが、フレーム処理完了後の
-// Vfield 待ち期間にメインループへ CPU 時間が返る。
+//
+// 周期と実時間のズレについて:
+//   本関数は 1ms 周期で起動する想定だが、Camera::updateInput() の 1 ステップ
+//   （imageCopy / extractBrightness）は 1ms を超える。処理が長引いている間に
+//   来た OSTM0 割り込みは、GIC 側で保留されても **保留は 1 回分にまとめられる**
+//   ため、超過分の tick はそのまま失われる。つまり g_timer_1ms は実時間より
+//   遅れる方向にズレる（進みすぎることはない）。
+//   走行ロジックのタイマーはすべて g_timer_1ms 基準なので、実時間との差は
+//   ステップ処理の重さに比例する。厳密な実時間が要るなら別途 OSTM1 等で
+//   フリーランカウンタを持つ必要がある。
+//
+//   なお本関数自体の再入は起きない。IRQ ハンドラ実行中は CPSR の I ビットで
+//   IRQ がマスクされ、INT_Excep_IRQ() を抜けるまで次の IRQ は入らない。
+//   4 ステップ完了後は Vfield 待ちで即リターンするので、その間に
+//   メインループへ CPU 時間が返る。
 void ostm0_interrupt_callback(void)
 {
   g_timer_1ms++;
@@ -318,6 +338,8 @@ static void runMainLoop(void)
     }
 
     // SDLogger を毎周期呼ぶ (内部で走行中ログ自動記録 + saveRequested 処理)
+    // ISR ではなくここから呼ぶ。SD/FatFs のタイミング制約に加え、保存時の
+    // saveToSD() が秒オーダーでブロックするため（詳細は SDLogger.h 冒頭）。
     g_sdlogger.updateOutput(g_sys);
 
     // 走行終了時に1回だけSD保存リクエスト
@@ -329,6 +351,13 @@ static void runMainLoop(void)
       g_sys.mot.rightCmd = 0;
       g_sys.srv.angleCmd = 0;
       g_sys.sd.saveRequested = true;
+      // 即座に保存実行。ここは最大 4000 エントリ × 160 画素の CSV 書き出しで
+      // 秒オーダーかかり、その間メインループは止まる。
+      // 一方 1ms 割り込みは走り続けるので、Camera のフレーム処理と
+      // Motor/Servo への出力は継続する。
+      // 直前の出力ゼロクリアは保存中に走り続けないための保険だが、ISR の
+      // Logic フェーズ (runFinish) が毎周期 sys.mot / sys.srv を上書きするため、
+      // 実際に停止を決めているのは runFinish 側である。
       g_sdlogger.updateOutput(g_sys);  // 即座に保存実行
       g_serial.printf("*** ログ保存完了 ***\n");
     }
