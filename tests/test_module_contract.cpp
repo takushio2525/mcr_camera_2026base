@@ -19,6 +19,13 @@
  *  実物の Camera はホストでビルドできない（VDC5 / DisplayBase 依存）ため
  *  「途中の初期化ステップで失敗したら false を返す」という同じ形の
  *  フェイクで検証する。
+ *
+ *  SystemData をローカルに置くときは必ず `SystemData sys{};` と値初期化する。
+ *  SystemData 配下の *Data は NSDMI を持たない集約体なので、`SystemData sys;`
+ *  だとスタック上の実体が不定値のままになる。ファーム側の g_sys は
+ *  グローバル（BSS ゼロ初期化）なのでこの問題は起きず、テストだけの注意点。
+ *  実際 CameraInitContract.FailedCameraIsSkippedByIsrLoop は、
+ *  frameReady の初期値がたまたま 0 になるかどうかで成否が変わっていた。
  */
 
 #include <gtest/gtest.h>
@@ -189,7 +196,7 @@ TEST(ModuleInitContract, ReturnValueMatchesInitResult)
 
 TEST(ModuleInitContract, DisabledModuleIsSkippedInInputPhase)
 {
-  SystemData sys;
+  SystemData sys{};  // 値初期化必須（理由はファイル冒頭の注記を参照）
   FakeModule good(true);
   FakeModule bad(false);
   initModule(good);
@@ -205,7 +212,7 @@ TEST(ModuleInitContract, DisabledModuleIsSkippedInInputPhase)
 
 TEST(ModuleInitContract, DisabledModuleIsSkippedInOutputPhase)
 {
-  SystemData sys;
+  SystemData sys{};  // 値初期化必須（理由はファイル冒頭の注記を参照）
   FakeModule good(true);
   FakeModule bad(false);
   initModule(good);
@@ -222,7 +229,7 @@ TEST(ModuleInitContract, WithoutInitModuleTheFailureIsNotIsolated)
 {
   // 対照実験: init() を直接呼んで戻り値を捨てると（= 本修正前の main() の形）
   // enabled が true のまま残り、壊れたモジュールが毎周期叩かれ続ける。
-  SystemData sys;
+  SystemData sys{};  // 値初期化必須（理由はファイル冒頭の注記を参照）
   FakeModule bad(false);
   bad.init();                 // 戻り値を捨てる
 
@@ -263,7 +270,7 @@ TEST(CameraInitContract, FailedCameraIsSkippedByIsrLoop)
 {
   // カメラ初期化に失敗しても ISR の Input フェーズは回り続け、
   // カメラだけがスキップされる（= ハングしない）
-  SystemData sys;
+  SystemData sys{};  // 値初期化必須（理由はファイル冒頭の注記を参照）
   FakeCamera cam(2);
   FakeModule onboard(true);
   initModule(cam);
