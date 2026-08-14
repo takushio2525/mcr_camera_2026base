@@ -50,7 +50,7 @@
 \pagestyle{fancy}
 \fancyhf{}
 \fancyhead[L]{\small\color{headerblue}\textbf{mcr\_camera\_2026base} プログラム設計仕様書}
-\fancyhead[R]{\small\color{headerblue}Rev.\,2.0}
+\fancyhead[R]{\small\color{headerblue}Rev.\,2.1}
 \fancyfoot[C]{\small\thepage\,/\,\pageref{LastPage}}
 \fancyfoot[R]{\small\color{gray}2026-08-13}
 \renewcommand{\headrulewidth}{0.8pt}
@@ -172,7 +172,7 @@
 \newcommand{\doctitle}{mcr\_camera\_2026base\\プログラム設計仕様書}
 \newcommand{\docsubtitle}{GR-PEACH (RZ/A1H) マイコンカーラリー カメラクラス開発}
 \newcommand{\docauthor}{Shiozawa}
-\newcommand{\docversion}{2.0}
+\newcommand{\docversion}{2.1}
 \newcommand{\docdate}{2026年8月13日}
 
 %% ─── ビルド検証環境（§6.1 で使用） ─────────────
@@ -262,6 +262,13 @@
   LineDetector / SDLogger / 起動シーケンス / パラメータ調整ガイドを追加。
   \texttt{mcr\_camera\_2026base\_SPEC.md} の技術知見を「ベアメタル固有の実装知見」章と
   付録「不具合と対策の記録」へ移植し、同ファイルを廃止。 \\
+2.1  & 2026-08-13 & Shiozawa & \texttt{IModule::init()} の戻り値契約の実装を反映。
+  \texttt{src/core/ModuleInit.h}（\texttt{initModule()}）と
+  \texttt{src/drivers/CameraData.h}（Camera の Config / Data 分離）を新規記述し、
+  ファイル構成と \texttt{SystemData.h} の依存を更新。
+  起動シーケンスに初期化失敗時の扱い（\texttt{enabled = false} / シリアル赤字 / 赤 LED）を追加。
+  \texttt{Camera::init()} の失敗時挙動を \texttt{while(1);} から \texttt{return false} へ
+  変更した件を API 仕様と付録に記録。 \\
 \bottomrule
 \end{tabularx}
 
@@ -418,6 +425,8 @@ Input / Output の各フェーズは \texttt{IModule*} の配列 (\texttt{s\_inp
 \texttt{s\_outputModules[]}) をループして呼び出す。
 モジュールの \texttt{enabled} が \texttt{false} の間はスキップされるため、
 初期化に失敗したモジュールを配列から外さずに無効化できる。
+この \texttt{enabled} は \texttt{main()} が \texttt{initModule()}
+(\hyperref[sec:api-moduleinit]{§\ref*{sec:api-moduleinit}}) 経由で初期化を行った時点で確定する。
 
 \begin{lstlisting}[caption={Input / Output フェーズの配列駆動 (mcr\_camera\_2026base.cpp)},label=lst:phasearray]
 static IModule* s_inputModules[] = {
@@ -513,6 +522,30 @@ extern SystemData g_sys;
 他モジュールのデータを横断参照してよいのは Logic フェーズの関数だけ、というルールで運用する。
 \end{notebox}
 
+\begin{notebox}[Camera だけは宣言ヘッダを分離している]
+\texttt{SystemData.h} が include するのは
+\texttt{Camera.h} ではなく \texttt{src/drivers/CameraData.h} である
+（他の8モジュールは \texttt{Motor.h} 等のドライバヘッダをそのまま include する）。
+
+\texttt{Camera.h} は VDC5 ドライバ (\texttt{video/DisplayBace.h} $\rightarrow$
+\texttt{pinmap.h}) を include し、その先で実機のレジスタ定義
+(\texttt{iodefine.h} の \texttt{INTC}) を要求する。
+一方 \texttt{SystemData.h} が Camera から必要としているのは \texttt{CameraData} 型だけで、
+VDC5 の API は一切要らない。にもかかわらず \texttt{SystemData.h} が
+\texttt{Camera.h} を include していたため、
+\texttt{SystemData.h} を使う全モジュール（Motor / Servo / Encoder 等）が
+\textbf{VDC5 ドライバ一式に依存}してしまい、
+モータ1個のホスト側テストにカメラ HAL 全部が必要になっていた。
+これが \texttt{tests/} をビルド不能にしていた直接の原因である。
+
+そこでハードウェア非依存の宣言（\texttt{CameraConfig} / \texttt{CameraData} /
+\texttt{CAM\_*} マクロ）だけを \texttt{CameraData.h} へ移し、
+\texttt{DisplayBase} を持つ \texttt{Camera} クラス本体は \texttt{Camera.h} に残した。
+\texttt{Camera.h} は \texttt{CameraData.h} を include するため、
+\texttt{Camera.h} を include する側から見える宣言の集合は分離前と同一であり、
+「Data の所有権はモジュール側にある」というルールも維持されている。
+\end{notebox}
+
 \begin{cautionbox}[画素バッファは SystemData に置かない]
 160$\times$120 の輝度バッファ（約 19KB）と YCbCr422 中間バッファ（約 38KB）は
 \texttt{Camera} クラス内に実体を持ち、\texttt{SystemData} からは
@@ -594,6 +627,7 @@ mcr\_camera\_2026base/ \\
 \>\> mcr\_camera\_2026base.cpp \quad\textrm{\color{gray}← メイン・GIC/OSTM0 初期化・割り込みハンドラ} \\
 \>\> core/ \\
 \>\>\> IModule.h \quad\textrm{\color{gray}← 基底インターフェース} \\
+\>\>\> ModuleInit.h \quad\textrm{\color{gray}← init() の戻り値を enabled へ反映するヘルパ} \\
 \>\>\> SystemData.h \quad\textrm{\color{gray}← 全モジュール共有データ} \\
 \>\>\> ProjectConfig.h \quad\textrm{\color{gray}← 全パラメータの実値定義} \\
 \>\>\> ModuleTimer.h \quad\textrm{\color{gray}← ノンブロッキングタイマー} \\
@@ -601,6 +635,7 @@ mcr\_camera\_2026base/ \\
 \>\>\> RunLogic.h / RunLogic.cpp \quad\textrm{\color{gray}← 走行状態機械（純関数）} \\
 \>\> drivers/ \\
 \>\>\> Camera.h / Camera.cpp \quad\textrm{\color{gray}← NTSC キャプチャ (VDC5+DVDEC)} \\
+\>\>\> CameraData.h \quad\textrm{\color{gray}← Camera の Config / Data 宣言（ハードウェア非依存）} \\
 \>\>\> LineDetector.h / .cpp \quad\textrm{\color{gray}← ライン検出・偏差算出} \\
 \>\>\> Encoder.h / Encoder.cpp \quad\textrm{\color{gray}← エンコーダ制御} \\
 \>\>\> Motor.h / Motor.cpp \quad\textrm{\color{gray}← モータ制御} \\
@@ -631,14 +666,15 @@ mcr\_camera\_2026base/ \\
 \toprule
 \textbf{ディレクトリ} & \textbf{役割} \\
 \midrule
-\texttt{src/core/}    & システム基盤（\texttt{IModule}, \texttt{SystemData}, \texttt{ProjectConfig}, \texttt{ModuleTimer}） \\
+\texttt{src/core/}    & システム基盤（\texttt{IModule}, \texttt{ModuleInit}, \texttt{SystemData}, \texttt{ProjectConfig}, \texttt{ModuleTimer}） \\
 \texttt{src/logic/}   & Logic フェーズの走行ロジック（\texttt{RunLogic}）。ハードウェアに触れない \\
 \texttt{src/drivers/} & ハードウェアドライバ（Camera, LineDetector, Motor, Servo, Encoder, Onboard, Serial, SDCard, SDLogger） \\
 \texttt{src/drivers/fatfs/} & ChaN's FatFs R0.11a と \texttt{SDCard} へのブリッジ（\texttt{diskio.cpp}） \\
 \texttt{src/drivers/video/} & \texttt{mbed-gr-libs} 由来の VDC5/DVDEC ドライバ群と \texttt{DisplayBase} API \\
 \texttt{src/system/}  & FPU / MMU / L1 キャッシュ初期化（mbed OS の \texttt{SystemInit()} 移植） \\
 \texttt{generate/}    & e2 studio 自動生成ファイル（\hyperref[sec:generate]{§\ref*{sec:generate}} の手動修正あり） \\
-\texttt{tests/}       & PC 上で動かす単体テスト（レジスタをモック化して Motor/Servo/Encoder を検証） \\
+\texttt{tests/}       & PC 上で動かす単体テスト（レジスタをモック化して Motor/Servo/Encoder を検証。
+  \texttt{initModule()} の戻り値契約もここで検証する） \\
 \texttt{doc/}         & 本仕様書（\texttt{main.tex} / \texttt{main.pdf}） \\
 \texttt{.devcontainer/} & LaTeX ドキュメントビルド用のコンテナ環境定義 \\
 \bottomrule
@@ -653,11 +689,16 @@ mcr\_camera\_2026base/ \\
 \endhead
 \texttt{src/mcr\_camera\_2026base.cpp} & メインエントリ・GIC/OSTM0 初期化・3フェーズ割り込みハンドラ・2つの動作モードループ \\
 \texttt{src/core/IModule.h}         & 全モジュール共通の基底インターフェース \\
-\texttt{src/core/SystemData.h}      & 全モジュールの Data を集約した共有構造体 \\
+\texttt{src/core/ModuleInit.h}      & \texttt{initModule()} --- \texttt{init()} の戻り値を
+  \texttt{enabled} に反映する契約を1箇所に閉じ込めたヘルパ \\
+\texttt{src/core/SystemData.h}      & 全モジュールの Data を集約した共有構造体。
+  Camera だけは \texttt{Camera.h} ではなく \texttt{CameraData.h} を include する \\
 \texttt{src/core/ProjectConfig.h}   & 全 \texttt{*\_CONFIG} インスタンスの実値定義（調整の入口） \\
 \texttt{src/core/ModuleTimer.h}     & \texttt{g\_timer\_1ms} を時刻源とするノンブロッキングタイマー \\
 \texttt{src/logic/RunLogic.h/.cpp}  & 走行状態機械（\texttt{applyDrivingPattern()}）・\texttt{RunPattern} 定義 \\
 \texttt{src/drivers/Camera.h/.cpp}  & NTSC 160$\times$120 キャプチャ（VDC5 ch0 + DVDEC0） \\
+\texttt{src/drivers/CameraData.h}   & \texttt{CameraConfig} / \texttt{CameraData} /
+  \texttt{CAM\_*} マクロ。VDC5 に依存しない宣言だけを \texttt{Camera.h} から分離したもの \\
 \texttt{src/drivers/LineDetector.h/.cpp} & 偏差算出・クロス/ハーフ/センターライン検出・8点センサ生成 \\
 \texttt{src/drivers/Motor.h/.cpp}   & モータ PWM 制御 (MTU2 ch3/4 リセット同期PWM) \\
 \texttt{src/drivers/Servo.h/.cpp}   & サーボ PWM 制御 (MTU2 ch0 PWMモード1) \\
@@ -683,9 +724,10 @@ mcr\_camera\_2026base/ \\
 \textbf{機能} & \textbf{メインファイル} & \textbf{関連ファイル} \\
 \midrule
 3フェーズ割り込み & \texttt{mcr\_camera\_2026base.cpp} & IModule.h, SystemData.h, inthandler.c \\
+モジュール初期化 & \texttt{mcr\_camera\_2026base.cpp} & ModuleInit.h, IModule.h \\
 走行状態機械     & \texttt{RunLogic.cpp}    & SystemData.h, ProjectConfig.h, ModuleTimer.h \\
 ライン検出       & \texttt{LineDetector.cpp}& Camera.h, SystemData.h, ProjectConfig.h \\
-カメラ入力       & \texttt{Camera.cpp}      & video/DisplayBace.h, video/gr\_peach\_vdc5.c \\
+カメラ入力       & \texttt{Camera.cpp}      & CameraData.h, video/DisplayBace.h, video/gr\_peach\_vdc5.c \\
 モータ制御       & \texttt{Motor.cpp}       & IModule.h, iodefine.h \\
 サーボ制御       & \texttt{Servo.cpp}       & IModule.h, iodefine.h \\
 エンコーダ       & \texttt{Encoder.cpp}     & IModule.h, iodefine.h \\
@@ -851,7 +893,10 @@ Logic レイヤーの \texttt{RunLogic}
 
 \vspace{1.5mm}
 \textbf{戻り値:} \texttt{bool} --- \texttt{true}=成功 / \texttt{false}=失敗。
-失敗時は呼び出し側で \texttt{enabled = false} に落とす運用を推奨する。
+失敗時は呼び出し側で \texttt{enabled = false} に落とす。
+この判定は \texttt{main()} が直接書くのではなく
+\texttt{initModule()} (\hyperref[sec:api-moduleinit]{§\ref*{sec:api-moduleinit}})
+が一手に引き受ける。
 \end{funcblock}
 
 \begin{funcblock}{updateInput(sys)}
@@ -923,12 +968,102 @@ public:
   \item \texttt{SystemData.h} に \texttt{XxxData xxx;} を追加し、ヘッダを include する
   \item \texttt{ProjectConfig.h} に \texttt{XXX\_CONFIG} の実値を定義する
   \item \texttt{mcr\_camera\_2026base.cpp} でグローバルインスタンス \texttt{g\_xxx} を生成し、
-        \texttt{main()} で \texttt{init()} を呼び、必要なフェーズの配列へ登録する
+        \texttt{main()} で \texttt{initModule(g\_xxx)}（実際には \texttt{initAndReport()}）
+        を呼び、必要なフェーズの配列へ登録する。
+        \texttt{init()} を直接呼ぶと \texttt{enabled} が更新されず、
+        失敗しても無効化されないので注意する
 \end{enumerate}
 
 \end{apibox}
 
-%% ── 7.2 Encoder ──
+%% ── 7.2 ModuleInit ──
+\subsection{initModule --- 初期化の戻り値契約}\label{sec:api-moduleinit}
+
+\begin{apibox}{ModuleInit.h --- init() の戻り値を enabled へ反映するヘルパ}
+
+\textbf{ファイル:} \texttt{src/core/ModuleInit.h} \hfill
+\textbf{種別:} インライン自由関数（ヘッダのみ）
+
+\vspace{2mm}\hrule\vspace{2mm}
+
+\apisection{概要}
+
+\texttt{IModule} は「\texttt{init()} が \texttt{false} を返したら呼び出し側で
+\texttt{enabled = false} に落とす」という運用を前提に設計されている
+(\hyperref[sec:api-imodule]{§\ref*{sec:api-imodule}})。
+\texttt{initModule()} はその契約を実装する唯一の関数である。
+
+契約を1箇所に閉じ込めたのは、判定を各呼び出し箇所に手書きすると必ず書き忘れが出るためである。
+実際、本ヘッダの導入前は \texttt{main()} が\textbf{全ての \texttt{init()} の戻り値を捨てており}、
+\texttt{enabled} に \texttt{false} を書く箇所が一つも存在しなかった。
+その結果、SD 未挿入で \texttt{SDLogger::init()} が失敗しても
+\texttt{updateOutput()} が毎周期呼ばれ続けて空振りしていた。
+
+\apisection{定義}
+
+\begin{lstlisting}[caption={initModule() の定義 (core/ModuleInit.h)},label=lst:moduleinit]
+inline bool initModule(IModule& mod)
+{
+    const bool ok = mod.init();
+    mod.enabled   = ok;
+    return ok;
+}
+\end{lstlisting}
+
+\apisection{関数ドキュメント}
+
+\begin{funcblock}{initModule(mod)}
+\texttt{inline bool initModule(IModule\& mod)}
+
+\vspace{1.5mm}
+\texttt{mod.init()} を1回だけ呼び、その結果をそのまま \texttt{mod.enabled} へ反映する。
+
+\vspace{1.5mm}
+\textbf{引数:} \texttt{mod} --- 初期化対象のモジュール\quad
+\textbf{戻り値:} \texttt{bool} --- \texttt{init()} の結果そのもの。
+呼び出し側はこれを見てシリアル出力等の障害報告を行う
+(\hyperref[sec:bootseq]{§\ref*{sec:bootseq}})
+\end{funcblock}
+
+\apisection{失敗したモジュールの扱い}
+
+\texttt{enabled = false} になったモジュールは、以後3フェーズ実行から外れる。
+判定箇所は2種類ある。
+
+\begin{tabularx}{\textwidth}{l X}
+\toprule
+\textbf{対象} & \textbf{スキップの判定箇所} \\
+\midrule
+ISR 配列に載るモジュール &
+  \texttt{ostm0\_interrupt\_callback()} の \texttt{s\_inputModules[]} /
+  \texttt{s\_outputModules[]} ループ (\hyperref[sec:isr]{§\ref*{sec:isr}}) \\
+配列外の \texttt{LineDetector} / \texttt{SDLogger} &
+  \texttt{runMainLoop()} / \texttt{runDebugLoop()} 側の呼び出し
+  (\hyperref[sec:mainloop]{§\ref*{sec:mainloop}}) \\
+\bottomrule
+\end{tabularx}
+
+\begin{notebox}[現時点で false を返しうるのは2モジュールだけ]
+\texttt{Camera::init()}（VDC5 / DVDEC の各初期化ステップ）と
+\texttt{SDLogger::init()}（SD 未挿入・FatFs マウント失敗）のみが \texttt{false} を返す。
+\texttt{Onboard} / \texttt{Serial} / \texttt{Motor} / \texttt{Servo} /
+\texttt{LineDetector} / \texttt{Encoder} は現状レジスタ設定と変数初期化だけなので
+無条件に \texttt{true} を返す。
+契約自体は全モジュールに適用されているため、
+将来これらに失敗経路を足しても \texttt{main()} 側の変更は要らない。
+\end{notebox}
+
+\begin{notebox}[ホスト側テストで検証できる]
+\texttt{initModule()} はハードウェアに一切触れないため、
+PC 上の単体テスト \texttt{tests/test\_module\_contract.cpp} から直接検証できる。
+「\texttt{init()} が \texttt{false} なら \texttt{enabled} が落ちる」
+「\texttt{enabled = false} のモジュールは3フェーズ実行から外れる」の2点を
+フェイクモジュールで確認している。
+\end{notebox}
+
+\end{apibox}
+
+%% ── 7.3 Encoder ──
 \subsection{Encoder クラス}\label{sec:api-encoder}
 
 \begin{apibox}{Encoder --- エンコーダドライバ}
@@ -1044,12 +1179,13 @@ B相 & P1\_10 (TCLKB) & MTU2TCNT\_1 & 同上（位相差で方向を判別） \\
 
 \end{apibox}
 
-%% ── 7.3 Camera ──
+%% ── 7.4 Camera ──
 \subsection{Camera クラス}\label{sec:api-camera}
 
 \begin{apibox}{Camera --- NTSC ビデオキャプチャドライバ}
 
-\textbf{ファイル:} \texttt{src/drivers/Camera.h}, \texttt{Camera.cpp} \hfill
+\textbf{ファイル:} \texttt{src/drivers/Camera.h}, \texttt{Camera.cpp},
+\texttt{CameraData.h} \hfill
 \textbf{継承:} \texttt{IModule} \hfill
 \phasebadge{Input フェーズ}
 
@@ -1073,6 +1209,16 @@ VDC5 チャネル0 と DVDEC0 を用いて NTSC 映像を 160$\times$120 の YCb
 \end{itemize}
 
 \apisection{設定 (CameraConfig)}
+
+\texttt{CameraConfig} と \texttt{CameraData}、および画像サイズのマクロ
+（\texttt{CAM\_PIXEL\_HW} / \texttt{CAM\_PIXEL\_VW} /
+\texttt{CAM\_DATA\_SIZE\_PER\_PIC} / \texttt{CAM\_VIDEO\_BUFFER\_STRIDE}）の宣言は
+\texttt{Camera.h} ではなく \texttt{src/drivers/CameraData.h} にある。
+VDC5 に依存しない宣言だけを切り出したヘッダで、
+\texttt{SystemData.h} はこちらを include する（理由は
+\hyperref[sec:systemdata]{§\ref*{sec:systemdata}}）。
+\texttt{Camera.h} が \texttt{CameraData.h} を include するため、
+\texttt{Camera.h} を使う側から見える宣言は分離前と変わらない。
 
 \begin{tabularx}{\textwidth}{l l X}
 \toprule
@@ -1136,7 +1282,45 @@ XIP 環境では4ステップの合計が NTSC の Vfield 間隔（16.7ms）を�
 メモリ書き込み設定を行ってビデオキャプチャを開始する。
 初期化中の Vsync / Vfield 待ちは割り込みベースで行うため、
 \textbf{事前に GIC が有効化されている必要がある} (\hyperref[sec:bootseq]{§\ref*{sec:bootseq}})。
+
+\vspace{1.5mm}
+\textbf{戻り値:} \texttt{bool} --- 下表5ステップのいずれかが
+\texttt{GRAPHICS\_OK} 以外を返した時点でエラー内容をシリアルへ出力し、
+\textbf{\texttt{false} を返して即座に打ち切る}。全ステップ通過時のみ \texttt{true}。
 \end{funcblock}
+
+\begin{tabularx}{\textwidth}{c l X}
+\toprule
+\textbf{\#} & \textbf{DisplayBase API} & \textbf{内容} \\
+\midrule
+1 & \texttt{Graphics\_init}          & グラフィックス全体の初期化 \\
+2 & \texttt{Graphics\_Video\_init}   & ビデオデコーダ (DVDEC) の初期化 \\
+3 & \texttt{Graphics\_Irq\_Handler\_Set} & Vsync 割り込みコールバックの登録 \\
+4 & \texttt{Video\_Write\_Setting}   & NTSC / YCbCr422 / 160$\times$120 の書き込み設定 \\
+5 & \texttt{Graphics\_Irq\_Handler\_Set} & Vfield 割り込みコールバックの登録 \\
+\bottomrule
+\end{tabularx}
+
+\vspace{2mm}
+5ステップの後にキャプチャ開始（Start $\rightarrow$ Stop $\rightarrow$ Start）と
+Vsync / Vfield の安定待ちを行う。これらは戻り値を持たないため失敗判定の対象外である。
+
+\begin{notebox}[以前は失敗時に無限ループしていた]
+かつては各ステップの失敗時に \texttt{while(1);} で停止していたため、
+カメラ未接続で起動すると GIC 初期化直後に完全にハングし、
+シリアル出力も走行も一切行われなかった。
+現在は \texttt{false} を返して呼び出し側へ判断を委ね、
+\texttt{initModule()} (\hyperref[sec:api-moduleinit]{§\ref*{sec:api-moduleinit}}) が
+\texttt{enabled = false} に落とす。カメラが無くてもシリアル表示とメインループは動き続ける。
+\end{notebox}
+
+\begin{cautionbox}[要実機確認: 途中失敗後の VDC5 の状態]
+\texttt{init()} がステップ2--5 で \texttt{false} を返した場合、
+\textbf{部分的に設定された VDC5 がその後どう振る舞うかは未確認}である。
+従来は同じ箇所で無限ループしていたため、この経路を通した実績が無い。
+登録済みの割り込みコールバックだけが残る、キャプチャが停止しないまま残る、
+といった状態があり得るかは実機で確認すること。
+\end{cautionbox}
 
 \begin{funcblock}{updateInput(sys)}
 \texttt{void updateInput(SystemData\& sys) override}
@@ -1215,7 +1399,7 @@ VDC5 の Vfield / Vsync 割り込みから呼ばれ、内部のフィールド�
 
 \end{apibox}
 
-%% ── 7.4 LineDetector ──
+%% ── 7.5 LineDetector ──
 \subsection{LineDetector クラス}\label{sec:api-linedetector}
 
 \begin{apibox}{LineDetector --- ライン検出モジュール}
@@ -1371,7 +1555,7 @@ PID 制御は行わず、ハンドル角の算出は \texttt{RunLogic} 側の
 
 \end{apibox}
 
-%% ── 7.5 Motor ──
+%% ── 7.6 Motor ──
 \subsection{Motor クラス}\label{sec:api-motor}
 
 \begin{apibox}{Motor --- モータ PWM ドライバ}
@@ -1516,7 +1700,7 @@ MTU2 のスタンバイを解除してチャネル3/4 をリセット同期 PWM 
 
 \end{apibox}
 
-%% ── 7.6 Servo ──
+%% ── 7.7 Servo ──
 \subsection{Servo クラス}\label{sec:api-servo}
 
 \begin{apibox}{Servo --- サーボ PWM ドライバ}
@@ -1637,7 +1821,7 @@ P4\_0 を第2代替機能（TIOC0A）に設定し、MTU2 のスタンバイを�
 
 \end{apibox}
 
-%% ── 7.7 Onboard ──
+%% ── 7.8 Onboard ──
 \subsection{Onboard クラス}\label{sec:api-onboard}
 
 \begin{apibox}{Onboard --- オンボード LED / スイッチ ドライバ}
@@ -1795,7 +1979,7 @@ SW User    & P6\_0  & Low = 押下 & プルアップ、GND 接続 \\
 
 \end{apibox}
 
-%% ── 7.8 Serial ──
+%% ── 7.9 Serial ──
 \subsection{Serial クラス}\label{sec:api-serial}
 
 \begin{apibox}{Serial --- シリアル通信ドライバ}
@@ -1931,7 +2115,7 @@ P6\_3 / P6\_2 を使用すること。
 
 \end{apibox}
 
-%% ── 7.9 SDCard ──
+%% ── 7.10 SDCard ──
 \subsection{SDCard クラス}\label{sec:api-sdcard}
 
 \begin{apibox}{SDCard --- SD カード SPI ブロックドライバ}
@@ -2098,7 +2282,7 @@ CD   & P7\_8 & GPIO 入力 & カード検出（Low = 挿入） \\
 
 \end{apibox}
 
-%% ── 7.10 SDLogger ──
+%% ── 7.11 SDLogger ──
 \subsection{SDLogger クラス}\label{sec:api-sdlogger}
 
 \begin{apibox}{SDLogger --- 走行ログ記録モジュール}
@@ -2253,7 +2437,7 @@ if (g_sys.run.finished && !savedToSD) {
 
 \end{apibox}
 
-%% ── 7.11 RunLogic ──
+%% ── 7.12 RunLogic ──
 \subsection{RunLogic --- 走行ロジック}\label{sec:api-runlogic}
 
 \begin{apibox}{RunLogic --- 走行状態機械（Logic レイヤー）}
@@ -2472,6 +2656,10 @@ if (g_sys.run.finished && !savedToSD) {
 
 \texttt{main()} の初期化順序には\textbf{守らないとハングする制約}が複数ある。
 順序を変更する場合は下表の理由を必ず確認すること。
+なお各モジュールの初期化は \texttt{init()} の直接呼び出しではなく、
+戻り値を \texttt{enabled} へ反映する \texttt{initModule()}
+(\hyperref[sec:api-moduleinit]{§\ref*{sec:api-moduleinit}}) 経由で行う。
+失敗時の扱いは表の後にまとめる。
 
 \begin{longtable}{c l p{78mm}}
 \toprule
@@ -2487,22 +2675,28 @@ if (g_sys.run.finished && !savedToSD) {
      \texttt{\_config} が BSS のゼロのままになる (\hyperref[sec:ctors]{§\ref*{sec:ctors}}) \\
 2  & \texttt{SystemInit()}      & FPU / MMU / L1 キャッシュを有効化する。
      この関数の中ではシリアル出力を行わないこと \\
-3  & \texttt{g\_onboard.init()} & 起動モード判定に \texttt{sw()} を使うため、
-     シリアルより先に GPIO を立ち上げる \\
-4  & \texttt{g\_serial.init()}  & 以降の初期化ログを出力するため早期に初期化する \\
-5  & 起動モード判定             & \texttt{g\_onboard.sw()} の結果で
+3  & \texttt{initModule(g\_onboard)} & 起動モード判定に \texttt{sw()} を使うため、
+     シリアルより先に GPIO を立ち上げる。結果は保持だけして後で報告する \\
+4  & \texttt{initModule(g\_serial)}  & 以降の初期化ログを出力するため早期に初期化する。
+     ここまでは \texttt{printf} が使えないので、\#3 と本項の結果はまとめて \#5 で報告する \\
+5  & 保留した2件の結果報告      & \texttt{g\_onboard} / \texttt{g\_serial} の失敗を
+     \texttt{reportInitFailure()} でシリアルと赤 LED へ出す \\
+6  & 起動モード判定             & \texttt{g\_onboard.sw()} の結果で
      デバッグモード / 走行モードを決める。カメラ初期化前なので結果をシリアルで確認できる \\
-6  & \texttt{initGIC()}         & \textbf{Camera より前に実行必須}。
+7  & \texttt{initGIC()}         & \textbf{Camera より前に実行必須}。
      VDC5 割り込みの登録が GIC に依存する (\hyperref[sec:gic]{§\ref*{sec:gic}}) \\
-7  & \texttt{g\_sdlogger.init()}& GIC の後・Camera の前。SPI 通信自体に割り込みは不要だが、
+8  & \texttt{initAndReport(g\_sdlogger)} & GIC の後・Camera の前。SPI 通信自体に割り込みは不要だが、
      カメラより先に済ませて起動時間を短縮する \\
-8  & \texttt{g\_camera.init()}  & VDC5 / DVDEC を初期化しキャプチャを開始する \\
-9  & \texttt{g\_motor.init()}   & MTU2 ch3/4 のスタンバイ解除と PWM 設定 \\
-10 & \texttt{g\_servo.init()}   & MTU2 ch0 のスタンバイ解除と PWM 設定 \\
-11 & \texttt{g\_lineDetector.init()} & 偏差配列とフラグのクリア \\
-12 & \texttt{runLogicInit(g\_sys)}   & \texttt{sys.run.*} と初期出力指示のクリア \\
-13 & \texttt{initOSTM0()}       & \textbf{必ず最後}。下の注意ボックスを参照 \\
-14 & 動作モード別ループへ分岐   & \texttt{runDebugLoop()} または \texttt{runMainLoop()} \\
+9  & \texttt{initAndReport(g\_camera)}   & VDC5 / DVDEC を初期化しキャプチャを開始する \\
+10 & \texttt{initAndReport(g\_motor)}    & MTU2 ch3/4 のスタンバイ解除と PWM 設定 \\
+11 & \texttt{initAndReport(g\_servo)}    & MTU2 ch0 のスタンバイ解除と PWM 設定 \\
+12 & \texttt{initAndReport(g\_lineDetector)} & 偏差配列とフラグのクリア \\
+13 & \texttt{runLogicInit(g\_sys)}   & \texttt{sys.run.*} と初期出力指示のクリア。
+     \texttt{IModule} ではないので \texttt{initModule()} の対象外 \\
+14 & 初期化結果のまとめ出力     & 失敗が1件でもあれば警告行を出す。
+     起動ログを遡らなくても異常が分かるようにするため \\
+15 & \texttt{initOSTM0()}       & \textbf{必ず最後}。下の注意ボックスを参照 \\
+16 & 動作モード別ループへ分岐   & \texttt{runDebugLoop()} または \texttt{runMainLoop()} \\
 \bottomrule
 \end{longtable}
 
@@ -2522,6 +2716,83 @@ MTU2 がスタンバイ状態のまま PWM レジスタへの書き込みが発�
 GIC 無効のため発火せずに蓄積し、後から \texttt{CPSIE i} を実行した瞬間に
 一斉発火して\textbf{割り込みストーム}になる。
 詳細は \hyperref[sec:gic]{§\ref*{sec:gic}} を参照。
+\end{cautionbox}
+
+\subsubsection{初期化失敗時の扱い}\label{sec:bootfail}
+
+初期化が失敗しても\textbf{システムは停止しない}。
+\texttt{initModule()} が \texttt{enabled = false} を立てて当該モジュールを
+3フェーズ実行から外し、残りのモジュールだけで動作を続ける。
+\texttt{main()} は \texttt{initModule()} と障害報告をまとめた
+\texttt{initAndReport()} を使う（シリアルがまだ使えない
+\texttt{Onboard} / \texttt{Serial} だけは \texttt{initModule()} を直接呼び、報告を後回しにする）。
+
+\begin{lstlisting}[caption={初期化の失敗報告 (mcr\_camera\_2026base.cpp)},label=lst:initreport]
+static void reportInitFailure(const char* name)
+{
+  s_initFailed = true;
+  g_serial.printf("\x1b[31m[init] %s の初期化に失敗 → enabled=false で無効化\x1b[39m\n",
+                  name);
+  // 赤 LED 点灯。OSTM0 未起動なので ISR は走っておらず、ここで直接 Output する。
+  if (g_onboard.enabled) {
+    g_sys.ob.ledRedCmd = 1;
+    g_onboard.updateOutput(g_sys);
+  }
+}
+
+static bool initAndReport(IModule& mod, const char* name)
+{
+  const bool ok = initModule(mod);   // init() を呼び enabled へ反映
+  if (!ok) reportInitFailure(name);
+  return ok;
+}
+\end{lstlisting}
+
+報告手段は2系統ある。
+
+\begin{tabularx}{\textwidth}{l X}
+\toprule
+\textbf{手段} & \textbf{位置づけ} \\
+\midrule
+シリアル出力（赤字） & 恒久的な記録。どのモジュールが落ちたかがログに残る \\
+赤 LED 点灯           & シリアル自体が死んでいる場合の最後の手掛かり \\
+\bottomrule
+\end{tabularx}
+
+\vspace{2mm}
+\texttt{Onboard} と \texttt{Serial} だけは「障害を報告する手段そのもの」なので特別扱いする。
+どちらも \texttt{printf} が使えない段階で初期化するため、結果を保持しておき、
+シリアル初期化後にまとめて報告する（起動シーケンス \#3--\#5）。
+\texttt{Onboard} を先に初期化するのは、\texttt{Serial} が死んでいても
+LED で失敗を示せるようにするためである。
+全モジュールの初期化後には、失敗が1件でもあれば警告行をまとめて出力する。
+
+\vspace{2mm}
+無効化されたモジュールがどこでスキップされるかは
+\hyperref[sec:api-moduleinit]{§\ref*{sec:api-moduleinit}} の表を参照。
+ISR 配列に載らない \texttt{LineDetector} / \texttt{SDLogger} は
+メインループ側が \texttt{enabled} を判定する
+(\hyperref[sec:mainloop]{§\ref*{sec:mainloop}})。
+
+\begin{cautionbox}[未確認事項・既知の制約（要実機確認）]
+初期化失敗時の挙動は、以下の点がまだ実機で確認できていない。
+不具合と断定できる材料は無いが、カメラ未接続などで実際にこの経路を通す前に確認すること。
+
+\begin{itemize}[nosep, leftmargin=*]
+  \item \textbf{赤 LED による失敗表示は初期化フェーズの間だけ有効}。
+        \texttt{initOSTM0()} 以降は ISR の Logic フェーズ
+        (\texttt{applyDrivingPattern()}) が毎周期 \texttt{sys.ob.*LedCmd} を上書きするため、
+        点灯は残らない。恒久表示にするには走行ロジック側に障害表示を持たせる必要がある。
+        シリアルへの出力は恒久的に残る
+  \item \textbf{カメラを無効化したまま走行モードへ入った場合の挙動は未検証}。
+        \texttt{sys.line.*} が全て \texttt{false} のままなのでスタートしない見込みだが、
+        実機では確認していない
+  \item \texttt{g\_serial.printf()} は \texttt{g\_serial.enabled} を見ずに呼ばれ続ける。
+        現状 \texttt{Serial::init()} に失敗経路が無いため理論上の話だが、
+        将来失敗しうる実装に変えるならこの前提が崩れる
+  \item \texttt{Camera::init()} が途中ステップで \texttt{false} を返したときの
+        VDC5 の残留状態は未確認（\hyperref[sec:api-camera]{§\ref*{sec:api-camera}}）
+\end{itemize}
 \end{cautionbox}
 
 \subsection{3フェーズ割り込みハンドラ}\label{sec:isr}
@@ -2600,6 +2871,15 @@ XIP 環境では \texttt{Camera::updateInput()} の1ステップが約 8ms か�
 \bottomrule
 \end{tabularx}
 
+\begin{notebox}[ISR 配列外モジュールの enabled 判定はメインループ側にある]
+\texttt{g\_lineDetector} と \texttt{g\_sdlogger} は
+\texttt{s\_inputModules[]} / \texttt{s\_outputModules[]} に載っていないため、
+ISR 側のループによるスキップが効かない。
+そこで両モジュールの呼び出しは、以下2つのループのどちらでも
+\texttt{if (g\_lineDetector.enabled)} / \texttt{if (g\_sdlogger.enabled)} で囲ってある
+(\hyperref[sec:api-moduleinit]{§\ref*{sec:api-moduleinit}})。
+\end{notebox}
+
 \subsubsection{走行モード (runMainLoop)}
 
 \begin{enumerate}[nosep, leftmargin=*]
@@ -2608,6 +2888,7 @@ XIP 環境では \texttt{Camera::updateInput()} の1ステップが約 8ms か�
   \item \texttt{g\_sdlogger.updateOutput(g\_sys)} を毎周期呼ぶ（走行中ログの自動記録）
   \item \texttt{sys.run.finished} が立ったら1回だけモータ・サーボを停止させ、
         \texttt{sys.sd.saveRequested = true} として SD へ書き出す
+        （\texttt{g\_sdlogger} が無効なら保存要求そのものを出さない）
   \item \texttt{g\_cnt\_printf} が \texttt{DEBUG\_PRINT\_INTERVAL\_MS}(200) に達したら
         ステータス行（タイマー・フレーム数・パターン・ハンドル・各ラインフラグ・偏差・ログ数）を出力する
 \end{enumerate}
@@ -3257,6 +3538,14 @@ GIC がエッジ割り込みを取りこぼす &
   グローバル ctor が実行されないため \texttt{\_config} が BSS ゼロのまま &
   \texttt{main()} 冒頭で \texttt{runGlobalConstructors()} を実行
   (\hyperref[sec:ctors]{§\ref*{sec:ctors}}) \\
+初期化に失敗したモジュールが無効化されない
+（SD 未挿入でも \texttt{SDLogger::updateOutput()} が毎周期空振りする） &
+  \texttt{main()} が全ての \texttt{init()} の戻り値を捨てており、
+  \texttt{enabled = false} を書く箇所が一つも存在しなかった &
+  \texttt{initModule()} を新設して契約を1箇所に閉じ込め、
+  \texttt{main()} は \texttt{initAndReport()} 経由で初期化する
+  (\hyperref[sec:api-moduleinit]{§\ref*{sec:api-moduleinit}},
+  \hyperref[sec:bootfail]{§\ref*{sec:bootfail}}) \\
 \bottomrule
 \end{longtable}
 
@@ -3333,6 +3622,36 @@ TeraTerm に何も表示されない &
   XIP 環境で \texttt{imageCopy} が 7--8ms かかり、
   CPU が 100\% 割り込み処理に占有される &
   フレーム処理を4ステップに分割 (\hyperref[sec:xip]{§\ref*{sec:xip}}) \\
+カメラ未接続で起動すると、GIC 初期化直後に完全ハングする
+（シリアル出力も走行も一切行われない） &
+  \texttt{Camera::init()} が各初期化ステップの失敗時に
+  \texttt{while(1);} で無限ループしていた &
+  5つの初期化ステップすべてで、失敗時は \texttt{false} を返して打ち切る。
+  \texttt{initModule()} がこれを受けて \texttt{enabled = false} に落とす。
+  カメラ無しでもシリアル表示とメインループは動き続ける
+  (\hyperref[sec:api-camera]{§\ref*{sec:api-camera}}) \\
+\bottomrule
+\end{longtable}
+
+\subsection{ビルド・テスト系}
+
+\begin{longtable}{p{40mm} p{55mm} p{55mm}}
+\toprule
+\textbf{症状} & \textbf{原因} & \textbf{対策} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{症状} & \textbf{原因} & \textbf{対策} \\
+\midrule
+\endhead
+ホスト側の単体テスト (\texttt{tests/}) がビルドできない
+（モータ1個のテストにカメラ HAL 全部が必要になる） &
+  \texttt{SystemData.h} が \texttt{CameraData} 型のためだけに \texttt{Camera.h} を
+  include し、その先の \texttt{video/DisplayBace.h} $\rightarrow$ \texttt{pinmap.h} が
+  実機のレジスタ定義 (\texttt{INTC}) を要求していた &
+  ハードウェア非依存の宣言を \texttt{CameraData.h} へ分離し、
+  \texttt{SystemData.h} はそちらを include する
+  (\hyperref[sec:systemdata]{§\ref*{sec:systemdata}}) \\
 \bottomrule
 \end{longtable}
 
