@@ -47,7 +47,7 @@
 \definecolor{okgreen}{HTML}{27AE60}
 
 %% ─── 版数・日付（ヘッダ／フッタと表紙で共用。ここだけ書き換える）───
-\newcommand{\docversion}{2.3}
+\newcommand{\docversion}{2.4}
 \newcommand{\docdate}{2026年8月21日}
 \newcommand{\docdatefooter}{2026-08-21}
 
@@ -276,6 +276,7 @@
   変更した件を API 仕様と付録に記録。 \\
 2.2 & 2026-08-21 & Shiozawa & テストの \texttt{SystemData} 値初期化漏れを修正し、実行環境による成否のばらつきを解消 (PR \#10) \\
 2.3 & 2026-08-21 & Shiozawa & 公式配布版 \texttt{kit20\_gr-peach} からの経緯を \S\ref*{sec:lineage} に追加。著作権・第三者提供コードの付録 (\S\ref*{sec:license}) を新設 \\
+2.4 & 2026-08-21 & Shiozawa & 公式配布版と本プログラムのビルド可否を e2 studio \ideversion 上で実測し \S\ref*{sec:kit20build} に記録。当初「ビルド定義が解釈できない」と記述していたが、実測により\textbf{インポートは成功し、2015 年版ツールチェインパスに解決されて何も生成せず終了する}挙動と判明したため訂正 \\
 \bottomrule
 \end{tabularx}
 
@@ -360,9 +361,10 @@ XIP       & eXecute In Place。SPI フラッシュ上のコードを RAM へ展�
         \texttt{ilg.gnuarmeclipse.managedbuild.cross.*}
         （サードパーティ製プラグイン GNU ARM Eclipse、後の Eclipse Embedded CDT）
         の名前空間で記述されている。現行の e2 studio が使う
-        \texttt{com.renesas.cdt.managedbuild.gcc.rz.*} とは名前空間ごと非互換であり、
-        個別のコンパイルエラーを解消する作業ではなく
-        \textbf{ビルド定義そのものが解釈できない}。
+        \texttt{com.renesas.cdt.managedbuild.gcc.rz.*} とは別系統である。
+        実測した挙動は \hyperref[sec:kit20build]{§\ref*{sec:kit20build}} に示すとおりで、
+        \textbf{インポートは成功するが、旧プラグイン既定の 2015 年版ツールチェインパスに
+        解決されてしまい、何も生成せずに「エラー 0 件」で終了する}。
         設定値（Cortex-A9 / ARMv7-A / VFPv3 / hard float ABI）自体は現行環境でも
         指定可能なものばかりで、\textbf{問題は設定値ではなく設定を記述する枠組みにある}
   \item \textbf{mbed OS サービス終了}: mbed のサービス終了に伴い、将来的な継続利用や保守が困難になる。
@@ -372,6 +374,65 @@ XIP       & eXecute In Place。SPI フラッシュ上のコードを RAM へ展�
   \item \textbf{ブラックボックス化の解消}: OS内部処理への依存を減らし、デバッグを容易にする必要がある
 \end{enumerate}
 \end{cautionbox}
+
+\subsection{ビルド可否の実測}\label{sec:kit20build}
+
+推定を避けるため、公式配布版と本プログラムの双方を
+\textbf{同一の e2 studio \ideversion 上でヘッドレスビルド}して確認した
+（2026-08-21 実施）。使用コマンドは次の形である。
+
+\begin{lstlisting}[caption={ヘッドレスビルドの実行},label=lst:headless]
+e2studioc.exe --launcher.suppressErrors -nosplash
+  -application org.eclipse.cdt.managedbuilder.core.headlessbuild
+  -data <ワークスペース> -import <プロジェクト>
+  -cleanBuild "<プロジェクト名>/<構成>"
+\end{lstlisting}
+
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{対象} & \textbf{結果} & \textbf{内容} \\
+\midrule
+本プログラム & \textbf{成功} &
+  \texttt{0 errors, 28 warnings}。\texttt{.elf} と \texttt{.bin} を生成。
+  text 252{,}976 / data 78{,}616 / bss 3{,}315{,}064 バイト \\
+公式配布版 & \textbf{失敗} &
+  インポートは成功するが \texttt{make} が見つからず、
+  \textbf{何も生成しないまま} \texttt{0 errors, 0 warnings} で終了 \\
+\bottomrule
+\end{tabularx}
+
+\vspace{2mm}
+公式配布版の失敗時、e2 studio が組み立てた PATH は次のとおりだった。
+
+\begin{lstlisting}[caption={公式配布版のビルド時に参照された PATH},label=lst:kit20path]
+PATH=[C:\Program Files\GNU Tools ARM Embedded\4.9 2015q3\bin\;
+      C:\Program Files (x86)\GNU Tools ARM Embedded\4.9 2015q3\bin\;
+      C:\Renesas\e2_studio\eclipse\..\Utilities]
+\end{lstlisting}
+
+\textbf{2015 年版のツールチェインを探しに行っている。}
+検証機に該当ディレクトリは存在せず、\texttt{make} も見つからない
+（現行 e2 studio の \texttt{make} は
+\texttt{eclipse\textbackslash plugins\textbackslash com.renesas.ide.exttools.gnumake...}
+配下にあり、上記 PATH には含まれない）。
+
+\begin{cautionbox}[「エラー 0 件」を成功と判定しない]
+公式配布版のビルドは \texttt{0 errors, 0 warnings}、\textbf{終了コード 0} で終わる。
+それでいて \texttt{.elf} は生成されていない。
+ビルドの成否はエラー件数や終了コードではなく、
+\textbf{出力ファイルが生成されたかどうかで判定すること}。
+\end{cautionbox}
+
+\begin{notebox}[紛らわしいログ行について]
+ビルドログには
+\texttt{Managed Build system manifest file error: Unable to resolve the category
+identifier ilg.gnuarmeclipse...} という行が出るが、
+\textbf{これは公式配布版に固有のものではない}。
+現行 e2 studio 自身の \texttt{com.renesas.cdt.managedbuild.gcc.rz} オプション定義に
+旧プラグインのカテゴリ ID が残っているためで、
+\textbf{本プログラムをビルドしても同じ行が出力される}。
+原因の切り分け時に誤認しやすいため記録しておく。
+\end{notebox}
 
 \begin{notebox}[公式配布物の扱い]
 本仕様書は公式配布物（プログラム本体および解説マニュアル）の内容を転載していない。
