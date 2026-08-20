@@ -44,12 +44,12 @@ struct CameraConfig
 // ====================================================================
 struct CameraData
 {
-  bool     frameReady;     // 新フレーム完了フラグ（メインループで消費後に false へ）
-  uint32_t frameCount;     // 累積フレーム数（debug 表示用）
-  int      field;          // 0=top / 1=bottom (debug 用)
+  bool     frameReady = false;     // 新フレーム完了フラグ（メインループで消費後に false へ）
+  uint32_t frameCount = 0;         // 累積フレーム数（debug 表示用）
+  int      field      = 0;         // 0=top / 1=bottom (debug 用)
   // 画素バッファ実体は Camera::imageBuffer_ にあり、ここはそれを指すポインタ。
   // 19KB のバッファを SystemData に持たせるとメモリ効率が悪いため。
-  const volatile unsigned char* imageBufferPtr;
+  const volatile unsigned char* imageBufferPtr = nullptr;
 };
 
 // 画像サイズ定義 (CameraConfig との整合のためマクロも残す)

@@ -43,32 +43,32 @@ SDCard::SDCard(const SDCardConfig& cfg)
 
 bool SDCard::init()
 {
-  g_serial.printf("SDCard: 初期化開始...\n");
+  g_serial.printf("[SDCard] 初期化開始...\n");
 
   // RSPI2 ハードウェア初期化
   initSPI();
 
   // カード検出確認
   if (!isCardInserted()) {
-    g_serial.printf("SDCard: カード未挿入\n");
+    g_serial.printf("[SDCard] カード未挿入\n");
     return false;
   }
-  g_serial.printf("SDCard: カード検出OK\n");
+  g_serial.printf("[SDCard] カード検出OK\n");
 
   // SDカード初期化
   int ret = initCard();
   if (ret != 0) {
-    g_serial.printf("SDCard: 初期化失敗 (err=%d)\n", ret);
+    g_serial.printf("[SDCard] 初期化失敗 (err=%d)\n", ret);
     return false;
   }
 
   // セクタ数を取得
   sectorCount_ = readSectorCount();
-  g_serial.printf("SDCard: セクタ数=%lu (%luMB)\n",
+  g_serial.printf("[SDCard] セクタ数=%lu (%luMB)\n",
                   sectorCount_, sectorCount_ / 2048);
 
   initialized_ = true;
-  g_serial.printf("SDCard: 初期化完了 (タイプ=%d)\n", (int)cardType_);
+  g_serial.printf("[SDCard] 初期化完了 (タイプ=%d)\n", (int)cardType_);
   return true;
 }
 
@@ -215,7 +215,7 @@ int SDCard::initCard()
   // CMD0: GO_IDLE_STATE (リセット)
   int r = sendCommand(0, 0);
   if (r != R1_IDLE_STATE) {
-    g_serial.printf("SDCard: CMD0 失敗 (r=%d)\n", r);
+    g_serial.printf("[SDCard] CMD0 失敗 (r=%d)\n", r);
     return -1;
   }
 
@@ -228,7 +228,7 @@ int SDCard::initCard()
     // SD v1.x カード
     return initCardV1();
   } else {
-    g_serial.printf("SDCard: CMD8 異常応答 (r=%d)\n", r);
+    g_serial.printf("[SDCard] CMD8 異常応答 (r=%d)\n", r);
     return -2;
   }
 }

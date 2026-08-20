@@ -89,16 +89,16 @@ struct RunLogicConfig
 // ====================================================================
 struct RunData
 {
-    int           pattern;          // 現在の走行パターン番号 (RunPattern を int 化)
-    int           prevPattern;      // 直前のパターン（遷移検知用）
-    int           handleVal;        // 直近のハンドル指示値（debug 表示用）
-    int           traceOffset;      // ハンドル計算オフセット
-    int           leftMotor;        // calcMotorVal() の結果
-    int           rightMotor;
-    int           leftBrake;        // calcBrakeMotorVal() の結果
-    int           rightBrake;
-    int           lastHandle101;    // FINISH 時のハンドル維持値
-    bool          finished;         // 走行終了フラグ
+    int           pattern       = 0;     // 現在の走行パターン番号 (RunPattern を int 化)
+    int           prevPattern   = 0;     // 直前のパターン（遷移検知用）
+    int           handleVal     = 0;     // 直近のハンドル指示値（debug 表示用）
+    int           traceOffset   = 0;     // ハンドル計算オフセット
+    int           leftMotor     = 0;     // calcMotorVal() の結果
+    int           rightMotor    = 0;
+    int           leftBrake     = 0;     // calcBrakeMotorVal() の結果
+    int           rightBrake    = 0;
+    int           lastHandle101 = 0;     // FINISH 時のハンドル維持値
+    bool          finished      = false; // 走行終了フラグ
 
     ModuleTimer   stateTimer;       // 旧 stateMs_ : 現パターンに入ってからの経過時間
     ModuleTimer   totalTimer;       // 旧 totalMs_ : 走行スタートからの経過時間

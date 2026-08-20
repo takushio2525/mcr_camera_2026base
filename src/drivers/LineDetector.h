@@ -94,13 +94,13 @@ struct LineDetectorConfig
 // ====================================================================
 struct LineDetectorData
 {
-    int           deviation[120];   // 各行の偏差（正=ライン左寄り、負=ライン右寄り）
-    bool          crossLine;        // クロスライン検出フラグ
-    bool          leftLine;         // 左ハーフライン検出フラグ
-    bool          rightLine;        // 右ハーフライン検出フラグ
-    bool          centerLine;       // センターライン検出フラグ
-    unsigned char sensorBin;        // 8点センサ値
-    int           detectRow;        // 直近で使用された検出行（debug 表示用）
+    int           deviation[120] = {};  // 各行の偏差（正=ライン左寄り、負=ライン右寄り）
+    bool          crossLine  = false;   // クロスライン検出フラグ
+    bool          leftLine   = false;   // 左ハーフライン検出フラグ
+    bool          rightLine  = false;   // 右ハーフライン検出フラグ
+    bool          centerLine = false;   // センターライン検出フラグ
+    unsigned char sensorBin  = 0;       // 8点センサ値
+    int           detectRow  = 0;       // 直近で使用された検出行（debug 表示用）
 };
 
 // マスク値定義（8点センサ用）
