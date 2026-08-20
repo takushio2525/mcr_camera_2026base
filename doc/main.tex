@@ -794,10 +794,11 @@ LED・スイッチ    & \texttt{Onboard.cpp}     & IModule.h, iodefine.h \\
 \textbf{項目} & \textbf{内容} \\
 \midrule
 ターゲットボード & GR-PEACH (ルネサス RZ/A1H, ARM Cortex-A9) \\
-開発環境         & Renesas e2 studio（ビルド構成 \texttt{HardwareDebug}） \\
+開発環境         & Renesas e2 studio \textbf{\ideversion}（ビルド構成 \texttt{HardwareDebug}） \\
 言語             & C++（ベアメタル、mbed OS 不使用）。\texttt{ProjectConfig.h} が
                    \texttt{inline const} を使うため \textbf{C++17 以上}が必要 \\
-コンパイラ       & GCC for Renesas ARM (\texttt{arm-none-eabi-gcc/g++} 13.3.1)。
+コンパイラ       & \gccbuild \newline
+                   \texttt{arm-none-eabi-gcc} / \texttt{g++} \gccversion。
                    確認済みの組み合わせは \hyperref[sec:buildenv]{§\ref*{sec:buildenv}} \\
 浮動小数点       & VFPv3-D16, hard ABI, リトルエンディアン \\
 実行方式         & XIP（SPI フラッシュ直接実行）+ MMU / L1 キャッシュ有効
