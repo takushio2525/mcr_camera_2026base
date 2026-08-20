@@ -47,7 +47,7 @@
 \definecolor{okgreen}{HTML}{27AE60}
 
 %% ─── 版数・日付（ヘッダ／フッタと表紙で共用。ここだけ書き換える）───
-\newcommand{\docversion}{2.4}
+\newcommand{\docversion}{2.5}
 \newcommand{\docdate}{2026年8月21日}
 \newcommand{\docdatefooter}{2026-08-21}
 
@@ -277,6 +277,7 @@
 2.2 & 2026-08-21 & Shiozawa & テストの \texttt{SystemData} 値初期化漏れを修正し、実行環境による成否のばらつきを解消 (PR \#10) \\
 2.3 & 2026-08-21 & Shiozawa & 公式配布版 \texttt{kit20\_gr-peach} からの経緯を \S\ref*{sec:lineage} に追加。著作権・第三者提供コードの付録 (\S\ref*{sec:license}) を新設 \\
 2.4 & 2026-08-21 & Shiozawa & 公式配布版と本プログラムのビルド可否を e2 studio \ideversion 上で実測し \S\ref*{sec:kit20build} に記録。当初「ビルド定義が解釈できない」と記述していたが、実測により\textbf{インポートは成功し、2015 年版ツールチェインパスに解決されて何も生成せず終了する}挙動と判明したため訂正 \\
+2.5 & 2026-08-21 & Shiozawa & EMA 準拠状況を全数照合し付録 (\S\ref*{sec:emacompliance}) に記録。EMA の出典 \url{https://github.com/takushio2525/Embedded-Module-Architecture} を明記。未準拠だった Data 構造体のデフォルト値（43 メンバ）とログ書式を是正し、init リトライ機構を追加（既定値は現行動作を維持）。実機ビルドで \texttt{.data} / \texttt{.bss} が不変であることを確認 \\
 \bottomrule
 \end{tabularx}
 
@@ -295,7 +296,10 @@ GR-PEACH (RZ/A1H) を使用した、マイコンカーラリー (MCR) カメラ�
 \begin{notebox}[設計思想]
 \begin{itemize}[nosep]
   \item mbed OS を使用せず、ルネサス標準の \texttt{iodefine.h} を用いたベアメタル（レジスタ直接操作）環境で構築する
-  \item 既存のスパゲッティコードを廃し、EMA (Embedded-Module-Architecture) 準拠のモジュール分割を採用する。
+  \item 既存のスパゲッティコードを廃し、\textbf{EMA (Embedded-Module-Architecture)} 準拠のモジュール分割を採用する。
+        EMA は本プロジェクトの著者が策定した組み込み向けモジュール設計パターンで、
+        リファレンス実装を \url{https://github.com/takushio2525/Embedded-Module-Architecture}
+        に公開している。
         全モジュールは共通インターフェース \texttt{IModule} を実装し、
         \texttt{init()} / \texttt{updateInput()} / \texttt{updateOutput()} の3点で統一的に扱う
   \item モジュール間のデータ受け渡しは共有構造体 \texttt{SystemData} に一本化し、
@@ -315,8 +319,12 @@ MCR       & マイコンカーラリーの略称 \\
 GR-PEACH  & ルネサス RZ/A1H 搭載の開発ボード \\
 MTU2      & マルチファンクション・タイマ・ユニット2。PWM出力・位相計数に使用 \\
 VDC5      & ビデオディスプレイコントローラ5。DVDEC と組み合わせて NTSC 映像を取り込む \\
-EMA       & Embedded-Module-Architecture。\texttt{IModule} / \texttt{SystemData} /
-            \texttt{\{Module\}Config} の3点セットでモジュールを構成する設計方針 \\
+EMA       & \textbf{Embedded-Module-Architecture}。\texttt{IModule} / \texttt{SystemData} /
+            \texttt{\{Module\}Config} の3点セットでモジュールを構成する設計方針。
+            本プロジェクトの著者が策定・公開しているアーキテクチャで、
+            正本は \url{https://github.com/takushio2525/Embedded-Module-Architecture}
+            （MIT License）。規約の詳細は同リポジトリの \texttt{ARCHITECTURE.md}、
+            本プロジェクトの準拠状況は \hyperref[sec:emacompliance]{§\ref*{sec:emacompliance}} \\
 IModule   & 全モジュール共通の基底インターフェース (\hyperref[sec:api-imodule]{§\ref*{sec:api-imodule}}) \\
 SystemData & 全モジュールの入出力データを集約する共有構造体 (\hyperref[sec:systemdata]{§\ref*{sec:systemdata}}) \\
 Config    & モジュールごとの設定構造体。実値は \texttt{ProjectConfig.h} で一括定義する
@@ -3790,6 +3798,118 @@ TeraTerm に何も表示されない &
 \bottomrule
 \end{longtable}
 
+
+%% ============================================================
+%% EMA 準拠状況
+%% ============================================================
+\section{EMA (Embedded-Module-Architecture) 準拠状況}\label{sec:emacompliance}
+
+本プログラムは EMA に準拠して設計されている。EMA は本プロジェクトの著者が
+策定・公開している組み込み向けモジュール設計パターンで、正本は次のリポジトリにある。
+
+\begin{center}
+\url{https://github.com/takushio2525/Embedded-Module-Architecture}
+\end{center}
+
+規約の詳細は同リポジトリの \texttt{ARCHITECTURE.md}（MIT License）に定義されている。
+本節は、その規約に対する本プログラムの準拠状況を全数照合した結果である（2026-08-21 時点）。
+
+\subsection{照合結果}
+
+\begin{longtable}{p{66mm} l p{56mm}}
+\toprule
+\textbf{EMA の規約} & \textbf{判定} & \textbf{備考} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{EMA の規約} & \textbf{判定} & \textbf{備考} \\
+\midrule
+\endhead
+\texttt{IModule} の形（\texttt{enabled} / \texttt{init()=0} /
+  デフォルト空実装 / 仮想デストラクタ） & 準拠 & \texttt{src/core/IModule.h} \\
+\texttt{IModule.h} は \texttt{SystemData} を前方宣言のみで参照 & 準拠 &
+  \texttt{struct SystemData;} \\
+モジュール \texttt{.h} は \texttt{SystemData.h} を include しない & 準拠 & 循環依存防止。全モジュールで確認 \\
+モジュール \texttt{.cpp} は \texttt{ProjectConfig.h} を include しない & 準拠 &
+  \texttt{RunLogic.cpp} は Logic 層であり対象外 \\
+3 フェーズ実行で \texttt{enabled} を判定してスキップ & 準拠 &
+  \hyperref[sec:isr]{§\ref*{sec:isr}} \\
+入出力両方を持つモジュールは両方の配列に登録 & 準拠 &
+  \texttt{Onboard} が両配列に在籍 \\
+コンストラクタで \texttt{const \{Module\}Config\&} を受け \texttt{\_config} に保持 & 準拠 & 9 モジュール \\
+命名 \texttt{\{Module\}Config} / \texttt{\{MODULE\}\_CONFIG} & 概ね準拠 &
+  \texttt{RunLogicConfig} の実体名が \texttt{RUN\_CONFIG} \\
+\textbf{Data 構造体はデフォルト値必須} & 準拠 & \textbf{Rev 2.5 で対応} \\
+ログ書式 \texttt{[ModuleName] msg} & 準拠 & \textbf{Rev 2.5 で対応} \\
+init 失敗時のリトライ & 機構のみ & 既定値 1。理由は \hyperref[sec:emaretry]{§\ref*{sec:emaretry}} \\
+\bottomrule
+\end{longtable}
+
+\subsection{Data 構造体のデフォルト値}
+
+EMA は \texttt{\{Module\}Data} の全メンバにデフォルト値を与えることを必須としている。
+Rev 2.4 まで本プログラムはこれを満たしておらず、9 つの Data 構造体・計 43 メンバが
+初期化子を持たなかった。
+
+\begin{cautionbox}[この違反は実際に不具合を起こしていた]
+実機では \texttt{g\_sys} がグローバル変数のため BSS でゼロ初期化され、症状が表面化しなかった。
+一方ホスト側テストは \texttt{SystemData} をスタックに置くため、初期化子が無いメンバは
+\textbf{不定値}になる。その結果 \texttt{CameraInitContract.FailedCameraIsSkippedByIsrLoop} が
+実行環境によって成否の変わるテストになっていた（Issue \#9 / PR \#10）。
+\textbf{EMA のこの規約は、まさにこの種の事故を防ぐためのものである。}
+\end{cautionbox}
+
+Rev 2.5 で全 43 メンバに初期化子を与えた。\textbf{値はすべてゼロ相当}
+（\texttt{false} / \texttt{0} / \texttt{0.0f} / \texttt{nullptr} / \texttt{\{\}}）に
+限定してあり、BSS のゼロ初期化と同じ値になるため\textbf{実機の挙動は変わらない}。
+実測でも \texttt{.data} と \texttt{.bss} のサイズが 1 バイトも変化していない
+（\hyperref[sec:emabuild]{§\ref*{sec:emabuild}}）。
+
+\texttt{SystemData} 自体には初期化子を書いていない。配下の各 \texttt{\{Module\}Data} が
+初期化子を持つため、\texttt{SystemData sys;} と書いても全メンバが初期化される。
+
+\subsection{init リトライを既定で行わない理由}\label{sec:emaretry}
+
+EMA は init 失敗時のリトライとロジック層での定期再試行を推奨している。
+本プログラムは \texttt{initModule(mod, retries = 1)} という形で機構を用意しているが、
+\textbf{既定値は 1（リトライしない）}とし、現行の挙動を維持している。
+
+\texttt{Camera::init()} は VDC5 / DVDEC を段階的に設定する。途中のステップで失敗した
+状態から再度 \texttt{init()} を呼ぶと、部分的に設定済みのペリフェラルへ重ねて設定を
+行うことになる。この経路が安全かどうかは\textbf{実機で未確認}であり、確認しないまま
+リトライ回数を増やすと、失敗時の挙動が「該当モジュールが無効化されるだけ」から
+「ハードウェアが不定状態になる」へ悪化しうる。
+
+リトライを有効にする場合は、対象モジュールごとに次を実機で確認してから
+\texttt{retries} を 2 以上にすること。
+
+\begin{enumerate}[nosep]
+  \item \texttt{init()} が途中失敗しても再入可能か（毎回ペリフェラルをリセットするか）
+  \item リトライ中の待ち時間が起動シーケンスの制約を壊さないか
+\end{enumerate}
+
+走行中の定期再試行についても同様で、\texttt{Motor} / \texttt{Servo} を走行中に
+再初期化すると MTU2 がスタンバイ状態を経由するため危険であり、本プログラムでは実装しない。
+
+\subsection{準拠対応後のビルド実測}\label{sec:emabuild}
+
+Rev 2.5 の変更後、e2 studio \ideversion 上でヘッドレスビルドし、
+挙動に影響が出ていないことを確認した。
+
+\begin{tabularx}{\textwidth}{l r r X}
+\toprule
+\textbf{セクション} & \textbf{対応前} & \textbf{対応後} & \textbf{評価} \\
+\midrule
+\texttt{.text} & 252{,}976 & 253{,}896 & +920。ゼロ書き込みコード分。起動時に一度のみ \\
+\texttt{.data} & 78{,}616 & 78{,}616 & \textbf{変化なし} \\
+\texttt{.bss}  & 3{,}315{,}064 & 3{,}315{,}064 & \textbf{変化なし}。RAM 配置は不変 \\
+\bottomrule
+\end{tabularx}
+
+\vspace{2mm}
+\texttt{0 errors, 28 warnings}（警告数も対応前と同一）で
+\texttt{.elf}（983{,}252 バイト）と \texttt{.bin}（336{,}384 バイト）を生成。
+ホスト側ユニットテストも 55/55 で緑を維持している。
 
 %% ============================================================
 %% 12. 著作権・第三者提供コードの扱い

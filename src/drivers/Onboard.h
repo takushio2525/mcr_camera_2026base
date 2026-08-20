@@ -36,12 +36,12 @@ struct OnboardConfig
 struct OnboardData
 {
   // Input
-  int sw;              // 1=Pressed, 0=Released
+  int sw           = 0;  // 1=Pressed, 0=Released
   // Output
-  int ledRedCmd;       // 0=OFF, 1=ON
-  int ledGreenCmd;
-  int ledBlueCmd;
-  int userLedCmd;
+  int ledRedCmd    = 0;  // 0=OFF, 1=ON
+  int ledGreenCmd  = 0;
+  int ledBlueCmd   = 0;
+  int userLedCmd   = 0;
 };
 
 // LED Count

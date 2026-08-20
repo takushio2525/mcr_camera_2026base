@@ -36,25 +36,25 @@ SDLogger::SDLogger(const SDLoggerConfig& cfg)
 
 bool SDLogger::init()
 {
-  g_serial.printf("SDLogger: 初期化開始...\n");
+  g_serial.printf("[SDLogger] 初期化開始...\n");
 
   // SDカードドライバ初期化
   g_sdcard.init();
 
   if (!g_sdcard.isReady()) {
-    g_serial.printf("SDLogger: SDカード初期化失敗\n");
+    g_serial.printf("[SDLogger] SDカード初期化失敗\n");
     return false;
   }
 
   // FatFs マウント
   FRESULT res = f_mount(&fatfs, "", 1);  // 即時マウント
   if (res != FR_OK) {
-    g_serial.printf("SDLogger: マウント失敗 (err=%d)\n", (int)res);
+    g_serial.printf("[SDLogger] マウント失敗 (err=%d)\n", (int)res);
     return false;
   }
 
   mounted_ = true;
-  g_serial.printf("SDLogger: マウント完了\n");
+  g_serial.printf("[SDLogger] マウント完了\n");
 
   // ログバッファをクリア
   resetLog();
@@ -154,16 +154,16 @@ void SDLogger::resetLog()
 int SDLogger::saveToSD()
 {
   if (!mounted_) {
-    g_serial.printf("SDLogger: 未マウント\n");
+    g_serial.printf("[SDLogger] 未マウント\n");
     return -1;
   }
 
   if (logCount_ == 0) {
-    g_serial.printf("SDLogger: 記録データなし\n");
+    g_serial.printf("[SDLogger] 記録データなし\n");
     return -2;
   }
 
-  g_serial.printf("SDLogger: 保存開始 (%u エントリ)...\n", logCount_);
+  g_serial.printf("[SDLogger] 保存開始 (%u エントリ)...\n", logCount_);
 
   // 連番を取得
   int fileNum = readRenban();
@@ -181,7 +181,7 @@ int SDLogger::saveToSD()
   FIL fil;
   FRESULT res = f_open(&fil, filename, FA_WRITE | FA_CREATE_ALWAYS);
   if (res != FR_OK) {
-    g_serial.printf("SDLogger: ファイルオープン失敗 (%s, err=%d)\n",
+    g_serial.printf("[SDLogger] ファイルオープン失敗 (%s, err=%d)\n",
                     filename, (int)res);
     return -3;
   }
@@ -223,18 +223,18 @@ int SDLogger::saveToSD()
 
     // 進捗表示 (500エントリごと)
     if ((i + 1) % 500 == 0) {
-      g_serial.printf("SDLogger: %u/%u 書き込み中...\n", i + 1, logCount_);
+      g_serial.printf("[SDLogger] %u/%u 書き込み中...\n", i + 1, logCount_);
     }
   }
 
   // ファイルクローズ
   res = f_close(&fil);
   if (res != FR_OK) {
-    g_serial.printf("SDLogger: クローズ失敗 (err=%d)\n", (int)res);
+    g_serial.printf("[SDLogger] クローズ失敗 (err=%d)\n", (int)res);
     return -4;
   }
 
-  g_serial.printf("SDLogger: 保存完了 → %s\n", filename);
+  g_serial.printf("[SDLogger] 保存完了 → %s\n", filename);
   return 0;
 }
 

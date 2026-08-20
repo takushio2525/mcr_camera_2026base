@@ -56,11 +56,11 @@ struct SDLoggerConfig
 // ====================================================================
 struct SDLoggerData
 {
-  bool     ready;          // 初期化成功フラグ
-  uint32_t logCount;       // 現在の記録エントリ数
-  bool     full;           // バッファ満杯フラグ
-  bool     saveRequested;  // メインループから「SD 書き出し」をリクエストするフラグ
-  bool     saveDone;       // SD 書き出し完了フラグ
+  bool     ready         = false;  // 初期化成功フラグ
+  uint32_t logCount      = 0;      // 現在の記録エントリ数
+  bool     full          = false;  // バッファ満杯フラグ
+  bool     saveRequested = false;  // メインループから「SD 書き出し」をリクエストするフラグ
+  bool     saveDone      = false;  // SD 書き出し完了フラグ
 };
 
 // ログバッファ最大エントリ数 (SDLoggerConfig.maxEntries の上限。配列サイズ用)

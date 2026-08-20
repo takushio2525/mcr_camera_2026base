@@ -90,40 +90,40 @@ bool Camera::init()
   memset((void *)imageBuffer_, 0, sizeof(imageBuffer_));
   memset(ycbcrBuffer_, 0, sizeof(ycbcrBuffer_));
 
-  g_serial.printf("[Camera::init] Start Graphics_init...\n");
+  g_serial.printf("[Camera] Start Graphics_init...\n");
   // 1. Graphics initialization process
   error = display_.Graphics_init(NULL);
   if (error != DisplayBase::GRAPHICS_OK)
   {
-    g_serial.printf("[Camera::init] ERROR at Graphics_init: %d\n", error);
+    g_serial.printf("[Camera] ERROR at Graphics_init: %d\n", error);
     return false;
   }
-  g_serial.printf("[Camera::init] Graphics_init OK.\n");
+  g_serial.printf("[Camera] Graphics_init OK.\n");
 
-  g_serial.printf("[Camera::init] Start Graphics_Video_init...\n");
+  g_serial.printf("[Camera] Start Graphics_Video_init...\n");
   // 2. Video decoder initialization
   error = display_.Graphics_Video_init(DisplayBase::INPUT_SEL_VDEC, NULL);
   if (error != DisplayBase::GRAPHICS_OK)
   {
-    g_serial.printf("[Camera::init] ERROR at Graphics_Video_init: %d\n", error);
+    g_serial.printf("[Camera] ERROR at Graphics_Video_init: %d\n", error);
     return false;
   }
-  g_serial.printf("[Camera::init] Graphics_Video_init OK.\n");
+  g_serial.printf("[Camera] Graphics_Video_init OK.\n");
 
-  g_serial.printf("[Camera::init] Start Graphics_Irq_Handler_Set (VSYNC)...\n");
+  g_serial.printf("[Camera] Start Graphics_Irq_Handler_Set (VSYNC)...\n");
   // 3. Vsync callback setting
   error = display_.Graphics_Irq_Handler_Set(DisplayBase::INT_TYPE_S0_VI_VSYNC,
                                             0, vsyncCallback);
   if (error != DisplayBase::GRAPHICS_OK)
   {
     g_serial.printf(
-        "[Camera::init] ERROR at Graphics_Irq_Handler_Set (VSYNC): %d\n",
+        "[Camera] ERROR at Graphics_Irq_Handler_Set (VSYNC): %d\n",
         error);
     return false;
   }
-  g_serial.printf("[Camera::init] Graphics_Irq_Handler_Set (VSYNC) OK.\n");
+  g_serial.printf("[Camera] Graphics_Irq_Handler_Set (VSYNC) OK.\n");
 
-  g_serial.printf("[Camera::init] Start Video_Write_Setting...\n");
+  g_serial.printf("[Camera] Start Video_Write_Setting...\n");
   // 4. Video write setting (NTSC, YCbCr422, 160x120)
   error = display_.Video_Write_Setting(
       DisplayBase::VIDEO_INPUT_CHANNEL_0, DisplayBase::COL_SYS_NTSC_358,
@@ -132,24 +132,24 @@ bool Camera::init()
       CAM_PIXEL_VW, CAM_PIXEL_HW);
   if (error != DisplayBase::GRAPHICS_OK)
   {
-    g_serial.printf("[Camera::init] ERROR at Video_Write_Setting: %d\n", error);
+    g_serial.printf("[Camera] ERROR at Video_Write_Setting: %d\n", error);
     return false;
   }
-  g_serial.printf("[Camera::init] Video_Write_Setting OK.\n");
+  g_serial.printf("[Camera] Video_Write_Setting OK.\n");
 
   g_serial.printf(
-      "[Camera::init] Start Graphics_Irq_Handler_Set (VFIELD)...\n");
+      "[Camera] Start Graphics_Irq_Handler_Set (VFIELD)...\n");
   // 5. Vfield callback setting (VIDEO_INT_TYPE = INT_TYPE_S0_VFIELD)
   error = display_.Graphics_Irq_Handler_Set(DisplayBase::INT_TYPE_S0_VFIELD, 0,
                                             vfieldCallback);
   if (error != DisplayBase::GRAPHICS_OK)
   {
     g_serial.printf(
-        "[Camera::init] ERROR at Graphics_Irq_Handler_Set (VFIELD): %d\n",
+        "[Camera] ERROR at Graphics_Irq_Handler_Set (VFIELD): %d\n",
         error);
     return false;
   }
-  g_serial.printf("[Camera::init] Graphics_Irq_Handler_Set (VFIELD) OK.\n");
+  g_serial.printf("[Camera] Graphics_Irq_Handler_Set (VFIELD) OK.\n");
 
   // 6. Capture Start -> Stop -> Start (参考プロジェクトと同じ初期化シーケンス)
   // XIP環境ではbusy-waitループが極めて遅い（L1キャッシュ無効でSPI Flashから
@@ -162,7 +162,7 @@ bool Camera::init()
   //     system_init.c で MMU_Enable() / L1C_EnableCaches() を実行している。
   //     実効速度は改善しているはずだが再測していない（要実機計測）。
   //     いずれにせよ本待ちは Vsync 割り込み駆動なので実行速度に依存しない。
-  g_serial.printf("[Camera::init] Video_Start (for Vsync stabilize wait)...\n");
+  g_serial.printf("[Camera] Video_Start (for Vsync stabilize wait)...\n");
   s_vsyncCount = 12; // Vsync 12回 ≈ 200ms
   display_.Video_Start(DisplayBase::VIDEO_INPUT_CHANNEL_0);
 
@@ -174,11 +174,11 @@ bool Camera::init()
        timeout++)
   {
   }
-  g_serial.printf("[Camera::init] Stabilized (12 Vsyncs). Restart...\n");
+  g_serial.printf("[Camera] Stabilized (12 Vsyncs). Restart...\n");
 
   display_.Video_Stop(DisplayBase::VIDEO_INPUT_CHANNEL_0);
   display_.Video_Start(DisplayBase::VIDEO_INPUT_CHANNEL_0);
-  g_serial.printf("[Camera::init] Sequence done.\n");
+  g_serial.printf("[Camera] Sequence done.\n");
 
   // 参考プロジェクトと同じ: Vsync/Vfield待ちでVDC5の安定を確認
   // WaitVsync(1) 相当: Vsyncが1回発生するまで待つ
@@ -189,7 +189,7 @@ bool Camera::init()
        timeout++)
   {
   }
-  g_serial.printf("[Camera::init] WaitVsync done.\n");
+  g_serial.printf("[Camera] WaitVsync done.\n");
 
   // WaitVfield(2) 相当: Vfieldが2回発生するまで待つ
   // s_vfieldCount は単調増加カウンタなので開始値からの差分で判定する
@@ -203,7 +203,7 @@ bool Camera::init()
     }
   }
   g_serial.printf(
-      "[Camera::init] All initialization completed successfully.\n");
+      "[Camera] All initialization completed successfully.\n");
   return true;
 }
 

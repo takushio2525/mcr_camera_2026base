@@ -38,10 +38,10 @@ struct MotorConfig
 // ====================================================================
 struct MotorData
 {
-  int leftCmd;       // Logic → Motor 指示値 [-100..+100]
-  int rightCmd;
-  int leftActual;    // Motor::updateOutput が反映後に書き戻し（debug 用）
-  int rightActual;
+  int leftCmd     = 0;  // Logic → Motor 指示値 [-100..+100]
+  int rightCmd    = 0;
+  int leftActual  = 0;  // Motor::updateOutput が反映後に書き戻し（debug 用）
+  int rightActual = 0;
 };
 
 class Motor : public IModule

@@ -6,6 +6,22 @@ mbed OS を使わず `iodefine.h` でレジスタを直接操作するベアメ�
 `IModule`（`init` / `updateInput` / `updateOutput`）を実装し、モジュール間のデータ受け渡しは
 共有構造体 `SystemData` に集約しています。
 
+
+## 設計アーキテクチャ
+
+本プロジェクトは **EMA (Embedded-Module-Architecture)** に準拠しています。
+
+- **正本リポジトリ:** https://github.com/takushio2525/Embedded-Module-Architecture (MIT License)
+- **規約:** 同リポジトリの [`ARCHITECTURE.md`](https://github.com/takushio2525/Embedded-Module-Architecture/blob/main/ARCHITECTURE.md)
+- **本プロジェクトの準拠状況:** `doc/main.pdf` の付録「EMA 準拠状況」に全数照合の結果を記載
+
+EMA は `IModule` / `SystemData` / `{Module}Config` の 3 点セットでモジュールを構成し、
+`loop()` を Input → Logic → Output の 3 フェーズに固定する設計パターンです。
+本プロジェクトはこれを mbed OS 非依存のベアメタル環境へ適用した実装例にあたります。
+
+新しいモジュールを追加するときは、まず上記 `ARCHITECTURE.md` の
+「新規モジュール追加チェックリスト」を参照してください。
+
 ## 環境構築
 
 ### 開発環境（ファームウェアビルド）

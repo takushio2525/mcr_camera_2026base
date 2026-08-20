@@ -41,8 +41,8 @@ struct ServoConfig
 // ====================================================================
 struct ServoData
 {
-  int angleCmd;      // Logic → Servo 指示角 [-MAX..+MAX] [度]
-  int angleActual;   // Servo::updateOutput が反映後に書き戻し
+  int angleCmd    = 0;  // Logic → Servo 指示角 [-MAX..+MAX] [度]
+  int angleActual = 0;  // Servo::updateOutput が反映後に書き戻し
 };
 
 class Servo : public IModule
