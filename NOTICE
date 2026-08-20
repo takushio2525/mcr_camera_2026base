@@ -1,0 +1,70 @@
+mcr_camera_2026base
+===================
+
+本リポジトリは自作コードと第三者提供コードの混成です。
+どの範囲が自作かを明確にするため、内訳を以下に示します。
+詳細は doc/main.pdf の付録「著作権・第三者提供コードの扱い」を参照してください。
+
+
+第三者提供コード
+----------------
+
+src/drivers/video/                          (81 ファイル)
+    Renesas Electronics Corporation 提供の VDC5 / VDEC ドライバおよび
+    DisplayBase API。mbed-gr-libs 由来。
+    各ファイル冒頭の DISCLAIMER に「Renesas 製品との使用に限り許諾する」旨の
+    記載があります。GR-PEACH は RZ/A1H を搭載した Renesas 製品です。
+
+    ただし以下は本プロジェクトが自作した互換ヘッダ（シム）です。
+    mbed OS 無しで上記ドライバをビルドするために追加しました。
+        src/drivers/video/mbed_assert.h
+        src/drivers/video/pinmap.h
+        src/drivers/video/gr_peach_vdc5.h
+
+generate/                                   (50 ファイル)
+    Renesas e2 studio が生成したプロジェクトファイル群。
+    inthandler.c と linker_script.ld には手動修正を加えています
+    （doc/main.pdf の「generate/ の手動修正箇所」を参照）。
+
+src/drivers/fatfs/                          (6 ファイル)
+    FatFs - FAT file system module R0.11a
+    Copyright (C) 2015, ChaN, all right reserved.
+    BSD 類似ライセンス。著作権表示の保持を条件に再配布可能です。
+
+src/system/ の CMSIS 関連                   (4 ファイル)
+    Copyright (c) 2009-2020 ARM Limited. All rights reserved.
+    SPDX-License-Identifier: Apache-2.0
+
+
+自作コード
+----------
+
+上記以外（約 59 ファイル）が本プロジェクトの自作分です。
+
+    src/core/                システム基盤（IModule, SystemData, ProjectConfig 等）
+    src/logic/               走行ロジック
+    src/drivers/ 直下         各ドライバ（Camera, LineDetector, Motor, Servo,
+                             Encoder, Onboard, Serial, SDCard, SDLogger）
+    src/mcr_camera_2026base.cpp
+    tests/                   ホスト側ユニットテスト
+    doc/                     仕様書
+
+
+公式配布プログラムとの関係
+--------------------------
+
+本プログラムは、画像処理マイコンカーキットの公式配布プログラム
+kit20_gr-peach を直接の契機として作成しましたが、そのソースコードを
+複製していません。新規プロジェクトから作成しており、ハードウェアの仕様
+（ピン割り当て、MTU2 のチャネル構成、クロック系統）に由来して結果的に
+一致する箇所を除き、実装は独自です。
+
+公式配布物（プログラム本体および解説マニュアル）は、文書による事前の
+承諾なしの転載・複製が禁じられています。本リポジトリにこれらは含まれません。
+
+
+注意
+----
+
+第三者提供コードのファイル冒頭にある著作権表示・DISCLAIMER は削除しないでください。
+削除すると出所を追跡できなくなります。

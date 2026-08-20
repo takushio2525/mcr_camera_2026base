@@ -46,13 +46,18 @@
 \definecolor{noteyellow}{HTML}{F39C12}
 \definecolor{okgreen}{HTML}{27AE60}
 
+%% ─── 版数・日付（ヘッダ／フッタと表紙で共用。ここだけ書き換える）───
+\newcommand{\docversion}{2.3}
+\newcommand{\docdate}{2026年8月21日}
+\newcommand{\docdatefooter}{2026-08-21}
+
 %% ─── ヘッダー・フッター ───────────────────────
 \pagestyle{fancy}
 \fancyhf{}
 \fancyhead[L]{\small\color{headerblue}\textbf{mcr\_camera\_2026base} プログラム設計仕様書}
-\fancyhead[R]{\small\color{headerblue}Rev.\,2.1}
+\fancyhead[R]{\small\color{headerblue}Rev.\,\docversion}
 \fancyfoot[C]{\small\thepage\,/\,\pageref{LastPage}}
-\fancyfoot[R]{\small\color{gray}2026-08-13}
+\fancyfoot[R]{\small\color{gray}\docdatefooter}
 \renewcommand{\headrulewidth}{0.8pt}
 \renewcommand{\footrulewidth}{0.4pt}
 
@@ -172,15 +177,15 @@
 \newcommand{\doctitle}{mcr\_camera\_2026base\\プログラム設計仕様書}
 \newcommand{\docsubtitle}{GR-PEACH (RZ/A1H) マイコンカーラリー カメラクラス開発}
 \newcommand{\docauthor}{Shiozawa}
-\newcommand{\docversion}{2.1}
-\newcommand{\docdate}{2026年8月13日}
 
 %% ─── ビルド検証環境（§6.1 で使用） ─────────────
-%% e2 studio の製品バージョンはリポジトリ内に記録が無く、未確定。
-%% 判明したら「この1行だけ」を書き換えれば §6.1 の表に反映される。
-%% 例: \newcommand{\ideversion}{2025-07 (25.7.0)}
+%% e2 studio の製品バージョンはプロジェクトファイルに記録されないため、
+%% 実機の C:\Renesas\e2_studio\eclipse\.eclipseproduct から実測した値を書く。
+%% 環境を更新したら「この1行だけ」を書き換えれば §6.1 の表に反映される。
 %% (制御綴に数字は使えないため \e2studioversion ではなく \ideversion とする)
-\newcommand{\ideversion}{\textcolor{warnred}{\textbf{（確認中 --- 要記入）}}}
+\newcommand{\ideversion}{2025-10 (25.10.0)}
+\newcommand{\gccbuild}{Arm GNU Toolchain 13.3.Rel1 (Build arm-13.24)}
+\newcommand{\gccversion}{13.3.1 20240614}
 
 %% ============================================================
 \begin{document}
@@ -269,6 +274,8 @@
   起動シーケンスに初期化失敗時の扱い（\texttt{enabled = false} / シリアル赤字 / 赤 LED）を追加。
   \texttt{Camera::init()} の失敗時挙動を \texttt{while(1);} から \texttt{return false} へ
   変更した件を API 仕様と付録に記録。 \\
+2.2 & 2026-08-21 & Shiozawa & テストの \texttt{SystemData} 値初期化漏れを修正し、実行環境による成否のばらつきを解消 (PR \#10) \\
+2.3 & 2026-08-21 & Shiozawa & 公式配布版 \texttt{kit20\_gr-peach} からの経緯を \S\ref*{sec:lineage} に追加。著作権・第三者提供コードの付録 (\S\ref*{sec:license}) を新設 \\
 \bottomrule
 \end{tabularx}
 
@@ -326,13 +333,52 @@ XIP       & eXecute In Place。SPI フラッシュ上のコードを RAM へ展�
 %% ============================================================
 \section{背景・課題}\label{sec:background}
 
+\subsection{本プログラムに至る経緯}\label{sec:lineage}
+
+本プログラムは、公式配布のサンプルプログラムをそのまま使い続けられなくなったことを
+直接の契機として、ゼロから作り直したものである。経緯は次の3段階になる。
+
+\begin{tabularx}{\textwidth}{l l l X}
+\toprule
+\textbf{プロジェクト} & \textbf{開発環境} & \textbf{mbed OS} & \textbf{位置づけ} \\
+\midrule
+\texttt{kit20\_gr-peach} & e2 studio & あり & 画像処理マイコンカーキットの公式配布プログラム \\
+\texttt{MCR\_SHIOZAWA\_CCLASS} & mbed Studio & あり & 上記を出発点に自作した走行プログラム（最高 2.38\,m/s） \\
+\textbf{本プログラム} & e2 studio & \textbf{なし} & mbed OS を排したベアメタル実装。本仕様書の対象 \\
+\bottomrule
+\end{tabularx}
+
+\vspace{2mm}
+公式配布版も本プログラムも同じ e2 studio を使うため、
+\textbf{本移行は統合開発環境の乗り換えではない}。
+実際に変えたのは \textbf{mbed OS への依存を断ったこと}である。
+
 \begin{cautionbox}[開発環境の課題]
 \begin{enumerate}[nosep]
-  \item \textbf{mbed OS サービス終了}: mbed のサービス終了に伴い、将来的な継続利用や保守が困難になる
-  \item \textbf{開発環境の老朽化}: 既存プロジェクトの e2 studio 環境やコンパイラバージョンが古く、最新の環境でビルドを通す必要がある
+  \item \textbf{公式配布版が現行 e2 studio でビルドできない}:
+        公式配布版の \texttt{.cproject} は、ビルド設定の識別子が
+        \texttt{ilg.gnuarmeclipse.managedbuild.cross.*}
+        （サードパーティ製プラグイン GNU ARM Eclipse、後の Eclipse Embedded CDT）
+        の名前空間で記述されている。現行の e2 studio が使う
+        \texttt{com.renesas.cdt.managedbuild.gcc.rz.*} とは名前空間ごと非互換であり、
+        個別のコンパイルエラーを解消する作業ではなく
+        \textbf{ビルド定義そのものが解釈できない}。
+        設定値（Cortex-A9 / ARMv7-A / VFPv3 / hard float ABI）自体は現行環境でも
+        指定可能なものばかりで、\textbf{問題は設定値ではなく設定を記述する枠組みにある}
+  \item \textbf{mbed OS サービス終了}: mbed のサービス終了に伴い、将来的な継続利用や保守が困難になる。
+        公式配布版は mbed OS 本体 692 ファイル・mbed-gr-libs 423 ファイルを同梱しており、
+        利用者が記述するコードは 1 ファイル（約 1,700 行）のみで、
+        残りは供給元が終了した土台に載っている
   \item \textbf{ブラックボックス化の解消}: OS内部処理への依存を減らし、デバッグを容易にする必要がある
 \end{enumerate}
 \end{cautionbox}
+
+\begin{notebox}[公式配布物の扱い]
+本仕様書は公式配布物（プログラム本体および解説マニュアル）の内容を転載していない。
+いずれも文書による事前の承諾なしの転載・複製が禁じられているため、
+参照はファイル名・関数名・設定識別子にとどめている。
+本プログラムのソースコードに公式配布版から複製したコードは含まれない。
+\end{notebox}
 
 %% ============================================================
 %% 3. 目的
@@ -774,13 +820,16 @@ LED・スイッチ    & \texttt{Onboard.cpp}     & IModule.h, iodefine.h \\
 \toprule
 \textbf{項目} & \textbf{確認済みの値} \\
 \midrule
-IDE                 & Renesas e2 studio \quad バージョン: \ideversion \\
+IDE                 & Renesas e2 studio \quad バージョン: \textbf{\ideversion} \\
 ビルド構成          & \texttt{HardwareDebug} \\
-ツールチェイン      & GNU Arm Embedded Toolchain（Arm GNU Toolchain \texttt{arm-none-eabi} 13.3 rel1） \\
+ツールチェイン      & \gccbuild \\
+コンパイラ実測値    & \texttt{arm-none-eabi-gcc} \gccversion \newline
+                      （\texttt{arm-none-eabi-gcc -{}-version} の実出力） \\
 \texttt{.cproject} の登録値 & \texttt{toolchain.id = gcc-arm-embedded},
-                              \texttt{toolchain.version = 13.3.1.arm-13-24} \\
-コンパイラ          & \texttt{arm-none-eabi-gcc} / \texttt{arm-none-eabi-g++} 13.3.1
-                      （生成 makefile の \texttt{GCC\_VERSION=13.3.1} と一致） \\
+                              \texttt{toolchain.version = 13.3.1.arm-13-24}
+                              \newline （上記ツールチェインのビルド番号 \texttt{arm-13.24} と一致） \\
+インストール先      & \texttt{C:\textbackslash Program Files (x86)\textbackslash Arm GNU Toolchain
+                      arm-none-eabi\textbackslash 13.3 rel1} \\
 CDT ツールチェイン  & GCC for Renesas RZ
                       (\texttt{com.renesas.cdt.managedbuild.gcc.rz.toolchain.debug.update}) \\
 \bottomrule
@@ -829,16 +878,28 @@ Float ABI        & hard             & \texttt{-mfloat-abi=hard} \\
 \end{itemize}
 \end{notebox}
 
-\begin{cautionbox}[e2 studio の製品バージョンは未確定]
-e2 studio 本体のバージョンを特定できる情報は、
-リポジトリ内のどのファイルにも記録されていない
+\begin{notebox}[製品バージョンはプロジェクトファイルに残らない]
+e2 studio 本体のバージョンは、\textbf{リポジトリ内のどのファイルにも記録されない}
 （\texttt{.settings/e2studio\_project.prefs} が持つのは構成 ID のみ）。
-そのため上表の該当欄は\textbf{未記入のまま}である。
+上表の値は開発機で次のファイルを直接読んで実測したものである。
 
-バージョンが判明したら、プリアンブルの \texttt{\textbackslash newcommand\{\textbackslash ideversion\}\{...\}}
-\textbf{1 箇所}を書き換えるだけで本表に反映される。
-e2 studio 側での確認方法は「ヘルプ $\rightarrow$ e2 studio について」。
-\end{cautionbox}
+\begin{center}
+\texttt{C:\textbackslash Renesas\textbackslash e2\_studio\textbackslash eclipse\textbackslash .eclipseproduct}
+\end{center}
+
+同ファイルの \texttt{version=25.10.0} が製品リリース 2025-10 に対応する。
+GUI から確認する場合は「ヘルプ $\rightarrow$ e2 studio について」。
+
+環境を更新したときは、プリアンブルの \texttt{\textbackslash ideversion} /
+\texttt{\textbackslash gccbuild} / \texttt{\textbackslash gccversion} の
+\textbf{3 行}を書き換えれば本表に反映される。
+
+\medskip
+\textbf{記録を残す意義}: 公式配布版が現行 e2 studio でビルドできなくなった
+(\hyperref[sec:background]{§\ref*{sec:background}}) 根本の一因は、
+どの版で動作を確認したかが誰にも記録されていなかったことにある。
+本表はその再発を防ぐために置いている。
+\end{notebox}
 
 %% ============================================================
 %% 7. API仕様 (データシート)
@@ -3655,5 +3716,91 @@ TeraTerm に何も表示されない &
 \bottomrule
 \end{longtable}
 
-\end{document}
 
+%% ============================================================
+%% 12. 著作権・第三者提供コードの扱い
+%% ============================================================
+\section{著作権・第三者提供コードの扱い}\label{sec:license}
+
+本プログラムは自作コードと第三者提供コードの混成である。
+どの範囲が自作かを明確にするため、追跡対象 200 ファイルの内訳を示す。
+
+\subsection{内訳}
+
+\begin{tabularx}{\textwidth}{l r l X}
+\toprule
+\textbf{対象} & \textbf{ファイル数} & \textbf{提供元} & \textbf{ライセンス・条件} \\
+\midrule
+\texttt{src/drivers/video/} & 81 & Renesas Electronics
+  （\texttt{mbed-gr-libs} 由来） & Renesas 製品との使用に限り許諾。各ファイル冒頭の
+  DISCLAIMER を参照 \\
+\texttt{generate/} & 50 & Renesas Electronics
+  （e2 studio 生成） & プロジェクト生成物。\hyperref[sec:generate]{§\ref*{sec:generate}} の手動修正あり \\
+\texttt{src/drivers/fatfs/} & 6 & ChaN & FatFs R0.11a。BSD 類似。
+  著作権表示の保持を条件に再配布可 \\
+\texttt{src/system/} の CMSIS & 4 & ARM Limited & Apache License 2.0 \\
+\midrule
+\textbf{第三者提供 小計} & \textbf{141} & & \\
+\textbf{自作コード} & \textbf{59} & 本プロジェクト & \\
+\midrule
+\textbf{合計} & \textbf{200} & & \\
+\bottomrule
+\end{tabularx}
+
+\vspace{2mm}
+自作コードは \texttt{src/core/}、\texttt{src/logic/}、\texttt{src/drivers/} 直下の
+各ドライバ（Camera / LineDetector / Motor / Servo / Encoder / Onboard / Serial /
+SDCard / SDLogger）、\texttt{src/mcr\_camera\_2026base.cpp}、および
+\texttt{tests/} である。
+
+\subsection{映像ドライバを流用した理由と、その際に自作したもの}
+
+\texttt{src/drivers/video/} の VDC5 / DVDEC ドライバと \texttt{DisplayBase} API は
+Renesas が提供する実績のある実装であり、NTSC のインターレース処理を含めて
+自作するより流用するほうが確実であると判断した。ドライバ本体には手を加えていない。
+
+一方、これらは本来 mbed OS 上で動くことを前提としており、
+mbed のヘッダを \texttt{include} している。
+mbed OS を排した本プログラムでこれらをビルドするために、
+以下の3ファイルを\textbf{自作の互換ヘッダ（シム）として追加}した。
+
+\begin{tabularx}{\textwidth}{l r X}
+\toprule
+\textbf{ファイル} & \textbf{行数} & \textbf{役割} \\
+\midrule
+\texttt{video/mbed\_assert.h} & 6 & \texttt{MBED\_ASSERT()} を無効化するだけのマクロ定義 \\
+\texttt{video/pinmap.h} & 226 & ドライバが型として要求する \texttt{PinName} 列挙のダミー定義 \\
+\texttt{video/gr\_peach\_vdc5.h} & --- & \texttt{gr\_peach\_vdc5.c} に対する宣言ヘッダ \\
+\bottomrule
+\end{tabularx}
+
+\vspace{2mm}
+\texttt{video/r\_typedefs.h} は Renesas 提供のものをそのまま使用している。
+\textbf{この3ファイルを用意するだけで、Renesas 提供のドライバ群は
+mbed OS 無しでコンパイルが通る}。裏を返せば、当該ドライバの mbed OS への依存は
+この程度に限られていた。
+
+\begin{cautionbox}[第三者提供コードを扱うときの原則]
+\begin{itemize}[nosep]
+  \item 各ファイル冒頭の著作権表示・DISCLAIMER を\textbf{削除しない}。
+        削除すると出所を追えなくなる
+  \item 自作のシムには自作である旨をコメントで明記し、
+        提供元のコードと混同されないようにする
+  \item ディレクトリ単位で第三者提供コードを分離し、
+        リポジトリの \texttt{NOTICE} に対応を記載する
+\end{itemize}
+\end{cautionbox}
+
+\subsection{公式配布物との関係}
+
+\hyperref[sec:lineage]{§\ref*{sec:lineage}} のとおり、本プログラムは公式配布版
+\texttt{kit20\_gr-peach} を直接の契機として作成したものであるが、
+\textbf{公式配布版のソースコードを複製していない}。
+新規プロジェクトから作成し、ハードウェアの仕様（ピン割り当て、MTU2 のチャネル構成、
+クロック系統）に由来して結果的に一致する箇所を除き、実装は独自である。
+
+公式配布物（プログラム本体・解説マニュアル）は、文書による事前の承諾なしの
+転載・複製が禁じられている。本仕様書および本プログラムのリポジトリには
+これらを含めていない。
+
+\end{document}
