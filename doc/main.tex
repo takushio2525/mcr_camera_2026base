@@ -423,16 +423,28 @@ PATH=[C:\Program Files\GNU Tools ARM Embedded\4.9 2015q3\bin\;
 \textbf{出力ファイルが生成されたかどうかで判定すること}。
 \end{cautionbox}
 
-\begin{notebox}[紛らわしいログ行について]
-ビルドログには
-\texttt{Managed Build system manifest file error: Unable to resolve the category
-identifier ilg.gnuarmeclipse...} という行が出るが、
-\textbf{これは公式配布版に固有のものではない}。
-現行 e2 studio 自身の \texttt{com.renesas.cdt.managedbuild.gcc.rz} オプション定義に
-旧プラグインのカテゴリ ID が残っているためで、
-\textbf{本プログラムをビルドしても同じ行が出力される}。
-原因の切り分け時に誤認しやすいため記録しておく。
-\end{notebox}
+\begin{cautionbox}[誤認しやすいログ行 --- 本仕様書 Rev 2.3 以前の記述は誤りだった]
+ビルドログには次の行が出力される。
+
+\begin{lstlisting}[caption={両プロジェクトで共通して出力される行},label=lst:manifesterr]
+Managed Build system manifest file error: Unable to resolve the category
+identifier ilg.gnuarmeclipse.managedbuild.cross.optionCategory.c.linker.misc
+in the option com.renesas.cdt.managedbuild.gcc.rz.option.linker.cpp.nosys.
+\end{lstlisting}
+
+\textbf{本仕様書は Rev 2.3 まで、この行を根拠に「公式配布版はビルド定義そのものが
+解釈できない」と記述していた。これは誤りである。}
+
+解決できないとされているのは、\textbf{現行 e2 studio 自身のオプション}
+\texttt{com.renesas.cdt.managedbuild.gcc.rz.option.linker.cpp.nosys} が参照している
+旧プラグインのカテゴリ ID である。Renesas 側のプラグイン定義に古い参照が
+残っているだけで、\textbf{本プログラム（正常にビルドが通り \texttt{.elf} を生成する）を
+ビルドしても同じ行が出力される}。公式配布版に固有の事象ではない。
+
+Rev 2.4 で、正常系のビルドと対照して実測し直した結果に基づき訂正した。
+\textbf{エラーメッセージが仮説と一致して見えるときほど、
+正常に動作する対象でも同じ事象が発生しないかを確認すること。}
+\end{cautionbox}
 
 \begin{notebox}[公式配布物の扱い]
 本仕様書は公式配布物（プログラム本体および解説マニュアル）の内容を転載していない。
