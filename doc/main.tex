@@ -160,13 +160,22 @@
 }
 
 % APIセクション見出し (FSPスタイル)
+% 見出しだけがページ末尾に孤立しないよう、LaTeX 標準の \@afterheading を使う。
+% これは \section 等が内部で使っている機構で、見出し直後の改ページを禁止し、
+% 続く段落の 1 行目が見出しから切り離されないようにする。
+% なお needspace パッケージの \Needspace も試したが、見出し自身の高さを消費するうえ、
+% 直後の tcolorbox が分割を開始できる高さに満たないと結局はみ出すため、
+% 総ページが 67→81 に増える割に孤立が解消せず不採用とした。
+\makeatletter
 \newcommand{\apisection}[1]{%
-  \vspace{4mm}%
+  \par\addvspace{4mm}%
   {\normalsize\bfseries\color{headerblue} #1}%
   \par\vspace{-1mm}%
   {\color{accentblue!40}\rule{\linewidth}{0.5pt}}%
-  \par\vspace{2mm}%
+  \par\nobreak\vspace{2mm}%
+  \@afterheading
 }
+\makeatother
 
 % 実行フェーズバッジ
 \newcommand{\phasebadge}[1]{%
@@ -188,6 +197,16 @@
 \newcommand{\gccversion}{13.3.1 20240614}
 
 %% ============================================================
+
+%% ─── 和文組版の調整 ───────────────────────────
+%% 日本語の行中に折り返せない \texttt{} の塊が入ると、行を埋めるために
+%% 和文の字間が引き伸ばされ、字間が異常に開いた行ができる。
+%% 行分割の許容度を上げ、最終手段の伸縮を許すことで発生を抑える。
+\emergencystretch=3zw      % どうしても収まらない行にのみ追加の伸びを許す
+\clubpenalty=10000         % 段落先頭 1 行だけがページ末に残るのを禁止
+\widowpenalty=10000        % 段落末尾 1 行だけが次ページ頭に送られるのを禁止
+\displaywidowpenalty=10000
+
 \begin{document}
 
 %% ─── 表紙 ─────────────────────────────────────
@@ -2674,7 +2693,8 @@ EMA 化にあたり\textbf{クラスを廃して純関数 \texttt{applyDrivingPa
 \end{longtable}
 
 \begin{notebox}[パターン番号は他モジュールからも参照される]
-\texttt{LineDetector} は \texttt{pattern == 11} / \texttt{1} / \texttt{2} で
+\texttt{LineDetector} は \texttt{pattern} が
+\texttt{11} / \texttt{1} / \texttt{2} のいずれかで
 検出パラメータを切り替え、\texttt{SDLogger} は
 \texttt{patternMinForLog = 11} 以上で記録を開始し \texttt{finishPattern = 101} を除外する。
 番号を変更する場合は \texttt{ProjectConfig.h} 側の対応値も合わせること。
